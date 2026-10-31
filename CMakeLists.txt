@@ -78,6 +78,27 @@ target_link_libraries(opent1_core PUBLIC opent1_compiler_flags)
 find_package(Threads REQUIRED)
 target_link_libraries(opent1_core PUBLIC Threads::Threads)
 
+include(CheckCXXSourceCompiles)
+set(CMAKE_REQUIRED_LIBRARIES Threads::Threads)
+check_cxx_source_compiles(
+    "#include <stop_token>
+     #include <thread>
+     int main() {
+         std::jthread worker([](std::stop_token) {});
+         worker.request_stop();
+     }"
+    OPENT1_HAS_CXX20_THREADS
+)
+unset(CMAKE_REQUIRED_LIBRARIES)
+if(NOT OPENT1_HAS_CXX20_THREADS)
+    message(
+        FATAL_ERROR
+            "OpenT1 requires C++20 std::jthread and std::stop_token support. "
+            "On macOS, use Homebrew LLVM 20 with its matching libc++ headers and runtime; "
+            "see docs/development.md."
+    )
+endif()
+
 add_library(
     opent1_math STATIC
     src/math/math_Fix16_and_int.cpp

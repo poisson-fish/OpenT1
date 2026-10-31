@@ -1,5 +1,5 @@
-#include <opent1/game/Mine.hpp>
-#include <opent1/game/Flier.hpp>
+#include <opent1/game/mine.hpp>
+#include <opent1/game/flier.hpp>
 #include <opent1/game/ai.hpp>
 #include <opent1/game/chat_inventory_huds.hpp>
 #include <opent1/game/chat_menu.hpp>

@@ -95,4 +95,12 @@ endforeach()
 add_test(NAME runtime COMMAND opent1 --smoke --headless --no-audio --no-assets --spawn-demo
                               --frames 4
 )
-set_tests_properties(runtime PROPERTIES TIMEOUT 30 LABELS integration)
+set_tests_properties(
+    runtime
+    PROPERTIES TIMEOUT
+               30
+               LABELS
+               integration
+               ENVIRONMENT
+               "SDL_VIDEODRIVER=dummy;ALSOFT_DRIVERS=null"
+)

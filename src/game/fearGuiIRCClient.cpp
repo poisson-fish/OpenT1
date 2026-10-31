@@ -250,7 +250,7 @@ void IRCClient::synchronizeNetwork() {
         channel.personLimit = static_cast<UInt32>(std::max(0, source.personLimit));
         const auto* old = findChannel(source.name);
         channel.id = old ? old->id : nextChannelId_++;
-        for (const auto [sourceFlag, guiFlag] :
+        for (const auto& [sourceFlag, guiFlag] :
              {std::pair{sim::IrcChannel::Private, CHANNEL_PRIVATE},
               {sim::IrcChannel::Secret, CHANNEL_SECRET},
               {sim::IrcChannel::Moderated, CHANNEL_MODERATED},

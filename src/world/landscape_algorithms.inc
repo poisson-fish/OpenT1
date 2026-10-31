@@ -1,7 +1,7 @@
 // Port of LS_Math.cpp (Dynamix, 1996). See terrain-authoring-port.json.
 void NativeLandscape::add(float _n) {
     if (stack.size() < 1) {
-        sprintf(mExecString, "ADD: nothing on stack to add");
+        std::snprintf(mExecString, sizeof(mExecString), "ADD: nothing on stack to add");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -13,7 +13,7 @@ void NativeLandscape::add(float _n) {
 
 void NativeLandscape::sub(float _n) {
     if (stack.size() < 1) {
-        sprintf(mExecString, "SUB: nothing on stack to subtract");
+        std::snprintf(mExecString, sizeof(mExecString), "SUB: nothing on stack to subtract");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -25,7 +25,7 @@ void NativeLandscape::sub(float _n) {
 
 void NativeLandscape::mul(float _n) {
     if (stack.size() < 1) {
-        sprintf(mExecString, "MUL: nothing on stack to multiply");
+        std::snprintf(mExecString, sizeof(mExecString), "MUL: nothing on stack to multiply");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -37,7 +37,7 @@ void NativeLandscape::mul(float _n) {
 
 void NativeLandscape::div(float _n) {
     if (stack.size() < 1) {
-        sprintf(mExecString, "DIV: nothing on stack to divide");
+        std::snprintf(mExecString, sizeof(mExecString), "DIV: nothing on stack to divide");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -49,7 +49,7 @@ void NativeLandscape::div(float _n) {
 
 void NativeLandscape::exp(float _n) {
     if (stack.size() < 1) {
-        sprintf(mExecString, "EXP: nothing on stack to exp");
+        std::snprintf(mExecString, sizeof(mExecString), "EXP: nothing on stack to exp");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -61,7 +61,7 @@ void NativeLandscape::exp(float _n) {
 
 void NativeLandscape::neg() {
     if (stack.size() < 1) {
-        sprintf(mExecString, "NEG: nothing on stack to neg");
+        std::snprintf(mExecString, sizeof(mExecString), "NEG: nothing on stack to neg");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -72,7 +72,7 @@ void NativeLandscape::neg() {
 
 void NativeLandscape::clr(float _n) {
     if (stack.size() < 1) {
-        sprintf(mExecString, "NEG: nothing on stack to clear");
+        std::snprintf(mExecString, sizeof(mExecString), "NEG: nothing on stack to clear");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -84,7 +84,7 @@ void NativeLandscape::clr(float _n) {
 void NativeLandscape::normalize(float _min, float _max) {
     int i;
     if (stack.size() < 1) {
-        sprintf(mExecString, "NORMALIZE: nothing on stack to normalize");
+        std::snprintf(mExecString, sizeof(mExecString), "NORMALIZE: nothing on stack to normalize");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -111,13 +111,13 @@ void NativeLandscape::normalize(float _min, float _max) {
 
 void NativeLandscape::addStack(int _n) {
     if (stack.size() < std::size_t(_n + 1)) {
-        sprintf(mExecString, "ADD_STACK: stack too small for operation");
+        std::snprintf(mExecString, sizeof(mExecString), "ADD_STACK: stack too small for operation");
         mExecStatus = EXEC_FAILURE;
         return;
     }
 
     if (stack[0]->size != stack[_n]->size) {
-        sprintf(mExecString, "ADD_STACK: can't add different sized matrices");
+        std::snprintf(mExecString, sizeof(mExecString), "ADD_STACK: can't add different sized matrices");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -134,13 +134,13 @@ void NativeLandscape::addStack(int _n) {
 
 void NativeLandscape::subStack(int _n) {
     if (stack.size() < std::size_t(_n + 1)) {
-        sprintf(mExecString, "SUB_STACK: stack too small for operation");
+        std::snprintf(mExecString, sizeof(mExecString), "SUB_STACK: stack too small for operation");
         mExecStatus = EXEC_FAILURE;
         return;
     }
 
     if (stack[0]->size != stack[_n]->size) {
-        sprintf(mExecString, "SUB_STACK: can't subtract different sized matrices");
+        std::snprintf(mExecString, sizeof(mExecString), "SUB_STACK: can't subtract different sized matrices");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -188,7 +188,7 @@ normalProbability(float _min, float _max, float _mean, float _dev, float _val) {
 // Port of LS_Cmplx.cpp (Dynamix, 1996). See terrain-authoring-port.json.
 void NativeLandscape::overlay(int _n, float _thresh) {
     if (stack.size() < std::size_t(_n + 1)) {
-        sprintf(mExecString, "OVERLAY: Not enough items on the stack to overlay");
+        std::snprintf(mExecString, sizeof(mExecString), "OVERLAY: Not enough items on the stack to overlay");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -206,7 +206,7 @@ void NativeLandscape::overlay(int _n, float _thresh) {
 
 void NativeLandscape::blend(int _n, int _dist) {
     if (stack.size() < std::size_t(_n + 1)) {
-        sprintf(mExecString, "BLEND: not enough items on the stack to blend");
+        std::snprintf(mExecString, sizeof(mExecString), "BLEND: not enough items on the stack to blend");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -257,7 +257,7 @@ void NativeLandscape::flipX() {
     int width = stack[0]->size;
 
     if (width < 1) {
-        sprintf(mExecString, "FLIPX: Nothing on the stack");
+        std::snprintf(mExecString, sizeof(mExecString), "FLIPX: Nothing on the stack");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -276,7 +276,7 @@ void NativeLandscape::flipY() {
     int width = stack[0]->size;
 
     if (width < 1) {
-        sprintf(mExecString, "FLIPY: Nothing on the stack");
+        std::snprintf(mExecString, sizeof(mExecString), "FLIPY: Nothing on the stack");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -297,12 +297,12 @@ void NativeLandscape::flipY() {
 
 void NativeLandscape::fillNormal(float _height) {
     if (stack.size() < 2) {
-        sprintf(mExecString, "FILL_NORMAL: not enough items on the stack to fillNormal (need 2)");
+        std::snprintf(mExecString, sizeof(mExecString), "FILL_NORMAL: not enough items on the stack to fillNormal (need 2)");
         mExecStatus = EXEC_FAILURE;
         return;
     }
     if (stack[0]->size != stack[1]->size) {
-        sprintf(mExecString, "FILL_NORMAL: different sized matrices");
+        std::snprintf(mExecString, sizeof(mExecString), "FILL_NORMAL: different sized matrices");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -489,7 +489,7 @@ static void fht(REAL* fz, int size);
 
 void NativeLandscape::wrap() {
     if (stack.size() < 1) {
-        sprintf(mExecString, "WRAP: nothing on stack to wrap");
+        std::snprintf(mExecString, sizeof(mExecString), "WRAP: nothing on stack to wrap");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -602,7 +602,7 @@ static void placeMatrix(Matrix* target, Matrix* source, int x, int y) {
 
 void NativeLandscape::tile() {
     if (stack.size() < 1) {
-        sprintf(mExecString, "TILE: Nothing on the stack to tile");
+        std::snprintf(mExecString, sizeof(mExecString), "TILE: Nothing on the stack to tile");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -647,13 +647,13 @@ void NativeLandscape::tile() {
 void NativeLandscape::alphablend(int x, int y) {
 
     if (stack.size() < 3) {
-        sprintf(mExecString, "ALPHA_BLEND: not enough items on the stack (need 3)");
+        std::snprintf(mExecString, sizeof(mExecString), "ALPHA_BLEND: not enough items on the stack (need 3)");
         mExecStatus = EXEC_FAILURE;
         return;
     }
 
     if (stack[0]->size != stack[1]->size) {
-        sprintf(mExecString, "ALPHA_BLEND: alpha chan and overlay are different sizes");
+        std::snprintf(mExecString, sizeof(mExecString), "ALPHA_BLEND: alpha chan and overlay are different sizes");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -697,7 +697,7 @@ const int convWeightsSize = sizeof(convWeights) / sizeof(float);
 
 void NativeLandscape::smooth(float epsilon, float exponent) {
     if (stack.size() < 1) {
-        sprintf(mExecString, "SMOOTH: Not enough items on the stack to blend");
+        std::snprintf(mExecString, sizeof(mExecString), "SMOOTH: Not enough items on the stack to blend");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -787,7 +787,7 @@ void NativeLandscape::smooth(float epsilon, float exponent) {
 void NativeLandscape::floor(float flr_start, float flr_depth, float scanDepth) {
 
     if (stack.size() < 1) {
-        sprintf(mExecString, "FLOOR: Nothing on the stack to floor");
+        std::snprintf(mExecString, sizeof(mExecString), "FLOOR: Nothing on the stack to floor");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -818,7 +818,7 @@ void NativeLandscape::floor(float flr_start, float flr_depth, float scanDepth) {
 
 void NativeLandscape::ceil(float ceil_start, float ceil_height, float scanHeight) {
     if (stack.size() < 1) {
-        sprintf(mExecString, "CEIL: Nothing on the stack to ceil");
+        std::snprintf(mExecString, sizeof(mExecString), "CEIL: Nothing on the stack to ceil");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -849,7 +849,7 @@ void NativeLandscape::ceil(float ceil_start, float ceil_height, float scanHeight
 
 void NativeLandscape::rot() {
     if (stack.size() < 1) {
-        sprintf(mExecString, "ROT: Nothing on the stack to rot");
+        std::snprintf(mExecString, sizeof(mExecString), "ROT: Nothing on the stack to rot");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -870,7 +870,7 @@ void NativeLandscape::rot() {
 
 void NativeLandscape::curve(float _thresh, int _iter) {
     if (stack.size() < 1) {
-        sprintf(mExecString, "CURVE: Nothing on the stack to curve");
+        std::snprintf(mExecString, sizeof(mExecString), "CURVE: Nothing on the stack to curve");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -937,7 +937,7 @@ void NativeLandscape::curve(float _thresh, int _iter) {
 
 void NativeLandscape::slope(float _thresh, int _iter) {
     if (stack.size() < 2) {
-        sprintf(mExecString, "SLOPE: Not enough items on the stack to slop (need 2)");
+        std::snprintf(mExecString, sizeof(mExecString), "SLOPE: Not enough items on the stack to slop (need 2)");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -1011,7 +1011,7 @@ const int convWeightsSize2 = sizeof(convWeights2) / sizeof(float);
 
 void NativeLandscape::shaveArea(float epsilon, float exponent, float avgWeight) {
     if (stack.size() < 2) {
-        sprintf(mExecString, "SHAVE_AREA: Stack must contain shave filter and target terrain.");
+        std::snprintf(mExecString, sizeof(mExecString), "SHAVE_AREA: Stack must contain shave filter and target terrain.");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -1127,7 +1127,7 @@ void NativeLandscape::shaveArea(float epsilon, float exponent, float avgWeight) 
 
 void NativeLandscape::clamp(int _detail, float _deviation) {
     if (stack.size() < 1) {
-        sprintf(mExecString, "CLAMP: Nothing on the stack to clamp");
+        std::snprintf(mExecString, sizeof(mExecString), "CLAMP: Nothing on the stack to clamp");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -1183,7 +1183,7 @@ void NativeLandscape::clamp(int _detail, float _deviation) {
 
 void NativeLandscape::mask(int _detail, float _scale) {
     if (stack.size() < 1) {
-        sprintf(mExecString, "MASK: Nothing on the stack to mask");
+        std::snprintf(mExecString, sizeof(mExecString), "MASK: Nothing on the stack to mask");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -1211,7 +1211,7 @@ void NativeLandscape::mask(int _detail, float _scale) {
 
 void NativeLandscape::diff() {
     if (stack.size() < 1) {
-        sprintf(mExecString, "DIFF: nothing on stack to diff");
+        std::snprintf(mExecString, sizeof(mExecString), "DIFF: nothing on stack to diff");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -1232,7 +1232,7 @@ void NativeLandscape::diff() {
 
 void NativeLandscape::fft(int _sign) {
     if (stack.size() < 2) {
-        sprintf(mExecString, "FFT: Nothing on the stack to fft");
+        std::snprintf(mExecString, sizeof(mExecString), "FFT: Nothing on the stack to fft");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -1426,7 +1426,7 @@ void fht(REAL* fz, int size) {
 
 void NativeLandscape::clipMin(float minHeight) {
     if (stack[0]->size < 1) {
-        sprintf(mExecString, "CLIP_MIN: Nothing on the stack");
+        std::snprintf(mExecString, sizeof(mExecString), "CLIP_MIN: Nothing on the stack");
         mExecStatus = EXEC_FAILURE;
         return;
     }
@@ -1439,7 +1439,7 @@ void NativeLandscape::clipMin(float minHeight) {
 
 void NativeLandscape::clipMax(float maxHeight) {
     if (stack[0]->size < 1) {
-        sprintf(mExecString, "CLIP_MAX: Nothing on the stack");
+        std::snprintf(mExecString, sizeof(mExecString), "CLIP_MAX: Nothing on the stack");
         mExecStatus = EXEC_FAILURE;
         return;
     }

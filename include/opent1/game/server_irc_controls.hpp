@@ -257,7 +257,7 @@ public:
         return recordings_;
     }
 
-    [[nodiscard]] std::string getCellText(Point2I cell) const override;
+    [[nodiscard]] std::string getCellText(Point2I cell) const;
 
 private:
     std::vector<PlaybackRep> recordings_{};
@@ -318,7 +318,7 @@ public:
         return recordings_;
     }
 
-    [[nodiscard]] std::string getCellText(Point2I cell) const;
+    [[nodiscard]] std::string getCellText(Point2I cell) const override;
 
 private:
     void sortRecordings();

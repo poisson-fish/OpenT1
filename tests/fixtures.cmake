@@ -1,0 +1,22 @@
+target_compile_definitions(
+    opent1_tests
+    PRIVATE
+        OPENT1_AUDIO_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/data/audio-v1.bin"
+        OPENT1_GAME_PLAYER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/data/game-player-v1.bin"
+        OPENT1_GAME_PSC_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/data/game-psc-wire-v1.bin"
+        OPENT1_GAME_WEAPONS_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/data/game-weapons-v1.bin"
+        OPENT1_GUI_CANVAS_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/data/gui-canvas-v1.bin"
+        OPENT1_GUI_EDITOR_FAILURES_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/data/gui-editor-failures-v1.bin"
+        OPENT1_GUI_EDITOR_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/data/gui-editor-v1.bin"
+        OPENT1_GUI_ROUTING_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/data/gui-routing-v1.bin"
+        OPENT1_INTERIOR_ASSET_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/data/interior-assets-v1.bin"
+        OPENT1_SOFTWARE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/data/software-2d-v1.bin"
+        OPENT1_TERRAIN_ASSET_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/data/terrain-assets-v1.bin"
+        OPENT1_TERRAIN_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/data/terrain-grid-v1.bin"
+        OPENT1_TS_ASSET_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/data/ts-assets-v1.bin"
+        OPENT1_TS_FORMAT_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/data/ts-formats-v1.bin"
+        OPENT1_VIDEO_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/data/smacker-v1.bin"
+        OPENT1_WORLD_CHILDREN_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/data/world-children-v1.bin"
+        OPENT1_WORLD_COLLISION_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/data/world-collision-v1.bin"
+        OPENT1_WORLD_MISSION_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/data/world-mission-v1.bin"
+)

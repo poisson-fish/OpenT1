@@ -1,0 +1,13 @@
+* text=auto eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.cmake text eol=lf
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.asm text eol=lf
+*.rc text eol=lf
+*.txt text eol=lf
+*.bin binary
+*.ico binary
+*.spv binary
+*.dxil binary

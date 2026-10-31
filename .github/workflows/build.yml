@@ -1,0 +1,70 @@
+name: Build and test
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.platform.name }} / ${{ matrix.configuration }}
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: Linux x64
+            runner: ubuntu-24.04
+            cmake_args: -DCMAKE_C_COMPILER=gcc-14 -DCMAKE_CXX_COMPILER=g++-14
+          - name: macOS ARM64
+            runner: macos-15
+            cmake_args: -DCMAKE_OSX_ARCHITECTURES=arm64
+          - name: Windows x64
+            runner: windows-2025
+            cmake_args: -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/msvc-x64.cmake
+        configuration: [desktop, headless]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            gcc-14 g++-14 ninja-build pkg-config \
+            libasound2-dev libpulse-dev libudev-dev \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev \
+            libxi-dev libxss-dev libxtst-dev libxkbcommon-dev \
+            libwayland-dev wayland-protocols libdecor-0-dev \
+            libdrm-dev libgbm-dev libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev
+      - name: Verify runner architecture
+        env:
+          ACTUAL_ARCH: ${{ runner.arch }}
+          EXPECTED_ARCH: ${{ runner.os == 'macOS' && 'ARM64' || 'X64' }}
+        run: test "$ACTUAL_ARCH" = "$EXPECTED_ARCH"
+      - name: Configure
+        env:
+          PLATFORM_CMAKE_ARGS: ${{ matrix.platform.cmake_args }}
+          CONFIGURATION: ${{ matrix.configuration }}
+        run: |
+          options=(-DOPENT1_BUILD_PLATFORM=ON -DOPENT1_BUILD_AUDIO=ON -DOPENT1_BUILD_EXAMPLES=ON
+                   -DCMAKE_DISABLE_FIND_PACKAGE_SDL3=ON)
+          if [[ "$CONFIGURATION" == headless ]]; then
+            options=(-DOPENT1_BUILD_PLATFORM=OFF -DOPENT1_BUILD_AUDIO=OFF -DOPENT1_BUILD_EXAMPLES=OFF)
+          fi
+          # All platform arguments are fixed values from the matrix above.
+          read -r -a platform_options <<< "$PLATFORM_CMAKE_ARGS"
+          cmake -S . -B build/ci -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_TESTING=ON -DOPENT1_BUILD_TERRAIN2=ON \
+            "${platform_options[@]}" "${options[@]}"
+      - name: Build all targets
+        run: cmake --build build/ci --parallel 3
+      - name: Test
+        run: ctest --test-dir build/ci --output-on-failure --no-tests=error --parallel 3

@@ -1,0 +1,39 @@
+#include <metal_stdlib>
+using namespace metal;
+
+struct Input {
+    float4 position [[position]];
+    float2 uv [[user(locn0)]];
+    float3 color [[user(locn1)]];
+    float haze [[user(locn2)]];
+    float2 lightMap [[user(locn3)]];
+    float opacity [[user(locn4)]];
+};
+
+struct Material {
+    float4 tint, hazeColor, options, alphaControls;
+};
+
+fragment float4 main0(Input v [[stage_in]],
+                      texture2d<float> image [[texture(0)]],
+                      sampler imageSampler [[sampler(0)]],
+                      texture2d<float> lightMap [[texture(1)]],
+                      sampler lightMapSampler [[sampler(1)]],
+                      constant Material& m [[buffer(0)]]) {
+    if (m.alphaControls.z == 2)
+        return float4(m.hazeColor.rgb, saturate(v.haze));
+    float4 texel = image.sample(imageSampler, v.uv, bias(m.options.z));
+    float3 light = lightMap.sample(lightMapSampler, v.lightMap).rgb;
+    float alpha = m.options.w == 0   ? texel.a * m.tint.a
+                  : m.options.w == 1 ? m.tint.a
+                  : m.options.w == 2 ? saturate(v.opacity) * m.tint.a
+                  : m.options.w == 4 ? texel.a * saturate(v.opacity) * m.tint.a
+                                     : 1.0;
+    if (m.options.y != 0 &&
+        (alpha <= m.alphaControls.x || (m.alphaControls.y != 0 && texel.a <= 0)))
+        discard_fragment();
+    float3 rgb = mix(texel.rgb * light * v.color * m.tint.rgb,
+                     m.hazeColor.rgb,
+                     m.alphaControls.z == 1 ? 0 : saturate(v.haze));
+    return float4(pow(saturate(rgb), m.options.xxx), alpha);
+}

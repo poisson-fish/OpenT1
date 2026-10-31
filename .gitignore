@@ -1,0 +1,39 @@
+# CMake and compiler output
+/build/
+/build-*/
+/out/
+/cmake-build-*/
+CMakeUserPresets.json
+CMakeCache.txt
+CMakeFiles/
+/Testing/
+compile_commands.json
+
+# IDE and editor state
+/.vs/
+/.vscode/
+/.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.tmp
+*.bak
+*~
+
+# Platform noise
+.DS_Store
+Thumbs.db
+Desktop.ini
+__pycache__/
+*.pyc
+
+
+# Local game installations and runtime state
+/TRIBES/
+/PCRPG/
+/base/
+/config/
+/assets/
+console.log
+*.dmp

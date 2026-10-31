@@ -91,6 +91,8 @@ ctest --test-dir build/headless --output-on-failure --no-tests=error
 Warnings are errors in project C++ code. Public headers use the
 `<opent1/...>` include prefix. The main targets are `opent1`,
 `opent1_asset_tool`, and `opent1_tests`.
+Project arithmetic keeps multiply and add operations separate so ARM FMA
+contraction does not change legacy rasterization and collision boundaries.
 
 ## Shader maintenance
 

@@ -39,10 +39,13 @@ if(MSVC)
         opent1_compiler_flags INTERFACE NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS
     )
 else()
+    # Legacy rasterization and collision fixtures require separate multiply/add
+    # rounding; ARM's default FMA contraction changes boundary decisions.
     target_compile_options(
         opent1_compiler_flags
         INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wall> $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
                   $<$<COMPILE_LANGUAGE:CXX>:-Wpedantic> $<$<COMPILE_LANGUAGE:CXX>:-Werror>
+                  $<$<COMPILE_LANGUAGE:CXX>:-ffp-contract=off>
     )
 endif()
 

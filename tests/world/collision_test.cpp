@@ -20,8 +20,12 @@ bool close(Flt32 a, Flt32 b) {
     return std::abs(a - b) <= .0005f * std::max({1.f, std::abs(a), std::abs(b)});
 }
 
-void near(Point3F a, Point3F b) {
-    CHECK(close(a.x, b.x) && close(a.y, b.y) && close(a.z, b.z));
+void near(Point3F a,
+          Point3F b,
+          std::source_location at = std::source_location::current()) {
+    test::check(close(a.x, b.x) && close(a.y, b.y) && close(a.z, b.z),
+                std::format("({},{},{}) != ({},{},{})", a.x, a.y, a.z, b.x, b.y, b.z),
+                at);
 }
 
 TMat3F at(Point3F p) {

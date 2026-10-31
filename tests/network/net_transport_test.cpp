@@ -47,11 +47,15 @@ void integration(Transport& clientTransport, Transport& serverTransport) {
     CHECK(e.type == EventType::Data);
     CHECK(std::ranges::equal(e.data(), maximum));
     CHECK(server.send(sid, bytes("reply"), 0, 0) == Result::Ok);
+    std::vector<Event> events;
     until([&] {
         CHECK(client.process(0) == Result::Ok);
-        return client.info(cid)->averageRtt != 100;
+        while (client.poll(e)) {
+            events.push_back(e);
+        }
+        return events.size() >= 2;
     });
-    auto events = drain(client);
+    CHECK(client.info(cid)->averageRtt != 100);
     CHECK(events.size() == 2);
     CHECK(events[0].type == EventType::Notify && events[0].notifyKey == 77 && events[0].delivered);
     CHECK(events[1].type == EventType::Data && text(events[1].data()) == "reply");

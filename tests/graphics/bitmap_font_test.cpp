@@ -179,6 +179,11 @@ void clipping() {
     first = {-1, -1};
     second = {-2, -2};
     CHECK(!clipLine(first, second, clip) && first == Point2I(-1, -1));
+    // Fusing the multiply/add moves the last clipped pixel from x=13 to x=14.
+    first = {-1, 15};
+    second = {23, -9};
+    CHECK(clipLine(first, second, {1, 1, 15, 11}));
+    CHECK(first == Point2I(3, 11) && second == Point2I(13, 1));
 }
 
 void resources() {

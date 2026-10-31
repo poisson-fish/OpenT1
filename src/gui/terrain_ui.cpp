@@ -6,8 +6,7 @@
 
 namespace opent1::gui {
 namespace {
-constexpr UInt32 uiAccept = 65536, uiCancel = 65537, uiChoose = 65538, uiUp = 65539,
-                 uiBrowse = 65540;
+constexpr UInt32 uiAccept = 65536, uiCancel = 65537, uiChoose = 65538, uiUp = 65539;
 constexpr UInt32 tedMenu = 65550, lsMenu = 65551, scriptTab = 65552, rulesTab = 65553,
                  addRule = 65554, editRule = 65555, deleteRule = 65556, typeList = 65557;
 constexpr UInt32 lsLoadScript = 20000, lsSaveScript = 20001, lsLoadRules = 20002,

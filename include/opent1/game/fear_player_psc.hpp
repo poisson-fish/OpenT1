@@ -386,7 +386,6 @@ private:
     bool fInObserverMode_{false};
     bool fInEditMode_{false};
     bool firstPerson_{true};
-    bool prevFirstPerson_{true};
     bool sneak_{false};
     Flt32 camDist_{0.0f};
 

@@ -255,8 +255,9 @@ bool EventManager::postRemoteEvent(std::unique_ptr<SimEvent> event) {
         impl_->count >= impl_->capacity) {
         return false;
     }
+    const SimEvent& eventObject = *event;
     const auto* codec = owner()->registry().event(event->type);
-    if (!codec || codec->type != std::type_index(typeid(*event)) ||
+    if (!codec || codec->type != std::type_index(typeid(eventObject)) ||
         ((event->flags & SimEvent::Ordered) && !(event->flags & SimEvent::Guaranteed))) {
         return false;
     }
@@ -285,8 +286,9 @@ bool EventManager::postRemoteBatch(std::vector<Delivery> deliveries) {
                 !target->owner()->error().empty()) {
                 return false;
             }
+            const SimEvent& eventObject = *event;
             const auto* codec = target->owner()->registry().event(event->type);
-            if (!codec || codec->type != std::type_index(typeid(*event)) ||
+            if (!codec || codec->type != std::type_index(typeid(eventObject)) ||
                 ((event->flags & SimEvent::Ordered) && !(event->flags & SimEvent::Guaranteed))) {
                 return false;
             }

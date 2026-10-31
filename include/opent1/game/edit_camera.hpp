@@ -72,8 +72,6 @@ private:
     Point3F throttle_{0.0f, 0.0f, 0.0f};
     Point3F desiredThrottle_{0.0f, 0.0f, 0.0f};
     bool hasFocus_{true};
-    Flt32 moveSpeed_{0.5f};
-    Flt32 rotateSpeed_{0.2f};
     std::shared_ptr<const sim::SimActionMap> actionMap_{};
     std::shared_ptr<sim::SimCollisionSphereImage> collisionImage_{};
 };

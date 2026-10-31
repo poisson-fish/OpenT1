@@ -357,8 +357,8 @@ public:
     bool message(gui::Control& sender, UInt32 msg) override;
     std::function<void()> checkpoint() override;
 
-    bool inspectRead(sim::Inspect& inspector);
-    bool inspectWrite(sim::Inspect& inspector) const;
+    bool inspectRead(sim::Inspect& inspector) override;
+    bool inspectWrite(sim::Inspect& inspector) const override;
 
     Persistent::Error
     read(StreamIO& sio, Int32 version, Int32 user, Persistent::LoadContext& ctx) override;

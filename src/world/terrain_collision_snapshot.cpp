@@ -475,8 +475,6 @@ bool GridCollision::collideBlock(const NativeBlock* block,
     float deltaY = end.y - start.y;
     float deltaZ = end.z - start.z;
 
-    Point3F currentHeight;
-
     CalcTs(curT[0], deltaT[0], start.y * invGrdSize, end.y * invGrdSize);
     CalcTs(curT[1], deltaT[1], start.x * invGrdSize, end.x * invGrdSize);
     CalcTs(

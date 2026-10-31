@@ -38,7 +38,7 @@ public:
     void updateImageTransform(const TMat3F& in_rTrans) override;
     void shutOffProjectile() override;
 
-    bool getTarget(Point3F* out_pTarget, Int32* out_pTeam) const noexcept;
+    bool getTarget(Point3F* out_pTarget, Int32* out_pTeam) const noexcept override;
 
     UInt32
     packUpdate(sim::network::GhostManager& gm, UInt32 mask, BitStream& stream) const override;

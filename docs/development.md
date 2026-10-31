@@ -36,8 +36,9 @@ with `cmake --preset x64-debug -DOPENT1_BUILD_EXAMPLES=ON`.
 On Linux or macOS, use an out-of-tree build with a compiler and standard
 library supporting C++20, including `std::format`, `std::jthread`, and
 `std::stop_token` (GCC 14 or newer, or LLVM 20 with libc++ 20). For a full desktop
-build, install SDL's platform development dependencies first; CI's Linux installation step lists the packages used on
-Ubuntu 24.04. Configuration fetches SDL3 if an installed package is unavailable
+build, install SDL's platform development dependencies first; CI's Linux
+installation step lists the packages used on Ubuntu 24.04. Configuration fetches
+SDL3 if an installed package is unavailable
 and always fetches OpenAL Soft when audio is enabled.
 
 ```sh
@@ -48,8 +49,8 @@ ctest --test-dir build/desktop --output-on-failure --no-tests=error
 ```
 
 On macOS, install [Homebrew LLVM 20](https://formulae.brew.sh/formula/llvm@20)
-and select both its compiler and its C++
-library before configuring a fresh build directory. The Apple C++ library in
+and select both its compiler and its C++ library before configuring a fresh
+build directory. The Apple C++ library in
 the macOS 15 CI image does not provide `std::jthread` or `std::stop_token`.
 Using only Homebrew's compiler with Apple's runtime is insufficient.
 
@@ -60,6 +61,7 @@ export CC="$llvm_prefix/bin/clang"
 export CXX="$llvm_prefix/bin/clang++"
 export CXXFLAGS="-nostdinc++ -isystem $llvm_prefix/include/c++/v1"
 export LDFLAGS="-L$llvm_prefix/lib/c++ -Wl,-rpath,$llvm_prefix/lib/c++"
+export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
 ```
 
 Then run the desktop or headless CMake commands in this section. The runtime

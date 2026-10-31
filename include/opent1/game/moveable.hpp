@@ -377,7 +377,6 @@ private:
     mutable Point3F rotationVec_{0.0f, 0.0f, 0.0f};
     Point3F ldistance_{0.0f, 0.0f, 0.0f};
     Point3F adistance_{0.0f, 0.0f, 0.0f};
-    bool fInTimerSet_{false};
     bool fSoundStart_{false};
     bool fSoundStop_{false};
     bool fSoundRun_{false};

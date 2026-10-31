@@ -257,7 +257,7 @@ public:
         return recordings_;
     }
 
-    [[nodiscard]] std::string getCellText(Point2I cell) const;
+    [[nodiscard]] std::string getCellText(Point2I cell) const override;
 
 private:
     std::vector<PlaybackRep> recordings_{};
@@ -727,8 +727,8 @@ public:
     }
 
     std::function<void()> checkpoint() override;
-    bool inspectRead(sim::Inspect& inspector);
-    bool inspectWrite(sim::Inspect& inspector) const;
+    bool inspectRead(sim::Inspect& inspector) override;
+    bool inspectWrite(sim::Inspect& inspector) const override;
 
     Persistent::Error
     read(StreamIO& sio, Int32 version, Int32 user, Persistent::LoadContext& ctx) override;

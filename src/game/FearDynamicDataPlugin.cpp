@@ -271,7 +271,7 @@ FearDynamicDataPlugin::FieldEntry makeScalarField(std::string_view name,
     entry.name = std::string(name);
     entry.type = type;
     entry.arraySize = 1;
-    entry.getter = [member, type, pluginPtr](const GameBaseData& base, std::size_t) -> std::string {
+    entry.getter = [=](const GameBaseData& base, std::size_t) -> std::string {
         const auto* d = dynamic_cast<const Derived*>(&base);
         if (!d) {
             return {};
@@ -325,7 +325,7 @@ FearDynamicDataPlugin::FieldEntry makeScalarField(std::string_view name,
             return {};
         }
     };
-    entry.setter = [member, type](GameBaseData& base,
+    entry.setter = [=](GameBaseData& base,
                                   std::size_t,
                                   std::span<const std::string> values,
                                   FearDynamicDataPlugin& plugin) -> bool {
@@ -457,7 +457,7 @@ FearDynamicDataPlugin::FieldEntry makeArrayField(std::string_view name,
     entry.name = std::string(name);
     entry.type = type;
     entry.arraySize = N;
-    entry.getter = [member, type, pluginPtr](const GameBaseData& base,
+    entry.getter = [=](const GameBaseData& base,
                                              std::size_t idx) -> std::string {
         const auto* d = dynamic_cast<const Derived*>(&base);
         if (!d || idx >= N) {
@@ -504,7 +504,7 @@ FearDynamicDataPlugin::FieldEntry makeArrayField(std::string_view name,
             return {};
         }
     };
-    entry.setter = [member, type](GameBaseData& base,
+    entry.setter = [=](GameBaseData& base,
                                   std::size_t idx,
                                   std::span<const std::string> values,
                                   FearDynamicDataPlugin& plugin) -> bool {

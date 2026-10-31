@@ -189,13 +189,16 @@ void tests() {
     CHECK(failedWriter.store(good, object) == Error::Ok); // failed write did not poison DICT
     other.next = &other;
     bytes = serialize(registry, other, true);
+    const auto beforeGraphs = Graph::alive;
     {
         MemRWStream s{std::span<const std::byte>(bytes)};
         LoadContext graphReader(registry, true);
         auto loaded = graphReader.load(s);
         auto* graph = dynamic_cast<Graph*>(loaded.object);
         CHECK(loaded && graph && graph->next == graph && graphReader.size() == 1);
+        CHECK(Graph::alive == beforeGraphs + 1);
     }
+    CHECK(Graph::alive == beforeGraphs);
     // A repeated root is a borrowed DICT reference, never a second owner.
     std::array<std::byte, 2048> output{};
     MemRWStream stream{std::span(output)};

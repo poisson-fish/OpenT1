@@ -79,8 +79,8 @@ public:
     bool draw(gfx::SoftwareSurface&, Point2I, RectI) const override;
     std::function<void()> checkpoint() override;
 
-    bool inspectRead(sim::Inspect& inspector);
-    bool inspectWrite(sim::Inspect& inspector) const;
+    bool inspectRead(sim::Inspect& inspector) override;
+    bool inspectWrite(sim::Inspect& inspector) const override;
 
     Persistent::Error
     read(StreamIO& sio, Int32 version, Int32 user, Persistent::LoadContext& ctx) override;
@@ -210,8 +210,8 @@ public:
     bool message(gui::Control& sender, UInt32 msg) override;
     std::function<void()> checkpoint() override;
 
-    bool inspectRead(sim::Inspect& inspector);
-    bool inspectWrite(sim::Inspect& inspector) const;
+    bool inspectRead(sim::Inspect& inspector) override;
+    bool inspectWrite(sim::Inspect& inspector) const override;
 
     Persistent::Error
     read(StreamIO& sio, Int32 version, Int32 user, Persistent::LoadContext& ctx) override;
@@ -332,8 +332,8 @@ public:
     [[nodiscard]] bool bindingConflict(const BindingSpec& candidate) const noexcept;
 
     std::function<void()> checkpoint() override;
-    bool inspectRead(sim::Inspect& inspector);
-    bool inspectWrite(sim::Inspect& inspector) const;
+    bool inspectRead(sim::Inspect& inspector) override;
+    bool inspectWrite(sim::Inspect& inspector) const override;
 
     Persistent::Error
     read(StreamIO& sio, Int32 version, Int32 user, Persistent::LoadContext& ctx) override;
@@ -398,8 +398,8 @@ public:
     void action() override;
     std::function<void()> checkpoint() override;
 
-    bool inspectRead(sim::Inspect& inspector);
-    bool inspectWrite(sim::Inspect& inspector) const;
+    bool inspectRead(sim::Inspect& inspector) override;
+    bool inspectWrite(sim::Inspect& inspector) const override;
 
     Persistent::Error
     read(StreamIO& sio, Int32 version, Int32 user, Persistent::LoadContext& ctx) override;
@@ -440,8 +440,8 @@ public:
     bool message(gui::Control& sender, UInt32 msg) override;
     std::function<void()> checkpoint() override;
 
-    bool inspectRead(sim::Inspect& inspector);
-    bool inspectWrite(sim::Inspect& inspector) const;
+    bool inspectRead(sim::Inspect& inspector) override;
+    bool inspectWrite(sim::Inspect& inspector) const override;
 
     Persistent::Error
     read(StreamIO& sio, Int32 version, Int32 user, Persistent::LoadContext& ctx) override;
@@ -471,8 +471,8 @@ public:
     bool activateTabIndex(std::size_t index);
     std::function<void()> checkpoint() override;
 
-    bool inspectRead(sim::Inspect& inspector);
-    bool inspectWrite(sim::Inspect& inspector) const;
+    bool inspectRead(sim::Inspect& inspector) override;
+    bool inspectWrite(sim::Inspect& inspector) const override;
 
     Persistent::Error
     read(StreamIO& sio, Int32 version, Int32 user, Persistent::LoadContext& ctx) override;
@@ -568,8 +568,8 @@ public:
     void drawBorder(gfx::SoftwareSurface&, RectI) const override;
 
     std::function<void()> checkpoint() override;
-    bool inspectRead(sim::Inspect& inspector);
-    bool inspectWrite(sim::Inspect& inspector) const;
+    bool inspectRead(sim::Inspect& inspector) override;
+    bool inspectWrite(sim::Inspect& inspector) const override;
 
     Persistent::Error
     read(StreamIO& sio, Int32 version, Int32 user, Persistent::LoadContext& ctx) override;
@@ -780,8 +780,8 @@ public:
     bool event(const gui::Event&) override;
 
     std::function<void()> checkpoint() override;
-    bool inspectRead(sim::Inspect& inspector);
-    bool inspectWrite(sim::Inspect& inspector) const;
+    bool inspectRead(sim::Inspect& inspector) override;
+    bool inspectWrite(sim::Inspect& inspector) const override;
 
     Persistent::Error
     read(StreamIO& sio, Int32 version, Int32 user, Persistent::LoadContext& ctx) override;
@@ -947,8 +947,8 @@ public:
     bool draw(gfx::SoftwareSurface&, Point2I, RectI) const override;
 
     std::function<void()> checkpoint() override;
-    bool inspectRead(sim::Inspect& inspector);
-    bool inspectWrite(sim::Inspect& inspector) const;
+    bool inspectRead(sim::Inspect& inspector) override;
+    bool inspectWrite(sim::Inspect& inspector) const override;
 
     Persistent::Error
     read(StreamIO& sio, Int32 version, Int32 user, Persistent::LoadContext& ctx) override;
@@ -1084,8 +1084,8 @@ public:
     [[nodiscard]] std::string getSelectedText() const;
 
     std::function<void()> checkpoint() override;
-    bool inspectRead(sim::Inspect& inspector);
-    bool inspectWrite(sim::Inspect& inspector) const;
+    bool inspectRead(sim::Inspect& inspector) override;
+    bool inspectWrite(sim::Inspect& inspector) const override;
 
     Persistent::Error
     read(StreamIO& sio, Int32 version, Int32 user, Persistent::LoadContext& ctx) override;

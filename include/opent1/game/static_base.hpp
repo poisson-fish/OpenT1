@@ -70,7 +70,7 @@ public:
 
     void setPos(const Point3F& pos);
     void setRot(const Point3F& rot);
-    void setDamageLevel(Flt32 level);
+    void setDamageLevel(Flt32 level) override;
 
     // Targetable set & score
     void setIsTarget(bool isTarget);

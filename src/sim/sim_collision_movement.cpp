@@ -1371,6 +1371,13 @@ bool SimMovement::processSurface(Point3F normal, const CollisionSurface& surface
 }
 
 bool SimMovement::processCollision(MovementInfo& info) {
+    struct RestoreMaterial {
+        std::optional<Material>& value;
+        std::optional<Material> previous;
+        ~RestoreMaterial() {
+            value = previous;
+        }
+    };
     bool hit = false;
     const auto flags = info.retryCount ? flags_ & ~(UseFriction | TrackContacts) : flags_;
     std::ranges::for_each(info.collisionList, [&](const auto& collision) {
@@ -1392,14 +1399,7 @@ bool SimMovement::processCollision(MovementInfo& info) {
             }
             Point3F normal;
             m_mul(surface.normal, static_cast<const RMat3F&>(collision.surfaces.tWorld), normal);
-            const auto previous = surfaceMaterial_;
-            struct Restore {
-                std::optional<Material>& value;
-                std::optional<Material> previous;
-                ~Restore() {
-                    value = previous;
-                }
-            } restore{surfaceMaterial_, previous};
+            RestoreMaterial restore{surfaceMaterial_, surfaceMaterial_};
             const auto primary =
                 info.image && (!collision.image ||
                                info.image->getPriority() >= collision.image->getPriority())

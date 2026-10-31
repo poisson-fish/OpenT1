@@ -12,7 +12,6 @@ namespace opent1::game {
 
 namespace {
 constexpr Flt32 kTwoPi = static_cast<Flt32>(2.0 * std::numbers::pi);
-constexpr UInt32 kItemNetFlagIsGhost = 1u << 1;
 
 constexpr UInt32 ServerCollisionMask = SimTerrainObjectType | SimInteriorObjectType |
                                        SimPlayerObjectType | StaticObjectType | VehicleObjectType |

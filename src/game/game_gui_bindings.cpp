@@ -831,7 +831,7 @@ void FearGameApp::installShellCommands() {
     }
     console.addCommand(0,
                        "JoinSelectedServer",
-                       [this](Console& con, Int32, std::span<const std::string>) -> std::string {
+                       [](Console& con, Int32, std::span<const std::string>) -> std::string {
                            const auto address = con.getVariable("Server::Address");
                            if (address.empty()) {
                                return "False";

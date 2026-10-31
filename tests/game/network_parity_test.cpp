@@ -1019,10 +1019,11 @@ void hostnameConnection() {
     };
     CHECK(client->browser().ping("IP:localhost:" + std::to_string(port)));
     const auto browserDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    for (UInt32 now = 1001; !browserReply; ++now) {
+    UInt32 browserTime = 1001;
+    while (!browserReply) {
         CHECK(std::chrono::steady_clock::now() < browserDeadline);
-        (void)server->process(now);
-        (void)client->process(now);
+        (void)server->process(browserTime);
+        (void)client->process(browserTime++);
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
@@ -1035,9 +1036,10 @@ void hostnameConnection() {
     };
     CHECK(client->connect("opent1-host-that-does-not-exist.invalid:123", 1000) == net::Result::Ok);
     const auto failureDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    for (UInt32 now = 1001; !rejected; ++now) {
+    UInt32 failureTime = 1001;
+    while (!rejected) {
         CHECK(std::chrono::steady_clock::now() < failureDeadline);
-        (void)client->process(now);
+        (void)client->process(failureTime++);
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 }

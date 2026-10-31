@@ -186,7 +186,7 @@ inline constexpr auto PlayerCollisionImageType =
     static_cast<sim::SimCollisionImage::Type>(PlayerCollisionImageTypeId);
 
 // -----------------------------------------------------------------------------
-// FBase: PhoenixAssert & avar (f_base.cpp)
+// FBase: PhoenixAssert (f_base.cpp)
 // -----------------------------------------------------------------------------
 enum PhoenixAssertFlag : UInt32 {
     ASSERT_NO_FLAGS = 0u,
@@ -303,25 +303,5 @@ private:
     std::string lastLine1_{};
     std::string lastLine2_{};
 };
-
-[[nodiscard]] std::string_view cacheAvarOutput(std::string formatted);
-
-template <typename... Args>
-[[nodiscard]] std::string formatAvar(std::format_string<Args...> fmt, Args&&... args) {
-    return std::format(fmt, std::forward<Args>(args)...);
-}
-
-inline std::string formatAvar(std::string_view literal) {
-    return std::string(literal);
-}
-
-template <typename... Args>
-[[nodiscard]] std::string_view avar(std::format_string<Args...> fmt, Args&&... args) {
-    return cacheAvarOutput(std::format(fmt, std::forward<Args>(args)...));
-}
-
-inline std::string_view avar(std::string_view literal) {
-    return cacheAvarOutput(std::string(literal));
-}
 
 } // namespace opent1::game

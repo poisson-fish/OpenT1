@@ -1,9 +1,9 @@
 #include <opent1/game/sound.hpp>
+#include <opent1/core/text.hpp>
 #include <opent1/game/explosion.hpp>
 #include <opent1/world/scene_objects.hpp>
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <numbers>
 
@@ -13,24 +13,11 @@ namespace {
 constexpr Flt32 kTwoPi = static_cast<Flt32>(2.0 * std::numbers::pi);
 Random g_expRandom{};
 
-bool equalsIgnoreCase(std::string_view a, std::string_view b) noexcept {
-    if (a.size() != b.size()) {
-        return false;
-    }
-    for (std::size_t i = 0; i < a.size(); ++i) {
-        if (std::tolower(static_cast<unsigned char>(a[i])) !=
-            std::tolower(static_cast<unsigned char>(b[i]))) {
-            return false;
-        }
-    }
-    return true;
-}
-
 Int32 findSequenceIndex(const world::TsShape& shape, std::string_view name) noexcept {
     for (std::size_t i = 0; i < shape.sequences.size(); ++i) {
         const Int32 nameIdx = shape.sequences[i].name;
         if (nameIdx >= 0 && static_cast<std::size_t>(nameIdx) < shape.names.size() &&
-            equalsIgnoreCase(shape.names[static_cast<std::size_t>(nameIdx)], name)) {
+            equalIgnoreCase(shape.names[static_cast<std::size_t>(nameIdx)], name)) {
             return static_cast<Int32>(i);
         }
     }

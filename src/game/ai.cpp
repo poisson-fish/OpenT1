@@ -1,9 +1,9 @@
 #include <opent1/game/ai.hpp>
+#include <opent1/core/text.hpp>
 #include <opent1/game/projectile.hpp>
 #include <opent1/game/proj_target_laser.hpp>
 
 #include <algorithm>
-#include <cctype>
 #include <charconv>
 #include <cmath>
 #include <format>
@@ -14,20 +14,6 @@ namespace opent1::game {
 Random AIObj::rng_{Random::defaultSeed};
 
 namespace {
-
-[[nodiscard]] bool equalsIgnoreCaseAscii(std::string_view a, std::string_view b) noexcept {
-    if (a.size() != b.size()) {
-        return false;
-    }
-    for (std::size_t i = 0; i < a.size(); ++i) {
-        const auto ca = static_cast<unsigned char>(a[i]);
-        const auto cb = static_cast<unsigned char>(b[i]);
-        if (std::tolower(ca) != std::tolower(cb)) {
-            return false;
-        }
-    }
-    return true;
-}
 
 [[nodiscard]] Flt32 parseFloatSv(std::string_view sv) noexcept {
     Flt32 val = 0.0f;
@@ -396,143 +382,139 @@ AIObj::AngleSeek AIObj::getAngleSeekZ(const Point3F& seekLoc,
 }
 
 bool AIObj::setVar(std::string_view varName, std::string_view value) {
-    if (equalsIgnoreCaseAscii(varName, "iq")) {
+    if (equalIgnoreCase(varName, "iq")) {
         iq_ = parseFloatSv(value);
         scaleIQVariables();
         return true;
     }
-    if (equalsIgnoreCaseAscii(varName, "attackMode")) {
+    if (equalIgnoreCase(varName, "attackMode")) {
         attackMode_ = parseIntSv(value);
         return true;
     }
-    if (equalsIgnoreCaseAscii(varName, "spotDist")) {
+    if (equalIgnoreCase(varName, "spotDist")) {
         iqVars_.spotDistOverride = parseFloatSv(value);
         scaleIQVariables();
         return true;
     }
-    if (equalsIgnoreCaseAscii(varName, "smartGuyWeaponRange")) {
+    if (equalIgnoreCase(varName, "smartGuyWeaponRange")) {
         iqVars_.smartGuyWeaponRange = parseFloatSv(value);
         scaleIQVariables();
         return true;
     }
-    if (equalsIgnoreCaseAscii(varName, "dumbGuyWeaponRange")) {
+    if (equalIgnoreCase(varName, "dumbGuyWeaponRange")) {
         iqVars_.dumbGuyWeaponRange = parseFloatSv(value);
         scaleIQVariables();
         return true;
     }
-    if (equalsIgnoreCaseAscii(varName, "smartGuyMinAccuracy")) {
+    if (equalIgnoreCase(varName, "smartGuyMinAccuracy")) {
         iqVars_.smartGuyMinAccuracy = parseFloatSv(value);
         scaleIQVariables();
         return true;
     }
-    if (equalsIgnoreCaseAscii(varName, "dopeOffset") ||
-        equalsIgnoreCaseAscii(varName, "dopeBase")) {
+    if (equalIgnoreCase(varName, "dopeOffset") || equalIgnoreCase(varName, "dopeBase")) {
         iqVars_.dopeBase = std::max(0.0f, parseFloatSv(value));
         return true;
     }
-    if (equalsIgnoreCaseAscii(varName, "thinkWait")) {
+    if (equalIgnoreCase(varName, "thinkWait")) {
         iqVars_.thinkWait = std::max(0, parseIntSv(value));
         return true;
     }
-    if (equalsIgnoreCaseAscii(varName, "triggerPct")) {
+    if (equalIgnoreCase(varName, "triggerPct")) {
         iqVars_.triggerPct = std::clamp(parseFloatSv(value), 0.0f, 1.0f);
         trigger_.percent = iqVars_.triggerPct;
         return true;
     }
-    if (equalsIgnoreCaseAscii(varName, "vertEvade")) {
+    if (equalIgnoreCase(varName, "vertEvade")) {
         iqVars_.vertEvade = std::clamp(parseIntSv(value), 0, 3);
         return true;
     }
-    if (equalsIgnoreCaseAscii(varName, "horizEvade")) {
+    if (equalIgnoreCase(varName, "horizEvade")) {
         iqVars_.horizEvade = std::clamp(parseIntSv(value), 0, 3);
         return true;
     }
-    if (equalsIgnoreCaseAscii(varName, "seekOff")) {
+    if (equalIgnoreCase(varName, "seekOff")) {
         std::istringstream input{std::string(value)};
         Point3F offset{};
         input >> offset.x >> offset.y >> offset.z;
         seekOff_ = offset;
         return true;
     }
-    if (equalsIgnoreCaseAscii(varName, "pathType")) {
-        if (equalsIgnoreCaseAscii(value, "oneWay")) {
+    if (equalIgnoreCase(varName, "pathType")) {
+        if (equalIgnoreCase(value, "oneWay")) {
             pathType_ = OneWay;
-        } else if (equalsIgnoreCaseAscii(value, "twoWay")) {
+        } else if (equalIgnoreCase(value, "twoWay")) {
             pathType_ = TwoWay;
-        } else if (equalsIgnoreCaseAscii(value, "circular")) {
+        } else if (equalIgnoreCase(value, "circular")) {
             pathType_ = Circular;
         } else {
             pathType_ = std::clamp(parseIntSv(value), 0, 2);
         }
         return true;
     }
-    if (equalsIgnoreCaseAscii(varName, "windup") ||
-        equalsIgnoreCaseAscii(varName, "triggerWindup")) {
+    if (equalIgnoreCase(varName, "windup") || equalIgnoreCase(varName, "triggerWindup")) {
         windup_ = std::max(0.0f, parseFloatSv(value));
         trigger_.windup = Int32(windup_);
         return true;
     }
-    if (equalsIgnoreCaseAscii(varName, "jetNavigation")) {
+    if (equalIgnoreCase(varName, "jetNavigation")) {
         jetNavigation_ = parseFloatSv(value);
         if (jetNavigation_ == 0) {
             jetSkill_.stage = JetSkill::NoNav;
         }
         return true;
     }
-    if (equalsIgnoreCaseAscii(varName, "automaticTargets")) {
-        automaticTargets_ = (parseIntSv(value) != 0 || equalsIgnoreCaseAscii(value, "true"));
+    if (equalIgnoreCase(varName, "automaticTargets")) {
+        automaticTargets_ = (parseIntSv(value) != 0 || equalIgnoreCase(value, "true"));
         return true;
     }
     return false;
 }
 
 std::string AIObj::getVar(std::string_view varName) const {
-    if (equalsIgnoreCaseAscii(varName, "jetNavigation")) {
+    if (equalIgnoreCase(varName, "jetNavigation")) {
         return std::format("{:.2f}", jetNavigation_);
     }
-    if (equalsIgnoreCaseAscii(varName, "iq")) {
+    if (equalIgnoreCase(varName, "iq")) {
         return std::format("{:.2f}", iq_);
     }
-    if (equalsIgnoreCaseAscii(varName, "attackMode")) {
+    if (equalIgnoreCase(varName, "attackMode")) {
         return std::format("{}", attackMode_);
     }
-    if (equalsIgnoreCaseAscii(varName, "spotDist")) {
+    if (equalIgnoreCase(varName, "spotDist")) {
         return std::format("{:.2f}", iqVars_.spotDistOverride);
     }
-    if (equalsIgnoreCaseAscii(varName, "smartGuyWeaponRange"))
+    if (equalIgnoreCase(varName, "smartGuyWeaponRange"))
         return std::format("{:.2f}", iqVars_.smartGuyWeaponRange);
-    if (equalsIgnoreCaseAscii(varName, "dumbGuyWeaponRange"))
+    if (equalIgnoreCase(varName, "dumbGuyWeaponRange"))
         return std::format("{:.2f}", iqVars_.dumbGuyWeaponRange);
-    if (equalsIgnoreCaseAscii(varName, "smartGuyMinAccuracy")) {
+    if (equalIgnoreCase(varName, "smartGuyMinAccuracy")) {
         return std::format("{:.2f}", iqVars_.smartGuyMinAccuracy);
     }
-    if (equalsIgnoreCaseAscii(varName, "dopeOffset") ||
-        equalsIgnoreCaseAscii(varName, "dopeBase")) {
+    if (equalIgnoreCase(varName, "dopeOffset") || equalIgnoreCase(varName, "dopeBase")) {
         return std::format("{:.2f}", iqVars_.dopeBase);
     }
-    if (equalsIgnoreCaseAscii(varName, "thinkWait")) {
+    if (equalIgnoreCase(varName, "thinkWait")) {
         return std::format("{}", iqVars_.thinkWait);
     }
-    if (equalsIgnoreCaseAscii(varName, "triggerPct")) {
+    if (equalIgnoreCase(varName, "triggerPct")) {
         return std::format("{:.2f}", iqVars_.triggerPct);
     }
-    if (equalsIgnoreCaseAscii(varName, "vertEvade")) {
+    if (equalIgnoreCase(varName, "vertEvade")) {
         return std::format("{}", iqVars_.vertEvade);
     }
-    if (equalsIgnoreCaseAscii(varName, "horizEvade")) {
+    if (equalIgnoreCase(varName, "horizEvade")) {
         return std::format("{}", iqVars_.horizEvade);
     }
-    if (equalsIgnoreCaseAscii(varName, "seekOff")) {
+    if (equalIgnoreCase(varName, "seekOff")) {
         return std::format("{:.6f} {:.6f} {:.6f}", seekOff_.x, seekOff_.y, seekOff_.z);
     }
-    if (equalsIgnoreCaseAscii(varName, "pathType")) {
+    if (equalIgnoreCase(varName, "pathType")) {
         return std::format("{}", pathType_);
     }
-    if (equalsIgnoreCaseAscii(varName, "windup") ||
-        equalsIgnoreCaseAscii(varName, "triggerWindup")) {
+    if (equalIgnoreCase(varName, "windup") || equalIgnoreCase(varName, "triggerWindup")) {
         return std::format("{:.2f}", windup_);
     }
-    if (equalsIgnoreCaseAscii(varName, "automaticTargets")) {
+    if (equalIgnoreCase(varName, "automaticTargets")) {
         return automaticTargets_ ? "1" : "0";
     }
     return {};

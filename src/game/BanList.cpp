@@ -1,4 +1,5 @@
 #include <opent1/game/ban_list.hpp>
+#include <opent1/core/text.hpp>
 #include <algorithm>
 #include <cctype>
 #include <ctime>
@@ -11,20 +12,8 @@ namespace {
     return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 }
 
-[[nodiscard]] bool equalsIgnoreCaseAscii(std::string_view a, std::string_view b) noexcept {
-    if (a.size() != b.size()) {
-        return false;
-    }
-    for (std::size_t i = 0; i < a.size(); ++i) {
-        if (toLowerAscii(a[i]) != toLowerAscii(b[i])) {
-            return false;
-        }
-    }
-    return true;
-}
-
 [[nodiscard]] bool startsWithIgnoreCaseAscii(std::string_view s, std::string_view prefix) noexcept {
-    return s.size() >= prefix.size() && equalsIgnoreCaseAscii(s.substr(0, prefix.size()), prefix);
+    return s.size() >= prefix.size() && equalIgnoreCase(s.substr(0, prefix.size()), prefix);
 }
 
 } // namespace
@@ -49,11 +38,12 @@ void BanList::addBan(std::string_view transportAddress, Int32 banTime) {
     }
 
     const auto boundedTa = transportAddress.substr(0, kMaxAddrLen - 1);
-    for (auto& entry : list_) {
-        if (equalsIgnoreCaseAscii(entry.transportAddress, boundedTa)) {
-            entry.bannedUntil = banTime;
-            return;
-        }
+    const auto found = std::ranges::find_if(list_, [&](const BanInfo& entry) {
+        return equalIgnoreCase(entry.transportAddress, boundedTa);
+    });
+    if (found != list_.end()) {
+        found->bannedUntil = banTime;
+        return;
     }
 
     BanInfo info;
@@ -77,11 +67,11 @@ void BanList::addBanRelative(std::string_view transportAddress, Int32 numSeconds
 
 void BanList::removeBan(std::string_view transportAddress) {
     const auto boundedTa = transportAddress.substr(0, kMaxAddrLen - 1);
-    for (auto it = list_.begin(); it != list_.end(); ++it) {
-        if (equalsIgnoreCaseAscii(it->transportAddress, boundedTa)) {
-            list_.erase(it);
-            return;
-        }
+    const auto found = std::ranges::find_if(list_, [&](const BanInfo& entry) {
+        return equalIgnoreCase(entry.transportAddress, boundedTa);
+    });
+    if (found != list_.end()) {
+        list_.erase(found);
     }
 }
 

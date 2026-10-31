@@ -1,4 +1,5 @@
 #include <opent1/game/player_manager.hpp>
+#include <opent1/core/text.hpp>
 #include <opent1/math/random.hpp>
 #include <opent1/world/scene_objects.hpp>
 #include <opent1/game/sound.hpp>
@@ -27,19 +28,6 @@ struct BitStreamRollbackGuard {
         }
     }
 };
-
-[[nodiscard]] bool equalsIgnoreCase(std::string_view a, std::string_view b) noexcept {
-    if (a.size() != b.size()) {
-        return false;
-    }
-    for (std::size_t i = 0; i < a.size(); ++i) {
-        if (std::tolower(static_cast<unsigned char>(a[i])) !=
-            std::tolower(static_cast<unsigned char>(b[i]))) {
-            return false;
-        }
-    }
-    return true;
-}
 
 [[nodiscard]] std::string truncateTo(std::string_view text, std::size_t maxLen) {
     const std::size_t len = std::min(text.size(), maxLen);
@@ -654,7 +642,7 @@ const PlayerManager::TeamRep* PlayerManager::findTeam(Int32 teamId) const noexce
 PlayerManager::TeamRep* PlayerManager::findTeam(std::string_view teamName) noexcept {
     for (Int32 i = -1; i < numTeams_; ++i) {
         TeamRep& t = teamList_[static_cast<std::size_t>(i + 1)];
-        if (equalsIgnoreCase(t.name, teamName)) {
+        if (equalIgnoreCase(t.name, teamName)) {
             return &t;
         }
     }
@@ -664,7 +652,7 @@ PlayerManager::TeamRep* PlayerManager::findTeam(std::string_view teamName) noexc
 const PlayerManager::TeamRep* PlayerManager::findTeam(std::string_view teamName) const noexcept {
     for (Int32 i = -1; i < numTeams_; ++i) {
         const TeamRep& t = teamList_[static_cast<std::size_t>(i + 1)];
-        if (equalsIgnoreCase(t.name, teamName)) {
+        if (equalIgnoreCase(t.name, teamName)) {
             return &t;
         }
     }

@@ -5,10 +5,8 @@ void NativeLandscape::add(float _n) {
         mExecStatus = EXEC_FAILURE;
         return;
     }
-    int length = sq(stack[0]->size);
-
-    for (int i = 0; i < length; i++)
-        stack[0]->real[i] += _n;
+    for (auto& value : stack[0]->values)
+        value += _n;
 }
 
 void NativeLandscape::sub(float _n) {
@@ -17,10 +15,8 @@ void NativeLandscape::sub(float _n) {
         mExecStatus = EXEC_FAILURE;
         return;
     }
-    int length = sq(stack[0]->size);
-
-    for (int i = 0; i < length; i++)
-        stack[0]->real[i] -= _n;
+    for (auto& value : stack[0]->values)
+        value -= _n;
 }
 
 void NativeLandscape::mul(float _n) {
@@ -29,10 +25,8 @@ void NativeLandscape::mul(float _n) {
         mExecStatus = EXEC_FAILURE;
         return;
     }
-    int length = sq(stack[0]->size);
-
-    for (int i = 0; i < length; i++)
-        stack[0]->real[i] *= _n;
+    for (auto& value : stack[0]->values)
+        value *= _n;
 }
 
 void NativeLandscape::div(float _n) {
@@ -41,10 +35,8 @@ void NativeLandscape::div(float _n) {
         mExecStatus = EXEC_FAILURE;
         return;
     }
-    int length = sq(stack[0]->size);
-
-    for (int i = 0; i < length; i++)
-        stack[0]->real[i] /= _n;
+    for (auto& value : stack[0]->values)
+        value /= _n;
 }
 
 void NativeLandscape::exp(float _n) {
@@ -53,10 +45,8 @@ void NativeLandscape::exp(float _n) {
         mExecStatus = EXEC_FAILURE;
         return;
     }
-    int length = sq(stack[0]->size);
-
-    for (int i = 0; i < length; i++)
-        stack[0]->real[i] = pow(stack[0]->real[i], _n);
+    for (auto& value : stack[0]->values)
+        value = pow(value, _n);
 }
 
 void NativeLandscape::neg() {
@@ -65,9 +55,8 @@ void NativeLandscape::neg() {
         mExecStatus = EXEC_FAILURE;
         return;
     }
-    int length = sq(stack[0]->size);
-    for (int i = 0; i < length; i++)
-        stack[0]->real[i] = -stack[0]->real[i];
+    for (auto& value : stack[0]->values)
+        value = -value;
 }
 
 void NativeLandscape::clr(float _n) {
@@ -76,7 +65,7 @@ void NativeLandscape::clr(float _n) {
         mExecStatus = EXEC_FAILURE;
         return;
     }
-    int length = sq(stack[0]->size);
+    int length = square(stack[0]->size);
 
     memset(stack[0]->real, _n, length * sizeof(float));
 }
@@ -91,7 +80,7 @@ void NativeLandscape::normalize(float _min, float _max) {
 
     float* realPtr = stack[0]->real;
 
-    int length = sq(stack[0]->size);
+    int length = square(stack[0]->size);
     float min = FLT_MAX;
     float max = -FLT_MAX;
 
@@ -264,7 +253,7 @@ void NativeLandscape::flipX() {
 
     float* realPtr = stack[0]->real;
 
-    for (int y = 0; y < sq(width); y += width)
+    for (int y = 0; y < square(width); y += width)
         for (int x = 0; x < (width >> 1); x++) {
             float tmp = realPtr[y + x];
             realPtr[y + x] = realPtr[y + width - 1 - x];
@@ -283,11 +272,11 @@ void NativeLandscape::flipY() {
 
     float* realPtr = stack[0]->real;
 
-    for (int y = 0; y < (sq(width) >> 1); y += width)
+    for (int y = 0; y < (square(width) >> 1); y += width)
         for (int x = 0; x < width; x++) {
             float tmp = realPtr[y + x];
-            realPtr[y + x] = realPtr[sq(width) - y - width + x];
-            realPtr[sq(width) - width - y + x] = tmp;
+            realPtr[y + x] = realPtr[square(width) - y - width + x];
+            realPtr[square(width) - width - y + x] = tmp;
         }
 }
 
@@ -384,10 +373,8 @@ void NativeLandscape::fillNormalHalf( float _height )
 
 // Port of LS_terrain.cpp (Dynamix, 1996). See terrain-authoring-port.json.
 void NativeLandscape::terrain(int size, float _h) {
-    Matrix* real = new Matrix(size);
-    stack.push_front(real);
-    Matrix* imag = new Matrix(size);
-    stack.push_front(imag);
+    stack.push_front(std::make_unique<Matrix>(size));
+    stack.push_front(std::make_unique<Matrix>(size));
 
     fillNormal(_h);
     fft(1);
@@ -448,8 +435,7 @@ void Plasma::recurse(int minX, int minY, int maxX, int maxY) {
 }
 
 void NativeLandscape::plasma(int size, float deviation) {
-    Matrix* real = new Matrix(size);
-    stack.push_front(real);
+    stack.push_front(std::make_unique<Matrix>(size));
     clr(0.0f);
 
     Plasma pp;
@@ -497,7 +483,7 @@ void NativeLandscape::wrap() {
     bool ok;
     int size = stack[0]->size;
     float* line;
-    float* lineBuffer = new float[size];
+    std::vector<float> lineBuffer(size);
     float hMax, delta, n0, n1;
     int y, x;
 
@@ -573,13 +559,11 @@ void NativeLandscape::wrap() {
             n1++;
         }
     }
-
-    delete[] lineBuffer;
 }
 
-static Matrix* getMatrix(Matrix* source, int x, int y, int size) {
+static std::unique_ptr<Matrix> getMatrix(const Matrix* source, int x, int y, int size) {
     int u, v, sourceIndex;
-    Matrix* m = new Matrix(size);
+    auto m = std::make_unique<Matrix>(size);
 
     for (v = 0; v < size; v++)
         for (u = 0; u < size; u++) {
@@ -587,16 +571,16 @@ static Matrix* getMatrix(Matrix* source, int x, int y, int size) {
             m->real[v * size + u] = source->real[sourceIndex];
         }
 
-    return (m);
+    return m;
 }
 
-static void placeMatrix(Matrix* target, Matrix* source, int x, int y) {
+static void placeMatrix(Matrix& target, const Matrix& source, int x, int y) {
     int u, v, targetIndex;
 
-    for (v = 0; v < source->size; v++)
-        for (u = 0; u < source->size; u++) {
-            targetIndex = (y + v) * target->size + (u + x);
-            target->real[targetIndex] = source->real[v * source->size + u];
+    for (v = 0; v < source.size; v++)
+        for (u = 0; u < source.size; u++) {
+            targetIndex = (y + v) * target.size + (u + x);
+            target.real[targetIndex] = source.real[v * source.size + u];
         }
 }
 
@@ -609,39 +593,35 @@ void NativeLandscape::tile() {
 
     Matrix* m = stack[0].get();
     int tileSize = m->size / 2;
-    Matrix* tile0 = getMatrix(m, tileSize, 0, tileSize);
-    Matrix* tile1 = getMatrix(m, 0, 0, tileSize);
-    Matrix* tile2 = getMatrix(m, 0, tileSize, tileSize);
-    Matrix* tile3 = getMatrix(m, tileSize, tileSize, tileSize);
+    auto tile0 = getMatrix(m, tileSize, 0, tileSize);
+    auto tile1 = getMatrix(m, 0, 0, tileSize);
+    auto tile2 = getMatrix(m, 0, tileSize, tileSize);
+    auto tile3 = getMatrix(m, tileSize, tileSize, tileSize);
 
-    Matrix* target = new Matrix(tileSize * 4);
+    auto target = std::make_unique<Matrix>(tileSize * 4);
 
-    placeMatrix(target, tile3, 0, 0);
-    placeMatrix(target, tile2, tileSize, 0);
-    placeMatrix(target, tile3, 2 * tileSize, 0);
-    placeMatrix(target, tile2, 3 * tileSize, 0);
+    placeMatrix(*target, *tile3, 0, 0);
+    placeMatrix(*target, *tile2, tileSize, 0);
+    placeMatrix(*target, *tile3, 2 * tileSize, 0);
+    placeMatrix(*target, *tile2, 3 * tileSize, 0);
 
-    placeMatrix(target, tile0, 0, tileSize);
-    placeMatrix(target, tile1, tileSize, tileSize);
-    placeMatrix(target, tile0, 2 * tileSize, tileSize);
-    placeMatrix(target, tile1, 3 * tileSize, tileSize);
+    placeMatrix(*target, *tile0, 0, tileSize);
+    placeMatrix(*target, *tile1, tileSize, tileSize);
+    placeMatrix(*target, *tile0, 2 * tileSize, tileSize);
+    placeMatrix(*target, *tile1, 3 * tileSize, tileSize);
 
-    placeMatrix(target, tile3, 0, 2 * tileSize);
-    placeMatrix(target, tile2, tileSize, 2 * tileSize);
-    placeMatrix(target, tile3, 2 * tileSize, 2 * tileSize);
-    placeMatrix(target, tile2, 3 * tileSize, 2 * tileSize);
+    placeMatrix(*target, *tile3, 0, 2 * tileSize);
+    placeMatrix(*target, *tile2, tileSize, 2 * tileSize);
+    placeMatrix(*target, *tile3, 2 * tileSize, 2 * tileSize);
+    placeMatrix(*target, *tile2, 3 * tileSize, 2 * tileSize);
 
-    placeMatrix(target, tile0, 0, 3 * tileSize);
-    placeMatrix(target, tile1, tileSize, 3 * tileSize);
-    placeMatrix(target, tile0, 2 * tileSize, 3 * tileSize);
-    placeMatrix(target, tile1, 3 * tileSize, 3 * tileSize);
+    placeMatrix(*target, *tile0, 0, 3 * tileSize);
+    placeMatrix(*target, *tile1, tileSize, 3 * tileSize);
+    placeMatrix(*target, *tile0, 2 * tileSize, 3 * tileSize);
+    placeMatrix(*target, *tile1, 3 * tileSize, 3 * tileSize);
 
     pop();
-    delete tile0;
-    delete tile1;
-    delete tile2;
-    delete tile3;
-    stack.push_front(target);
+    stack.push_front(std::move(target));
 }
 
 void NativeLandscape::alphablend(int x, int y) {
@@ -708,12 +688,10 @@ void NativeLandscape::smooth(float epsilon, float exponent) {
     float* source = sourceM->real;
     int size = sourceM->size;
 
-    Matrix* targetM = new Matrix(size);
+    auto targetM = std::make_unique<Matrix>(size);
     float* target = targetM->real;
 
-    float invEpsilon;
-    if (epsilon != 0.0)
-        invEpsilon = 1.0f / epsilon;
+    const float invEpsilon = epsilon != 0.0 ? 1.0f / epsilon : 0.0f;
 
     int convolutionSize = sqrt((double)convWeightsSize);
 
@@ -781,7 +759,7 @@ void NativeLandscape::smooth(float epsilon, float exponent) {
         }
 
     pop();
-    stack.push_front(targetM);
+    stack.push_front(std::move(targetM));
 }
 
 void NativeLandscape::floor(float flr_start, float flr_depth, float scanDepth) {
@@ -792,7 +770,7 @@ void NativeLandscape::floor(float flr_start, float flr_depth, float scanDepth) {
         return;
     }
 
-    int length = sq(stack[0]->size);
+    int length = square(stack[0]->size);
     int i;
 
     float* realPtr = stack[0]->real;
@@ -823,7 +801,7 @@ void NativeLandscape::ceil(float ceil_start, float ceil_height, float scanHeight
         return;
     }
 
-    int length = sq(stack[0]->size);
+    int length = square(stack[0]->size);
     int i;
 
     float* realPtr = stack[0]->real;
@@ -857,7 +835,7 @@ void NativeLandscape::rot() {
         return;
 
     int size = stack[0]->size;
-    Matrix* pMTX = new Matrix(size);
+    auto pMTX = std::make_unique<Matrix>(size);
 
     for (int row = 0; row < size; row++)
         for (int col = 0; col < size; col++)
@@ -865,7 +843,7 @@ void NativeLandscape::rot() {
 
     stack.pop_front();
 
-    stack.push_front(pMTX);
+    stack.push_front(std::move(pMTX));
 }
 
 void NativeLandscape::curve(float _thresh, int _iter) {
@@ -879,12 +857,12 @@ void NativeLandscape::curve(float _thresh, int _iter) {
 
     int size = stack[0]->size;
     float bitSrc, bitDst, deltaX, deltaY;
-    bool changed = TRUE;
+    bool changed = true;
 
     dup();
 
     while (changed && _iter--) {
-        changed = FALSE;
+        changed = false;
         swap();
         float* topReal = stack[0]->real;
         float* nextReal = stack[1]->real;
@@ -946,12 +924,12 @@ void NativeLandscape::slope(float _thresh, int _iter) {
 
     int size = stack[0]->size;
     float bitSrc, bitDst;
-    bool changed = TRUE;
+    bool changed = true;
 
     dup();
 
     while (changed && _iter--) {
-        changed = FALSE;
+        changed = false;
         swap();
         float* topReal = stack[0]->real;
         float* nextReal = stack[1]->real;
@@ -1040,9 +1018,7 @@ void NativeLandscape::shaveArea(float epsilon, float exponent, float avgWeight) 
     int x, y, u, v, xc, yc, i, cDelta;
     float targetVal, delta, sign;
 
-    float invEpsilon;
-    if (epsilon != 0.0)
-        invEpsilon = 1.0f / epsilon;
+    const float invEpsilon = epsilon != 0.0 ? 1.0f / epsilon : 0.0f;
 
     int convolutionSize = sqrt((double)convWeightsSize2);
 
@@ -1054,7 +1030,7 @@ void NativeLandscape::shaveArea(float epsilon, float exponent, float avgWeight) 
 
     float invTotalWeight = 1.0 / totalWeight;
 
-    Matrix* targetM = new Matrix(size);
+    auto targetM = std::make_unique<Matrix>(size);
 
     source = stack[0]->real;
     shaver = stack[1]->real;
@@ -1121,7 +1097,7 @@ void NativeLandscape::shaveArea(float epsilon, float exponent, float avgWeight) 
         }
 
     pop();
-    stack.push_front(targetM);
+    stack.push_front(std::move(targetM));
     swap();
 }
 
@@ -1237,7 +1213,7 @@ void NativeLandscape::fft(int _sign) {
         return;
     }
 
-    int msize = sq(stack[0]->size);
+    int msize = square(stack[0]->size);
     int half = msize >> 1;
     float* rPi = stack[0]->real;
     float* rPj = &stack[0]->real[msize - 1];
@@ -1292,7 +1268,7 @@ void fht(REAL* fz, int size) {
 
     for (int k1 = 1, k2 = 0; k1 < size; k1++) {
         REAL a;
-        for (int k = size >> 1; (!((k2 ^= k) & k)); k >>= 1)
+        for (int bit = size >> 1; (!((k2 ^= bit) & bit)); bit >>= 1)
             ;
         if (k1 > k2) {
             a = fz[k1];
@@ -1382,14 +1358,14 @@ void fht(REAL* fz, int size) {
             fi += k4;
         } while (fi < fn);
         TRIG_INIT(k, c1, s1);
-        for (int i = 1; i < kx; i++) {
+        for (int angleIndex = 1; angleIndex < kx; angleIndex++) {
             REAL c2, s2;
             TRIG_NEXT(k, c1, s1);
             c2 = c1 * c1 - s1 * s1;
             s2 = 2 * (c1 * s1);
             fn = fz + size;
-            fi = fz + i;
-            gi = fz + k1 - i;
+            fi = fz + angleIndex;
+            gi = fz + k1 - angleIndex;
             do {
                 REAL a, b, g0, f0, f1, g1, f2, g2, f3, g3;
                 b = s2 * fi[k1] - c2 * gi[k1];
@@ -1431,10 +1407,9 @@ void NativeLandscape::clipMin(float minHeight) {
         return;
     }
 
-    int length = sq(stack[0]->size);
-    for (float* fPtr = stack[0]->real; fPtr < stack[0]->real + length; fPtr++)
-        if (*fPtr < minHeight)
-            *fPtr = minHeight;
+    for (auto& value : stack[0]->values)
+        if (value < minHeight)
+            value = minHeight;
 }
 
 void NativeLandscape::clipMax(float maxHeight) {
@@ -1444,8 +1419,7 @@ void NativeLandscape::clipMax(float maxHeight) {
         return;
     }
 
-    int length = sq(stack[0]->size);
-    for (float* fPtr = stack[0]->real; fPtr < stack[0]->real + length; fPtr++)
-        if (*fPtr > maxHeight)
-            *fPtr = maxHeight;
+    for (auto& value : stack[0]->values)
+        if (value > maxHeight)
+            value = maxHeight;
 }

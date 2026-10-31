@@ -1,8 +1,5 @@
 #include <opent1/core/base.hpp>
 
-#include <array>
-#include <cstdarg>
-#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 
@@ -112,21 +109,6 @@ void PhoenixAssert::processAt(AssertType type,
 PhoenixAssert& globalAssert() noexcept {
     static PhoenixAssert instance;
     return instance;
-}
-
-const char* avar(const char* fmt, ...) {
-    thread_local std::array<char, 1024> buffer{};
-    if (fmt == nullptr) {
-        buffer[0] = '\0';
-        return buffer.data();
-    }
-
-    va_list args;
-    va_start(args, fmt);
-    std::vsnprintf(buffer.data(), buffer.size(), fmt, args);
-    va_end(args);
-    buffer.back() = '\0';
-    return buffer.data();
 }
 
 } // namespace opent1

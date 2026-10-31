@@ -1,4 +1,5 @@
 #include <opent1/game/shape_base.hpp>
+#include <opent1/core/text.hpp>
 #include <opent1/world/scene_objects.hpp>
 #include <opent1/game/sound.hpp>
 #include <opent1/game/player_manager.hpp>
@@ -56,19 +57,6 @@ TMat3F ensureRigidTransform(const TMat3F& inMat, bool preserveReflection = false
     return out;
 }
 
-bool equalsIgnoreCase(std::string_view a, std::string_view b) noexcept {
-    if (a.size() != b.size()) {
-        return false;
-    }
-    for (std::size_t i = 0; i < a.size(); ++i) {
-        if (std::tolower(static_cast<unsigned char>(a[i])) !=
-            std::tolower(static_cast<unsigned char>(b[i]))) {
-            return false;
-        }
-    }
-    return true;
-}
-
 struct BitStreamRollbackGuard {
     BitStream& stream;
     Int32 savedBitPos;
@@ -117,9 +105,9 @@ bool ShapeBase::onAdd() {
         }
     }
     if (const auto destrStr = getFieldValue("destroyable"); destrStr && !destrStr->empty()) {
-        if (*destrStr == "0" || equalsIgnoreCase(*destrStr, "false")) {
+        if (*destrStr == "0" || equalIgnoreCase(*destrStr, "false")) {
             destroyable_ = false;
-        } else if (*destrStr == "1" || equalsIgnoreCase(*destrStr, "true")) {
+        } else if (*destrStr == "1" || equalIgnoreCase(*destrStr, "true")) {
             destroyable_ = true;
         }
     }
@@ -245,7 +233,7 @@ bool ShapeBase::initResources(GameBaseData* dat) {
                 const auto nameIdx = shapeData_->shieldShape->sequences[i].name;
                 if (nameIdx >= 0 &&
                     static_cast<std::size_t>(nameIdx) < shapeData_->shieldShape->names.size() &&
-                    equalsIgnoreCase(
+                    equalIgnoreCase(
                         shapeData_->shieldShape->names[static_cast<std::size_t>(nameIdx)],
                         "Sequence01")) {
                     shieldThreadIndex_ =
@@ -376,7 +364,7 @@ void ShapeBase::startSequenceSound(SThread& st) {
         return;
     }
     for (const auto& entry : shapeData_->sequenceSound) {
-        if (entry.sound >= 0 && equalsIgnoreCase(entry.sequence, shape->names[std::size_t(name)])) {
+        if (entry.sound >= 0 && equalIgnoreCase(entry.sequence, shape->names[std::size_t(name)])) {
             st.sound = TSFX::PlayAt(UInt32(entry.sound), getTransform(), {}, getManager());
             break;
         }
@@ -657,7 +645,7 @@ Int32 ShapeBase::getDamageSkinLevel(Int32 detailLevel) const noexcept {
 void ShapeBase::reSkin(bool force) {
     const std::string_view newSkinBase = getSkinBase();
     const Int32 dlevel = getDamageSkinLevel(prefDamageSkinDetail);
-    if (!force && dlevel == curSkinDamage_ && equalsIgnoreCase(curSkin_, newSkinBase)) {
+    if (!force && dlevel == curSkinDamage_ && equalIgnoreCase(curSkin_, newSkinBase)) {
         return;
     }
     curSkinDamage_ = dlevel;
@@ -741,7 +729,7 @@ void ShapeBase::blowUp() {
             if (det.root >= 0 && static_cast<std::size_t>(det.root) < shape.nodes.size()) {
                 const Int32 nameIdx = shape.nodes[static_cast<std::size_t>(det.root)].name;
                 if (nameIdx >= 0 && static_cast<std::size_t>(nameIdx) < shape.names.size() &&
-                    equalsIgnoreCase(shape.names[static_cast<std::size_t>(nameIdx)], "debris0")) {
+                    equalIgnoreCase(shape.names[static_cast<std::size_t>(nameIdx)], "debris0")) {
                     foundDebrisDetail = true;
                     break;
                 }

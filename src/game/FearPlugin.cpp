@@ -1,4 +1,5 @@
 #include <opent1/game/mine.hpp>
+#include <opent1/core/text.hpp>
 #include <opent1/game/flier.hpp>
 #include <opent1/game/ai.hpp>
 #include <opent1/game/chat_inventory_huds.hpp>
@@ -157,19 +158,6 @@ void collectGroupObjectsRecursive(sim::SimGroup& group, std::vector<sim::SimObje
     }
 }
 
-[[nodiscard]] bool equalsIgnoreCaseSv(std::string_view a, std::string_view b) noexcept {
-    if (a.size() != b.size()) {
-        return false;
-    }
-    for (std::size_t i = 0; i < a.size(); ++i) {
-        if (std::tolower(static_cast<unsigned char>(a[i])) !=
-            std::tolower(static_cast<unsigned char>(b[i]))) {
-            return false;
-        }
-    }
-    return true;
-}
-
 void addLocalPlayer(PlayerManager& players, Console& console, Int32 clientId) {
     const auto preference = [&](std::string_view name, std::string_view fallback) {
         const auto value = console.getVariable(name);
@@ -178,7 +166,7 @@ void addLocalPlayer(PlayerManager& players, Console& console, Int32 clientId) {
     players.clientAdded(preference("PCFG::Name", "PlayerOne"),
                         preference("PCFG::Voice", "male1"),
                         preference("PCFG::SkinBase", "base"),
-                        !equalsIgnoreCaseSv(preference("PCFG::Gender", "Male"), "Female"),
+                        !equalIgnoreCase(preference("PCFG::Gender", "Male"), "Female"),
                         clientId);
 }
 
@@ -205,7 +193,7 @@ void addLocalPlayer(PlayerManager& players, Console& console, Int32 clientId) {
     std::vector<sim::SimObject*> allObjs;
     collectGroupObjectsRecursive(*mgr, allObjs);
     for (sim::SimObject* obj : allObjs) {
-        if (obj && equalsIgnoreCaseSv(obj->getName(), nameOrId)) {
+        if (obj && equalIgnoreCase(obj->getName(), nameOrId)) {
             return obj;
         }
     }
@@ -574,7 +562,7 @@ public:
         }
         auto next = state();
         if (auto value = getFieldValue("isLooping")) {
-            next.looping = equalsIgnoreCaseSv(*value, "True") || *value == "1";
+            next.looping = equalIgnoreCase(*value, "True") || *value == "1";
         }
         return setState(std::move(next));
     }
@@ -4392,7 +4380,7 @@ void FearGameApp::installRuntimeServices() {
                     }
                 }
             }
-            if (equalsIgnoreCaseSv(args[1], "server.cs") || equalsIgnoreCaseSv(args[1], "server")) {
+            if (equalIgnoreCase(args[1], "server.cs") || equalIgnoreCase(args[1], "server")) {
                 con.addCommand(
                     0,
                     "createServer",
@@ -5348,10 +5336,10 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
                             cg.dbm,
                             camera,
                             cg.currentTime,
-                            !equalsIgnoreCaseSv(
-                                game_.console().getVariable("pref::SniperCrosshair"), "false"),
-                            !equalsIgnoreCaseSv(game_.console().getVariable("pref::sensorOn"),
-                                                "false"),
+                            !equalIgnoreCase(game_.console().getVariable("pref::SniperCrosshair"),
+                                             "false"),
+                            !equalIgnoreCase(game_.console().getVariable("pref::sensorOn"),
+                                             "false"),
                             !script::toBool(game_.console().getVariable("pref::ignoreTargets")));
                     }
                 }

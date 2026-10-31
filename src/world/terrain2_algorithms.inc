@@ -49,7 +49,7 @@ void NativeTerrainBlock::buildGridMap() {
                 pl3.set(p1, p2, p4);
                 pl4.set(p2, p3, p4);
                 bool parentSplit45 = false;
-                GridSquare* parent = NULL;
+                GridSquare* parent = nullptr;
                 if (i < BlockShift) {
                     parent = findSquare(i + 1, Point2I(squareX * squareSize, squareY * squareSize));
                     parentSplit45 = parent->flags & GridSquare::Split45;
@@ -281,11 +281,15 @@ void NativeTerrainRender::expandDynamicLight(TerrLightInfo& tl, int x, int y, in
                     lightExpandVert(
                         yp - trs.squareSize, xp * xp, delta, (j - 1) << delt, i << delt, delt);
                 if (i != 0 && j != 0) {
-                    float xp = (x + i - 1) * trs.squareSize - tl.pos.x;
+                    float previousX = (x + i - 1) * trs.squareSize - tl.pos.x;
                     for (int k = 1; k < size; k++) {
-                        float yp = (y + j - 1) * trs.squareSize + k * delta - tl.pos.y;
-                        lightExpandHorz(
-                            xp, yp * yp, delta, ((j - 1) << delt) + k, (i - 1) << delt, delt);
+                        float rowY = (y + j - 1) * trs.squareSize + k * delta - tl.pos.y;
+                        lightExpandHorz(previousX,
+                                        rowY * rowY,
+                                        delta,
+                                        ((j - 1) << delt) + k,
+                                        (i - 1) << delt,
+                                        delt);
                     }
                 }
             }
@@ -357,26 +361,26 @@ NativeTerrainRender::TestSquareLights(GridSquare* sq, int level, Point2I pos, UI
     for (int i = 0; (lightMask >> i) != 0; i++) {
 
         if (lightMask & (1 << i)) {
-            Point3F* pos = &terrainLights[i].pos;
+            const Point3F& lightPos = terrainLights[i].pos;
 
-            if (pos->z < blockZ)
-                vec.z = blockZ - pos->z;
-            else if (pos->z > blockZ + blockHeight)
-                vec.z = pos->z - (blockZ + blockHeight);
+            if (lightPos.z < blockZ)
+                vec.z = blockZ - lightPos.z;
+            else if (lightPos.z > blockZ + blockHeight)
+                vec.z = lightPos.z - (blockZ + blockHeight);
             else
                 vec.z = 0;
 
-            if (pos->x < blockX)
-                vec.x = blockX - pos->x;
-            else if (pos->x > blockX + blockSize)
-                vec.x = pos->x - (blockX + blockSize);
+            if (lightPos.x < blockX)
+                vec.x = blockX - lightPos.x;
+            else if (lightPos.x > blockX + blockSize)
+                vec.x = lightPos.x - (blockX + blockSize);
             else
                 vec.x = 0;
 
-            if (pos->y < blockY)
-                vec.y = blockY - pos->y;
-            else if (pos->y > blockY + blockSize)
-                vec.y = pos->y - (blockY + blockSize);
+            if (lightPos.y < blockY)
+                vec.y = blockY - lightPos.y;
+            else if (lightPos.y > blockY + blockSize)
+                vec.y = lightPos.y - (blockY + blockSize);
             else
                 vec.y = 0;
             float dist = vec.len();
@@ -486,7 +490,7 @@ int NativeTerrainRender::allocEdges(int count) {
 }
 
 void NativeTerrainRender::clampEdge(int edge) {
-    int edgeStack[EdgeStackSize];
+    std::array<int, EdgeStackSize> edgeStack;
     int stackSize = 0;
     for (;;) {
         int mp = trs.edges[edge].mp;
@@ -960,10 +964,10 @@ void NativeTerrainRender::processWaterBlock(Point2F extent, float height) {
         float midX = pos.x + ext.x * 0.5;
         float midY = pos.y + ext.y * 0.5;
 
-        int p1 = trs.edges[top].p1;
-        int p2 = trs.edges[bottom].p2;
+        int topPoint = trs.edges[top].p1;
+        int bottomPoint = trs.edges[bottom].p2;
 
-        int midPoint = allocWaterPoint(Point2F(midX, midY), p1, p2);
+        int midPoint = allocWaterPoint(Point2F(midX, midY), topPoint, bottomPoint);
 
         subdivideWaterEdge(top, Point2F(midX, pos.y + ext.y));
         subdivideWaterEdge(right, Point2F(pos.x + ext.x, midY));

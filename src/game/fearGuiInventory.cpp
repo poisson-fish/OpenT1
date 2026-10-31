@@ -1,25 +1,12 @@
 #include <opent1/game/chat_inventory_huds.hpp>
+#include <opent1/core/text.hpp>
 
 #include <algorithm>
-#include <cctype>
 #include <format>
 
 namespace opent1::game {
 
 namespace {
-
-[[nodiscard]] bool equalsIgnoreCase(std::string_view a, std::string_view b) noexcept {
-    if (a.size() != b.size()) {
-        return false;
-    }
-    for (std::size_t i = 0; i < a.size(); ++i) {
-        if (std::tolower(static_cast<unsigned char>(a[i])) !=
-            std::tolower(static_cast<unsigned char>(b[i]))) {
-            return false;
-        }
-    }
-    return true;
-}
 
 void insertCategorizedRow(std::vector<InventoryDisplayRow>& rows, InventoryDisplayRow item) {
     const char catKey = item.heading.empty() ? '\0' : item.heading[0];
@@ -274,8 +261,8 @@ std::vector<Int32> FearGuiPurchase::parseFavoritesList(std::span<const std::stri
             if (itemData == nullptr) {
                 continue;
             }
-            if (equalsIgnoreCase(itemData->description, arg) ||
-                equalsIgnoreCase(itemData->dbmName, arg)) {
+            if (equalIgnoreCase(itemData->description, arg) ||
+                equalIgnoreCase(itemData->dbmName, arg)) {
                 if (std::ranges::find(favs, i) == favs.end()) {
                     favs.push_back(i);
                 }

@@ -7,7 +7,6 @@ namespace opent1::game {
 namespace {
 PhoenixAssert g_defaultAssert{};
 PhoenixAssert* g_activeAssert = &g_defaultAssert;
-thread_local std::string g_avarBuffer{};
 } // namespace
 
 PhoenixAssert::PhoenixAssert() {
@@ -118,14 +117,6 @@ void PhoenixAssert::process(PhoenixAssertType type,
             break;
         }
     }
-}
-
-std::string_view cacheAvarOutput(std::string formatted) {
-    if (formatted.size() > 254) {
-        formatted.resize(254);
-    }
-    g_avarBuffer = std::move(formatted);
-    return g_avarBuffer;
 }
 
 } // namespace opent1::game

@@ -221,7 +221,7 @@ static void m_sincos(float a, float* s, float* c) {
 }
 #ifdef _MSC_VER
 #pragma warning(push)
-#pragma warning(disable : 4244 4267 4018 4101 4189 4456 4457 4701 4703)
+#pragma warning(disable : 4244 4267 4018)
 #endif
 #include "terrain2_algorithms.inc"
 #ifdef _MSC_VER

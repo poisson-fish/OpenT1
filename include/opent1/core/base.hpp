@@ -3,8 +3,6 @@
 #include <opent1/core/types.hpp>
 
 #include <concepts>
-#include <cstdarg>
-#include <cstdio>
 #include <exception>
 #include <filesystem>
 #include <format>
@@ -165,14 +163,12 @@ using Phoenix_Assert = PhoenixAssert;
 [[nodiscard]] PhoenixAssert& globalAssert() noexcept;
 
 // -----------------------------------------------------------------------------
-// Formatting Helpers (Modern std::format + Bounded Legacy avar)
+// Formatting Helpers
 // -----------------------------------------------------------------------------
 template <typename... Args>
 [[nodiscard]] std::string formatMessage(std::format_string<Args...> fmt, Args&&... args) {
     return std::format(fmt, std::forward<Args>(args)...);
 }
-
-[[nodiscard]] const char* avar(const char* fmt, ...);
 
 // -----------------------------------------------------------------------------
 // C++20 Assertion Functions with std::source_location

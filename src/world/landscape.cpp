@@ -1,6 +1,7 @@
 #include <opent1/world/landscape.hpp>
 #include <opent1/math/random.hpp>
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cfloat>
 #include <charconv>
@@ -82,8 +83,8 @@ struct Matrix {
 };
 
 struct MatrixStack : std::vector<std::unique_ptr<Matrix>> {
-    void push_front(Matrix* p) {
-        insert(begin(), std::unique_ptr<Matrix>(p));
+    void push_front(std::unique_ptr<Matrix> p) {
+        insert(begin(), std::move(p));
     }
 
     void pop_front() {
@@ -121,7 +122,7 @@ struct NativeLandscape {
 
     void dup() {
         if (!stack.empty()) {
-            stack.push_front(new Matrix(*stack[0]));
+            stack.push_front(std::make_unique<Matrix>(*stack[0]));
         }
     }
 
@@ -175,22 +176,21 @@ struct NativeLandscape {
 };
 
 constexpr double M_2PI = 6.283185307179586476925286766559;
-#define TRUE true
-#define FALSE false
-#define sq(x) ((x) * (x))
+
+constexpr int square(int value) {
+    return value * value;
+}
+
 #define GOOD_TRIG
 #include "landscape_trig.inc"
 #ifdef _MSC_VER
 #pragma warning(push)
-#pragma warning(disable : 4244 4267 4018 4101 4189 4555 4701 4703 4456)
+#pragma warning(disable : 4244 4267 4018)
 #endif
 #include "landscape_algorithms.inc"
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
-#undef TRUE
-#undef FALSE
-#undef sq
 #undef minf
 #undef maxf
 #undef absf
@@ -204,67 +204,68 @@ bool dimension(double n) {
 }
 
 struct Operation {
-    const char* name;
+    std::string_view name;
     LandscapeOpcode code;
-    const char* types;
+    std::string_view types;
 };
 
-constexpr Operation operations[]{{"SEED", LandscapeOpcode::Seed, "i"},
-                                 {"LOAD", LandscapeOpcode::Load, "s"},
-                                 {"LOADM", LandscapeOpcode::LoadMax, "sf"},
-                                 {"SAVE", LandscapeOpcode::Save, "s"},
-                                 {"CLEAR", LandscapeOpcode::Clear, ""},
-                                 {"PUSH", LandscapeOpcode::Push, "i"},
-                                 {"POP", LandscapeOpcode::Pop, ""},
-                                 {"GET", LandscapeOpcode::Get, "i"},
-                                 {"SWAP", LandscapeOpcode::Swap, ""},
-                                 {"DUP", LandscapeOpcode::Dup, ""},
-                                 {"SIZE", LandscapeOpcode::Size, "i"},
-                                 {"ADD", LandscapeOpcode::Add, "f"},
-                                 {"SUB", LandscapeOpcode::Sub, "f"},
-                                 {"MUL", LandscapeOpcode::Mul, "f"},
-                                 {"DIV", LandscapeOpcode::Div, "f"},
-                                 {"EXP", LandscapeOpcode::Exp, "f"},
-                                 {"NEG", LandscapeOpcode::Neg, ""},
-                                 {"CLR", LandscapeOpcode::Clr, "f"},
-                                 {"DIFF", LandscapeOpcode::Diff, ""},
-                                 {"NORMALIZE", LandscapeOpcode::Normalize, "ff"},
-                                 {"ADD_STACK", LandscapeOpcode::AddStack, "i"},
-                                 {"SUB_STACK", LandscapeOpcode::SubStack, "i"},
-                                 {"TERRAIN", LandscapeOpcode::Terrain, "if"},
-                                 {"PLASMA", LandscapeOpcode::Plasma, "if"},
-                                 {"CRATER", LandscapeOpcode::Crater, ""},
-                                 {"PEAK", LandscapeOpcode::Peak, ""},
-                                 {"ROT", LandscapeOpcode::Rot, ""},
-                                 {"RING", LandscapeOpcode::Ring, ""},
-                                 {"FILLBASIN", LandscapeOpcode::FillBasin, ""},
-                                 {"OVERLAY", LandscapeOpcode::Overlay, "if"},
-                                 {"BLEND", LandscapeOpcode::Blend, "ii"},
-                                 {"FLIPX", LandscapeOpcode::FlipX, ""},
-                                 {"FLIPY", LandscapeOpcode::FlipY, ""},
-                                 {"LPFILTER", LandscapeOpcode::LowPass, ""},
-                                 {"HPFILTER", LandscapeOpcode::HighPass, ""},
-                                 {"BPFILTER", LandscapeOpcode::BandPass, ""},
-                                 {"BRFILTER", LandscapeOpcode::BandReject, ""},
-                                 {"FFLP", LandscapeOpcode::FastLowPass, ""},
-                                 {"FFHP", LandscapeOpcode::FastHighPass, ""},
-                                 {"FFBP", LandscapeOpcode::FastBandPass, ""},
-                                 {"FFBR", LandscapeOpcode::FastBandReject, ""},
-                                 {"FFT", LandscapeOpcode::Fft, "i"},
-                                 {"SMOOTH", LandscapeOpcode::Smooth, "ff"},
-                                 {"SLOPE", LandscapeOpcode::Slope, "fi"},
-                                 {"SHAVE", LandscapeOpcode::Shave, "fff"},
-                                 {"CURVE", LandscapeOpcode::Curve, "fi"},
-                                 {"FLOOR", LandscapeOpcode::Floor, "fff"},
-                                 {"CEIL", LandscapeOpcode::Ceil, "fff"},
-                                 {"FILL_N", LandscapeOpcode::FillNormal, "f"},
-                                 {"ALPHABLEND", LandscapeOpcode::AlphaBlend, "ii"},
-                                 {"TILE", LandscapeOpcode::Tile, ""},
-                                 {"WRAP", LandscapeOpcode::Wrap, ""},
-                                 {"CLAMP", LandscapeOpcode::Clamp, "if"},
-                                 {"MASK", LandscapeOpcode::Mask, "if"},
-                                 {"CLIPMIN", LandscapeOpcode::ClipMin, "f"},
-                                 {"CLIPMAX", LandscapeOpcode::ClipMax, "f"}};
+constexpr auto operations =
+    std::to_array<Operation>({{"SEED", LandscapeOpcode::Seed, "i"},
+                              {"LOAD", LandscapeOpcode::Load, "s"},
+                              {"LOADM", LandscapeOpcode::LoadMax, "sf"},
+                              {"SAVE", LandscapeOpcode::Save, "s"},
+                              {"CLEAR", LandscapeOpcode::Clear, ""},
+                              {"PUSH", LandscapeOpcode::Push, "i"},
+                              {"POP", LandscapeOpcode::Pop, ""},
+                              {"GET", LandscapeOpcode::Get, "i"},
+                              {"SWAP", LandscapeOpcode::Swap, ""},
+                              {"DUP", LandscapeOpcode::Dup, ""},
+                              {"SIZE", LandscapeOpcode::Size, "i"},
+                              {"ADD", LandscapeOpcode::Add, "f"},
+                              {"SUB", LandscapeOpcode::Sub, "f"},
+                              {"MUL", LandscapeOpcode::Mul, "f"},
+                              {"DIV", LandscapeOpcode::Div, "f"},
+                              {"EXP", LandscapeOpcode::Exp, "f"},
+                              {"NEG", LandscapeOpcode::Neg, ""},
+                              {"CLR", LandscapeOpcode::Clr, "f"},
+                              {"DIFF", LandscapeOpcode::Diff, ""},
+                              {"NORMALIZE", LandscapeOpcode::Normalize, "ff"},
+                              {"ADD_STACK", LandscapeOpcode::AddStack, "i"},
+                              {"SUB_STACK", LandscapeOpcode::SubStack, "i"},
+                              {"TERRAIN", LandscapeOpcode::Terrain, "if"},
+                              {"PLASMA", LandscapeOpcode::Plasma, "if"},
+                              {"CRATER", LandscapeOpcode::Crater, ""},
+                              {"PEAK", LandscapeOpcode::Peak, ""},
+                              {"ROT", LandscapeOpcode::Rot, ""},
+                              {"RING", LandscapeOpcode::Ring, ""},
+                              {"FILLBASIN", LandscapeOpcode::FillBasin, ""},
+                              {"OVERLAY", LandscapeOpcode::Overlay, "if"},
+                              {"BLEND", LandscapeOpcode::Blend, "ii"},
+                              {"FLIPX", LandscapeOpcode::FlipX, ""},
+                              {"FLIPY", LandscapeOpcode::FlipY, ""},
+                              {"LPFILTER", LandscapeOpcode::LowPass, ""},
+                              {"HPFILTER", LandscapeOpcode::HighPass, ""},
+                              {"BPFILTER", LandscapeOpcode::BandPass, ""},
+                              {"BRFILTER", LandscapeOpcode::BandReject, ""},
+                              {"FFLP", LandscapeOpcode::FastLowPass, ""},
+                              {"FFHP", LandscapeOpcode::FastHighPass, ""},
+                              {"FFBP", LandscapeOpcode::FastBandPass, ""},
+                              {"FFBR", LandscapeOpcode::FastBandReject, ""},
+                              {"FFT", LandscapeOpcode::Fft, "i"},
+                              {"SMOOTH", LandscapeOpcode::Smooth, "ff"},
+                              {"SLOPE", LandscapeOpcode::Slope, "fi"},
+                              {"SHAVE", LandscapeOpcode::Shave, "fff"},
+                              {"CURVE", LandscapeOpcode::Curve, "fi"},
+                              {"FLOOR", LandscapeOpcode::Floor, "fff"},
+                              {"CEIL", LandscapeOpcode::Ceil, "fff"},
+                              {"FILL_N", LandscapeOpcode::FillNormal, "f"},
+                              {"ALPHABLEND", LandscapeOpcode::AlphaBlend, "ii"},
+                              {"TILE", LandscapeOpcode::Tile, ""},
+                              {"WRAP", LandscapeOpcode::Wrap, ""},
+                              {"CLAMP", LandscapeOpcode::Clamp, "if"},
+                              {"MASK", LandscapeOpcode::Mask, "if"},
+                              {"CLIPMIN", LandscapeOpcode::ClipMin, "f"},
+                              {"CLIPMAX", LandscapeOpcode::ClipMax, "f"}});
 
 bool nativeNoop(LandscapeOpcode op) {
     const auto n = UInt32(op);
@@ -291,7 +292,7 @@ Landscape::Landscape(UInt32 size) : impl_(std::make_unique<Impl>()) {
     if (!dimension(size)) {
         throw std::invalid_argument("Landscape size must be a power of two from 4 to 512");
     }
-    impl_->native.stack.push_front(new Matrix(Int32(size)));
+    impl_->native.stack.push_front(std::make_unique<Matrix>(Int32(size)));
 }
 
 Landscape::~Landscape() = default;
@@ -395,7 +396,7 @@ bool Landscape::run(const LandscapeCommand& c, const Loader& loader) {
         return fail("Unknown landscape opcode");
     }
     std::size_t index{};
-    for (auto type : std::string_view(at->types)) {
+    for (auto type : at->types) {
         if (type == 's') {
             if (c.name.empty() || c.name.size() > 255 || c.name.find('\0') != c.name.npos) {
                 return fail("Invalid landscape filename");
@@ -444,7 +445,7 @@ bool Landscape::run(const LandscapeCommand& c, const Loader& loader) {
             return fail("Landscape stack/size limit");
         }
         if (op == O::Push) {
-            s.push_front(new Matrix(i(0)));
+            s.push_front(std::make_unique<Matrix>(i(0)));
         } else if (op == O::Terrain) {
             n.terrain(std::min(i(0), 256), a(1));
             n.size(i(0));
@@ -717,7 +718,7 @@ bool Landscape::script(std::string_view script, bool clear, const Loader& loader
             return false;
         }
         LandscapeCommand c{at->code, {}, {}};
-        for (auto type : std::string_view(at->types)) {
+        for (auto type : at->types) {
             if (j >= tokens.size()) {
                 error_ = "Missing landscape argument";
                 return false;

@@ -1,30 +1,18 @@
 #include <opent1/game/static_base.hpp>
+#include <opent1/core/text.hpp>
 #include <opent1/game/sound.hpp>
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 
 namespace opent1::game {
 
 namespace {
-bool equalsIgnoreCase(std::string_view a, std::string_view b) noexcept {
-    if (a.size() != b.size()) {
-        return false;
-    }
-    for (std::size_t i = 0; i < a.size(); ++i) {
-        if (std::tolower(static_cast<unsigned char>(a[i])) !=
-            std::tolower(static_cast<unsigned char>(b[i]))) {
-            return false;
-        }
-    }
-    return true;
-}
 
 Int32 findSequenceIndex(const world::TsShape& shape, std::string_view seqName) noexcept {
     for (std::size_t i = 0; i < shape.sequences.size(); ++i) {
         const Int32 nameIdx = shape.sequences[i].name;
         if (nameIdx >= 0 && static_cast<std::size_t>(nameIdx) < shape.names.size() &&
-            equalsIgnoreCase(shape.names[static_cast<std::size_t>(nameIdx)], seqName)) {
+            equalIgnoreCase(shape.names[static_cast<std::size_t>(nameIdx)], seqName)) {
             return static_cast<Int32>(i);
         }
     }
@@ -37,7 +25,7 @@ Int32 findDetailIndex(const world::TsShape& shape, std::string_view detailName) 
         if (rootNode >= 0 && static_cast<std::size_t>(rootNode) < shape.nodes.size()) {
             const Int32 nameIdx = shape.nodes[static_cast<std::size_t>(rootNode)].name;
             if (nameIdx >= 0 && static_cast<std::size_t>(nameIdx) < shape.names.size() &&
-                equalsIgnoreCase(shape.names[static_cast<std::size_t>(nameIdx)], detailName)) {
+                equalIgnoreCase(shape.names[static_cast<std::size_t>(nameIdx)], detailName)) {
                 return static_cast<Int32>(i);
             }
         }

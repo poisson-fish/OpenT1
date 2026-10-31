@@ -1,4 +1,5 @@
 #include <opent1/console/console.hpp>
+#include <opent1/core/text.hpp>
 #include <opent1/game/data_block_manager.hpp>
 #include <opent1/game/version.hpp>
 #include <opent1/sim/sim_resource_volume.hpp>
@@ -24,26 +25,8 @@ constexpr std::array<std::string_view, DataBlockManager::NumDataTypes> kDataName
     return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 }
 
-[[nodiscard]] bool equalsIgnoreCaseAscii(std::string_view a, std::string_view b) noexcept {
-    if (a.size() != b.size()) {
-        return false;
-    }
-    for (std::size_t i = 0; i < a.size(); ++i) {
-        if (toLowerAscii(a[i]) != toLowerAscii(b[i])) {
-            return false;
-        }
-    }
-    return true;
-}
-
 [[nodiscard]] Int32 countBits(Int32 val) noexcept {
-    UInt32 u = static_cast<UInt32>(val);
-    Int32 ret = 0;
-    while (u != 0) {
-        ++ret;
-        u >>= 1U;
-    }
-    return ret;
+    return static_cast<Int32>(std::bit_width(static_cast<UInt32>(val)));
 }
 
 template <class T> void writePod(BitStream& stream, const T& val) {
@@ -101,7 +84,7 @@ Int32 readBlockIdHelper(BitStream& stream, DataBlockManager* dbm, Int32 group) {
 [[nodiscard]] std::string ensureDtsExtension(std::string_view baseName) {
     std::string result(baseName);
     if (result.size() < 4 ||
-        !equalsIgnoreCaseAscii(std::string_view(result).substr(result.size() - 4), ".dts")) {
+        !equalIgnoreCase(std::string_view(result).substr(result.size() - 4), ".dts")) {
         result += ".dts";
     }
     return result;
@@ -1952,7 +1935,7 @@ GameBaseData* DataBlockManager::lookupDataBlock(std::string_view name,
     }
     const auto& grp = dataBlocks_[static_cast<std::size_t>(groupId)];
     for (std::size_t i = 0; i < grp.size(); ++i) {
-        if (grp[i] && equalsIgnoreCaseAscii(grp[i]->dbmName, name)) {
+        if (grp[i] && equalIgnoreCase(grp[i]->dbmName, name)) {
             if (blockId) {
                 *blockId = static_cast<Int32>(i);
             }
@@ -1969,7 +1952,7 @@ GameBaseData* DataBlockManager::lookupDataBlock(std::string_view name) const noe
     const auto h = hashName(name);
     for (const auto& node : hashTable_[h]) {
         if (auto* blk = lookupDataBlock(node.index, node.group)) {
-            if (equalsIgnoreCaseAscii(blk->dbmName, name)) {
+            if (equalIgnoreCase(blk->dbmName, name)) {
                 return blk;
             }
         }

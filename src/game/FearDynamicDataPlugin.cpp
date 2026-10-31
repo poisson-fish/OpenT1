@@ -1,4 +1,5 @@
 #include "opent1/game/fear_dynamic_data_plugin.hpp"
+#include <opent1/core/text.hpp>
 
 #include <algorithm>
 #include <array>
@@ -47,19 +48,6 @@ constexpr std::array<std::pair<std::string_view, UInt32>, 8> kSoundFlagTokens{{
     {"SFX_STREAMING_3D", 0x00002002u},
 }};
 
-[[nodiscard]] bool equalsIgnoreCaseAscii(std::string_view a, std::string_view b) noexcept {
-    if (a.size() != b.size()) {
-        return false;
-    }
-    for (std::size_t i = 0; i < a.size(); ++i) {
-        if (std::tolower(static_cast<unsigned char>(a[i])) !=
-            std::tolower(static_cast<unsigned char>(b[i]))) {
-            return false;
-        }
-    }
-    return true;
-}
-
 [[nodiscard]] std::size_t hashFieldName(std::string_view name, std::size_t tableSize) noexcept {
     if (tableSize == 0) {
         return 0;
@@ -107,10 +95,10 @@ constexpr std::array<std::pair<std::string_view, UInt32>, 8> kSoundFlagTokens{{
 }
 
 [[nodiscard]] bool parseBoolValue(std::string_view str) noexcept {
-    if (equalsIgnoreCaseAscii(str, "True") || equalsIgnoreCaseAscii(str, "true")) {
+    if (equalIgnoreCase(str, "True") || equalIgnoreCase(str, "true")) {
         return true;
     }
-    if (equalsIgnoreCaseAscii(str, "False") || equalsIgnoreCaseAscii(str, "false")) {
+    if (equalIgnoreCase(str, "False") || equalIgnoreCase(str, "false")) {
         return false;
     }
     return parseIntValue(str) != 0;
@@ -201,7 +189,7 @@ parsePoint3FValues(std::span<const std::string> values, Point3F& out, bool norma
         for (const auto& tok : tokens) {
             bool matched = false;
             for (const auto& [name, bit] : kSoundFlagTokens) {
-                if (equalsIgnoreCaseAscii(tok, name)) {
+                if (equalIgnoreCase(tok, name)) {
                     flags |= bit;
                     matched = true;
                     break;
@@ -567,7 +555,7 @@ FearDynamicDataPlugin::FieldEntry makeArrayField(std::string_view name,
             }
             val.name = args[0];
             val.soundTag = -1;
-            if (!equalsIgnoreCaseAscii(args[1], "none") && !args[1].empty()) {
+            if (!equalIgnoreCase(args[1], "none") && !args[1].empty()) {
                 if (auto* dbm = plugin.activeDataBlockManager()) {
                     Int32 sndId = -1;
                     if (dbm->lookupDataBlock(args[1], DataBlockManager::SoundDataType, &sndId)) {
@@ -629,7 +617,7 @@ void FearDynamicDataPlugin::init(Console& console, sim::SimManager* manager) {
                            }
                            Int32 typeIndex = -1;
                            for (std::size_t i = 0; i < kMatTypeNames.size(); ++i) {
-                               if (equalsIgnoreCaseAscii(argv[1], kMatTypeNames[i])) {
+                               if (equalIgnoreCase(argv[1], kMatTypeNames[i])) {
                                    typeIndex = static_cast<Int32>(i);
                                    break;
                                }
@@ -763,7 +751,7 @@ DataBlockManager& FearDynamicDataPlugin::ensureDataBlockManager() {
 const FearDynamicDataPlugin::ClassSchema*
 FearDynamicDataPlugin::findClassSchema(std::string_view className) const noexcept {
     for (const auto& schema : schemas_) {
-        if (equalsIgnoreCaseAscii(schema.name, className)) {
+        if (equalIgnoreCase(schema.name, className)) {
             return &schema;
         }
     }
@@ -779,7 +767,7 @@ FearDynamicDataPlugin::findClassField(std::string_view className,
     }
     const std::size_t bucket = hashFieldName(fieldName, schema->hashTableSize);
     for (std::size_t idx : schema->hashBuckets[bucket]) {
-        if (equalsIgnoreCaseAscii(schema->fields[idx].name, fieldName)) {
+        if (equalIgnoreCase(schema->fields[idx].name, fieldName)) {
             return &schema->fields[idx];
         }
     }
@@ -973,7 +961,7 @@ FearDynamicDataPlugin::ClassSchema& FearDynamicDataPlugin::registerClass(
     for (auto& f : ownFields) {
         auto it = std::find_if(
             schema.fields.begin(), schema.fields.end(), [&](const FieldEntry& existing) {
-                return equalsIgnoreCaseAscii(existing.name, f.name);
+                return equalIgnoreCase(existing.name, f.name);
             });
         if (it != schema.fields.end()) {
             *it = std::move(f);

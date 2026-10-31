@@ -1,27 +1,13 @@
 #include <opent1/game/ai.hpp>
+#include <opent1/core/text.hpp>
 #include <opent1/game/string_table.hpp>
 #include <opent1/game/data_block_manager.hpp>
 
 #include <algorithm>
-#include <cctype>
 
 namespace opent1::game {
 
 namespace {
-
-[[nodiscard]] bool equalsIgnoreCaseAscii(std::string_view a, std::string_view b) noexcept {
-    if (a.size() != b.size()) {
-        return false;
-    }
-    for (std::size_t i = 0; i < a.size(); ++i) {
-        const auto ca = static_cast<unsigned char>(a[i]);
-        const auto cb = static_cast<unsigned char>(b[i]);
-        if (std::tolower(ca) != std::tolower(cb)) {
-            return false;
-        }
-    }
-    return true;
-}
 
 constexpr std::array<std::string_view, 11> nativeVariables{"iq",
                                                            "pathType",
@@ -185,11 +171,8 @@ bool AIManager::spawn(Console& console,
         return false;
     }
     ai->scriptObjectId = object->getId();
-    ai->id =
-        players->aiAdded(shown,
-                         voice,
-                         "base",
-                         voice.size() >= 4 && equalsIgnoreCaseAscii(voice.substr(0, 4), "male"));
+    ai->id = players->aiAdded(
+        shown, voice, "base", voice.size() >= 4 && equalIgnoreCase(voice.substr(0, 4), "male"));
     if (ai->id <= 0) {
         manager->deleteObject(*object);
         manager->deleteObject(*player);
@@ -218,7 +201,7 @@ bool AIManager::spawn(Console& console,
 
 bool AIManager::remove(std::string_view aiName, bool deletePlayer) {
     for (std::size_t i = 0; i < aiList_.size(); ++i) {
-        if (equalsIgnoreCaseAscii(aiList_[i]->name, aiName)) {
+        if (equalIgnoreCase(aiList_[i]->name, aiName)) {
             AIObj& ai = *aiList_[i];
             removeVariables(getManager() ? getManager()->console() : nullptr, ai.name);
             if (auto* manager = getManager(); manager && ai.scriptObjectId) {
@@ -267,33 +250,25 @@ Int32 AIManager::removeMatched(std::string_view aiExpr, bool deletePlayer) {
 }
 
 AIObj* AIManager::findAI(std::string_view aiName) const noexcept {
-    for (const auto& ai : aiList_) {
-        if (equalsIgnoreCaseAscii(ai->name, aiName)) {
-            return ai.get();
-        }
-    }
-    return nullptr;
+    const auto found = std::ranges::find_if(aiList_, [&](const auto& ai) {
+        return equalIgnoreCase(ai->name, aiName);
+    });
+    return found == aiList_.end() ? nullptr : found->get();
 }
 
 AIObj* AIManager::findByPlayerId(Int32 playerId) const noexcept {
-    for (const auto& ai : aiList_) {
-        if (ai->id == playerId) {
-            return ai.get();
-        }
-    }
-    return nullptr;
+    const auto found = std::ranges::find(aiList_, playerId, &AIObj::id);
+    return found == aiList_.end() ? nullptr : found->get();
 }
 
 AIObj* AIManager::findByPlayer(const Player* player) const noexcept {
     if (!player) {
         return nullptr;
     }
-    for (const auto& ai : aiList_) {
-        if (ai->player() == player) {
-            return ai.get();
-        }
-    }
-    return nullptr;
+    const auto found = std::ranges::find_if(aiList_, [&](const auto& ai) {
+        return ai->player() == player;
+    });
+    return found == aiList_.end() ? nullptr : found->get();
 }
 
 void AIManager::buildExpressionList(std::vector<AIObj*>& outList, std::string_view expr) const {

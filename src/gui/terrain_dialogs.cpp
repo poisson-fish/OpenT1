@@ -328,12 +328,12 @@ bool TerrainTools::dialog(TerrainDialog kind, std::size_t rule) {
         }
     } else if (kind == TerrainDialog::NewTerrain) {
         for (auto [name, value] :
-             std::array<std::pair<const char*, const char*>, 5>{{{"Blocks X", "1"},
-                                                                 {"Blocks Y", "1"},
-                                                                 {"Block width", "256"},
-                                                                 {"Scale", "3"},
-                                                                 {"Pattern", "0"}}}) {
-            if (!addDialogField(name, value)) {
+             std::array<std::pair<std::string_view, std::string_view>, 5>{{{"Blocks X", "1"},
+                                                                           {"Blocks Y", "1"},
+                                                                           {"Block width", "256"},
+                                                                           {"Scale", "3"},
+                                                                           {"Pattern", "0"}}}) {
+            if (!addDialogField(std::string(name), std::string(value))) {
                 return false;
             }
         }

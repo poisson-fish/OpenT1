@@ -512,6 +512,10 @@ void networkCommands() {
     sensors->changeTargetName(key, "East generator");
     deliver(*from.stream, *to.stream);
     CHECK(receivedSensors->target(key).name == "East generator");
+    TargetNameEvent clearName;
+    clearName.targId = key;
+    CHECK(receivedSensors->processEvent(clearName));
+    CHECK(receivedSensors->target(key).name.empty());
     sensors->newClient(2049);
     deliver(*from.stream, *to.stream);
     CHECK(receivedSensors->target(key).name == "East generator");

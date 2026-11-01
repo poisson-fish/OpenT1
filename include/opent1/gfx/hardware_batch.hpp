@@ -35,6 +35,7 @@ struct HardwareMaterial {
     // Unset follows linear. Original OpenGL cutouts use nearest magnification
     // while retaining bilinear minification and nearest authored mip selection.
     std::optional<bool> magnificationLinear{};
+    bool dynamicTexture{}; // transient overlays may reuse same-layout GPU storage
 };
 
 struct HardwarePolygon {
@@ -65,6 +66,7 @@ struct HardwareTexture {
     std::vector<std::byte> rgba;   // tightly packed, top-down, base mip
     std::vector<HardwareMip> mips; // remaining supplied levels, never generated
     UInt64 hash{};                 // computed once when immutable converted storage is created
+    bool dynamic{};                // permits recycling unreferenced GPU allocation storage
 };
 
 struct HardwareDraw {

@@ -308,6 +308,42 @@ void resourcesAndCollision() {
         CHECK(manager.add("map#0.dtb", loadBlock(captured(0))));
         const auto resource = TerrainGridResources::load(manager, "MAP.DTF");
         CHECK(resource);
+        for (const bool native : {false, true}) {
+            TerrainLodState state(*resource);
+            TerrainLodView view{{8, 8, 64}, 320, 0};
+            if (native) {
+                view.nativeGeometry = TerrainGeometryView{320};
+                view.nativeTraversal = true;
+            }
+            const auto first =
+                WorldSurfaceMesh::terrainLod(*resource, view, false, {}, nullptr, &state);
+            CHECK(first && !first->triangles.empty());
+            std::vector<Point3F> retainedVertices;
+            for (const auto& triangle : first->triangles) {
+                for (const auto& vertex : triangle.vertices) {
+                    retainedVertices.push_back(vertex.position);
+                }
+            }
+            view.camera = {20, 4, 32};
+            const auto next =
+                WorldSurfaceMesh::terrainLod(*resource, view, false, {}, nullptr, &state);
+            CHECK(next && !next->triangles.empty());
+            // Returned geometry owns its data after frame-scoped scratch is
+            // released and after a subsequent camera preparation reuses memory.
+            std::size_t at{};
+            for (const auto& triangle : first->triangles) {
+                for (const auto& vertex : triangle.vertices) {
+                    CHECK(vertex.position == retainedVertices[at++]);
+                }
+            }
+            const auto good = view;
+            view.perspectiveDistance = std::numeric_limits<Flt32>::quiet_NaN();
+            CHECK(!WorldSurfaceMesh::terrainLod(*resource, view, false, {}, nullptr, &state));
+            const auto retry =
+                WorldSurfaceMesh::terrainLod(*resource, good, false, {}, nullptr, &state);
+            CHECK(retry && retry->terrainSquareIds == next->terrainSquareIds &&
+                  retry->triangles.size() == next->triangles.size());
+        }
         auto blocks = resource->collisionBlocks();
         CHECK(blocks && blocks->size() == 2);
         CHECK((*blocks)[0].origin == Point3F(0, 0, 0) && (*blocks)[1].origin == Point3F(16, 0, 0) &&

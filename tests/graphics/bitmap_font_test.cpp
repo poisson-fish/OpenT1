@@ -1,4 +1,5 @@
 #include "gfx_test_support.hpp"
+#include <opent1/gfx/bitmap_content.hpp>
 #include <opent1/core/file_stream.hpp>
 #include <opent1/core/vol_stream.hpp>
 #include <filesystem>
@@ -264,6 +265,45 @@ void assets(const std::filesystem::path& root) {
 }
 } // namespace
 
+namespace {
+void contentBounds() {
+    CHECK(!indexedContentBounds(Bitmap{}));
+    CHECK(!indexedContentBounds(*Bitmap::create(9, 7, 24)));
+    std::mt19937 random(731);
+    for (const auto width : {1, 7, 8, 9, 15, 16, 17, 31, 32, 33, 64, 65}) {
+        auto bitmap = Bitmap::create(width, 7);
+        CHECK(bitmap);
+        for (int sample = 0; sample < 80; ++sample) {
+            // Nonzero padding must never count as visible content.
+            std::ranges::fill(bitmap->pixels, std::byte{255});
+            RectI expected{width, 7, -1, -1};
+            for (Int32 y = 0; y < bitmap->height; ++y) {
+                auto row = bitmap->row(y);
+                for (Int32 x = 0; x < width; ++x) {
+                    const bool nonzero = sample && (random() % 17 == 0);
+                    row[std::size_t(x)] = nonzero ? std::byte{1} : std::byte{};
+                    if (nonzero) {
+                        expected.left = std::min(expected.left, x);
+                        expected.right = std::max(expected.right, x);
+                        expected.top = std::min(expected.top, y);
+                        expected.bottom = y;
+                    }
+                }
+            }
+            const auto actual = indexedContentBounds(*bitmap);
+            CHECK(actual && *actual == expected);
+        }
+        for (Int32 x = 0; x < width; ++x) {
+            std::ranges::fill(bitmap->pixels, std::byte{});
+            bitmap->row(6)[std::size_t(x)] = std::byte{255};
+            CHECK(indexedContentBounds(*bitmap) == std::optional(RectI{x, 6, x, 6}));
+        }
+        bitmap->pixels.clear();
+        CHECK(!indexedContentBounds(*bitmap));
+    }
+}
+}
+
 int opent1_test_bitmap_font(int argc, char** argv) {
     return opent1::test::run([&] {
         if (argc == 2) {
@@ -273,6 +313,7 @@ int opent1_test_bitmap_font(int argc, char** argv) {
             arraysAndFonts();
             clipping();
             resources();
+            contentBounds();
         }
     });
 }

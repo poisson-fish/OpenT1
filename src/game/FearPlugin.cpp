@@ -1,4 +1,5 @@
 #include <opent1/game/mine.hpp>
+#include <opent1/gfx/bitmap_content.hpp>
 #include <opent1/core/text.hpp>
 #include <opent1/game/flier.hpp>
 #include <opent1/game/ai.hpp>
@@ -273,7 +274,8 @@ bool renderSkyPass(const Sky& sky,
                    int pass,
                    const gfx::Palette* pal,
                    gfx::HardwareBatch* hardware = nullptr,
-                   Flt32 paletteGamma = 1) {
+                   Flt32 paletteGamma = 1,
+                   gfx::HardwareBatch* bands = nullptr) {
     if (pass != 0) {
         return true;
     }
@@ -332,14 +334,61 @@ bool renderSkyPass(const Sky& sky,
             h - 1);
     }
     const Int32 band1 = std::max(1, horizonY / 2);
-    if (band1 > 0) {
-        surface.fill(RectI{0, 0, w - 1, band1}, topIdx);
-    }
-    if (horizonY > band1) {
-        surface.fill(RectI{0, band1, w - 1, horizonY}, midIdx);
-    }
-    if (horizonY < h - 1) {
-        surface.fill(RectI{0, horizonY, w - 1, h - 1}, horizonIdx);
+    if (bands && pal && surface.clip() == surface.bitmap().bounds()) {
+        // Match the indexed OpenGL texture expansion, including its byte
+        // truncation after gamma. Continuous alpha-fill gamma is different.
+        if (!pal->valid()) {
+            return false;
+        }
+        const auto& colors = pal->find(surface.bitmap().paletteIndex).colors;
+        const auto channel = [&](UInt8 value) {
+            const auto corrected =
+                UInt8(std::pow(Flt32(value) / 255.f, double(1.f / paletteGamma)) * 255.);
+            return Flt32(corrected) / 255.f;
+        };
+        std::array<std::array<gfx::PolygonVertex, 4>, 3> vertices;
+        std::vector<gfx::HardwarePolygon> polygons;
+        polygons.reserve(vertices.size());
+        const auto add = [&](RectI rect, UInt8 index) {
+            const auto clip = gfx::intersect(rect, surface.bitmap().bounds());
+            if (!clip) {
+                return;
+            }
+            auto& quad = vertices[polygons.size()];
+            quad = {{{{Flt32(clip->left), Flt32(clip->top)}, {0, 0}},
+                     {{Flt32(clip->right + 1), Flt32(clip->top)}, {1, 0}},
+                     {{Flt32(clip->right + 1), Flt32(clip->bottom + 1)}, {1, 1}},
+                     {{Flt32(clip->left), Flt32(clip->bottom + 1)}, {0, 1}}}};
+            const auto& color = colors[index];
+            gfx::HardwareMaterial material;
+            material.color = {channel(color.red), channel(color.green), channel(color.blue)};
+            material.depth = gfx::HardwareDepth::Disabled;
+            material.perspective = false;
+            material.alphaSource = gfx::HardwareAlphaSource::Opaque;
+            polygons.push_back({quad, material});
+        };
+        add({0, 0, w - 1, band1}, topIdx);
+        if (horizonY > band1) {
+            add({0, band1, w - 1, horizonY}, midIdx);
+        }
+        if (horizonY < h - 1) {
+            add({0, horizonY, w - 1, h - 1}, horizonIdx);
+        }
+        auto prepared = gfx::HardwareBatch::prepare(polygons);
+        if (!prepared) {
+            return false;
+        }
+        *bands = std::move(*prepared);
+    } else {
+        if (band1 > 0) {
+            surface.fill(RectI{0, 0, w - 1, band1}, topIdx);
+        }
+        if (horizonY > band1) {
+            surface.fill(RectI{0, band1, w - 1, horizonY}, midIdx);
+        }
+        if (horizonY < h - 1) {
+            surface.fill(RectI{0, horizonY, w - 1, h - 1}, horizonIdx);
+        }
     }
     if (skyMaterials && !skyMaterials->textures.empty()) {
         std::vector<world::StaticSurfaceTriangle> triangles;
@@ -4909,6 +4958,7 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
     game_.console().setVariable("OpenT1::LastRenderError", "");
     std::optional<gfx::HardwareBatch> background;
     std::optional<gfx::HardwareBatch> worldBatch;
+    std::optional<gfx::HardwareBatch> hardwareForeground;
     std::vector<gfx::HardwareBatch> guiLayers;
     ensureFallbackRenderAssets();
     const auto* root = guiRuntime_ ? guiRuntime_->canvas.top() : nullptr;
@@ -4944,38 +4994,49 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
     const Int32 h = surface.bitmap().height;
     const auto presentation = guiPresentation({w, h});
     const bool scaled = presentation.extent != Point2I{w, h};
+    std::size_t layerIndex{};
     const auto layer = [&](const gfx::Bitmap& bitmap, bool transparent, bool logical = false) {
+        const auto slot = layerIndex++;
         RectI bounds = bitmap.bounds();
-        std::unique_ptr<gfx::Bitmap> cropped;
+        const gfx::Bitmap* cropped{};
         if (transparent) {
             renderStats_.work.layerScanPixels += UInt64(bitmap.width) * bitmap.height;
             // HUD panels flush in draw order, but their sparse indexed pixels
             // do not need a full-screen RGBA conversion, hash and upload.
-            bounds = {bitmap.width, bitmap.height, -1, -1};
-            for (Int32 y = 0; y < bitmap.height; ++y) {
-                const auto row = bitmap.row(y);
-                const auto first = std::ranges::find_if(row, [](auto pixel) {
-                    return pixel != std::byte{0};
-                });
-                if (first == row.end()) {
-                    continue;
-                }
-                const auto last = std::find_if(row.rbegin(), row.rend(), [](auto pixel) {
-                    return pixel != std::byte{0};
-                });
-                bounds.left = std::min(bounds.left, Int32(first - row.begin()));
-                bounds.right = std::max(bounds.right, Int32(row.rend() - last - 1));
-                bounds.top = std::min(bounds.top, y);
-                bounds.bottom = y;
+            const auto content = gfx::indexedContentBounds(bitmap);
+            if (!content) {
+                return std::optional<gfx::HardwareBatch>{};
             }
+            bounds = *content;
             if (!bounds.valid()) {
                 return gfx::HardwareBatch::prepare({});
             }
             if (bounds != bitmap.bounds()) {
-                cropped = bitmap.crop(bounds);
-                if (!cropped) {
-                    return std::optional<gfx::HardwareBatch>{};
+                if (hardwareLayerCrops_.size() <= slot) {
+                    hardwareLayerCrops_.resize(slot + 1);
                 }
+                auto& storage = hardwareLayerCrops_[slot];
+                const auto width = Int32(bounds.width()), height = Int32(bounds.height());
+                if (!storage || storage->width != width || storage->height != height) {
+                    auto next = gfx::Bitmap::create(width, height);
+                    if (!next) {
+                        return std::optional<gfx::HardwareBatch>{};
+                    }
+                    if (storage) {
+                        *storage = std::move(*next);
+                    } else {
+                        storage = std::move(next);
+                    }
+                }
+                storage->attributes = bitmap.attributes;
+                storage->paletteIndex = bitmap.paletteIndex;
+                storage->palette = bitmap.palette;
+                for (Int32 y = 0; y < height; ++y) {
+                    const auto row = bitmap.row(y + bounds.top)
+                                         .subspan(std::size_t(bounds.left), std::size_t(width));
+                    std::memcpy(storage->row(y).data(), row.data(), row.size());
+                }
+                cropped = storage.get();
                 renderStats_.work.bitmapCopyBytes += cropped->pixels.size();
             }
         }
@@ -4990,13 +5051,14 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
             }
         }
         gfx::HardwareMaterial material;
-        material.texture = cropped ? cropped.get() : &bitmap;
+        material.texture = cropped ? cropped : &bitmap;
         material.depth = gfx::HardwareDepth::Disabled;
         material.perspective = false;
         material.transparent = transparent;
         material.blend = transparent ? gfx::HardwareBlend::Alpha : gfx::HardwareBlend::Opaque;
         material.paletteMode = gfx::HardwarePaletteMode::OpenGL;
         material.paletteGamma = paletteGamma;
+        material.dynamicTexture = true;
         material.alphaSource =
             transparent ? gfx::HardwareAlphaSource::Texture : gfx::HardwareAlphaSource::Opaque;
         const std::array<gfx::HardwarePolygon, 1> polygons{{{quad, material}}};
@@ -5069,19 +5131,22 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
             for (sim::SimObject* obj : envObjects) {
                 if (auto* sky = dynamic_cast<Sky*>(obj)) {
                     gfx::HardwareBatch skyBatch;
+                    gfx::HardwareBatch skyBands;
                     if (!renderSkyPass(*sky,
                                        surface,
                                        envCam,
                                        pass,
                                        defaultPalette_.get(),
                                        hardware ? &skyBatch : nullptr,
-                                       paletteGamma)) {
+                                       paletteGamma,
+                                       hardware ? &skyBands : nullptr)) {
                         game_.console().setVariable("OpenT1::LastRenderError",
                                                     "Sky preparation failed");
                         return false;
                     }
                     if (hardware && pass == 0) {
-                        auto bands = layer(surface.bitmap(), false);
+                        auto bands = !skyBands.draws().empty() ? std::optional(std::move(skyBands))
+                                                               : layer(surface.bitmap(), false);
                         if (!bands) {
                             return false;
                         }
@@ -5243,7 +5308,7 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
 
     const auto guiStart = std::chrono::steady_clock::now();
     if (guiRuntime_ && guiRuntime_->canvas.top()) {
-        if (!guiRuntime_->canvas.fitContent(presentation.extent)) {
+        if (!guiRuntime_->canvas.fitContent(presentation.extent, true)) {
             return false;
         }
         updateGameplayGui();
@@ -5409,13 +5474,23 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
         // Software alpha tables must read the world pixels, not a zero-filled
         // temporary that is subsequently keyed out by the overlay blit.
         const auto* seed = scaled || (hardware && background) ? nullptr : &surface.bitmap();
-        if (auto frame = guiRuntime_->canvas.render(presentation.extent.x,
-                                                    presentation.extent.y,
-                                                    defaultPalette_.get(),
-                                                    seed,
-                                                    std::move(blendRenderer),
-                                                    true)) {
-            if (scaled) {
+        if (const auto* frame = guiRuntime_->canvas.renderRetained(presentation.extent.x,
+                                                                   presentation.extent.y,
+                                                                   defaultPalette_,
+                                                                   seed,
+                                                                   std::move(blendRenderer),
+                                                                   true)) {
+            const bool integerScale = presentation.viewport.width() % presentation.extent.x == 0 &&
+                                      presentation.viewport.height() % presentation.extent.y == 0;
+            if (hardware && background && integerScale) {
+                // Keep the indexed HUD at logical resolution. Nearest GPU
+                // sampling reproduces integer pixel replication and preserves
+                // the same final overlay order without a CPU stretch/scan.
+                hardwareForeground = layer(*frame, true, true);
+                if (!hardwareForeground) {
+                    return false;
+                }
+            } else if (scaled) {
                 // Scale the finished indexed UI, including fonts and cursor,
                 // once. No persisted layout or bitmap/font resource is edited.
                 auto overlay = *frame;
@@ -5437,7 +5512,8 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
     }
     ++renderedFrames_;
     if (hardware) {
-        auto foreground = layer(surface.bitmap(), background.has_value());
+        auto foreground = hardwareForeground ? std::move(hardwareForeground)
+                                             : layer(surface.bitmap(), background.has_value());
         if (!foreground) {
             return false;
         }
@@ -5676,6 +5752,7 @@ void FearGameApp::shutdown() noexcept {
     }
     pendingMission_.reset();
     softwareTextureCache_.clear();
+    hardwareLayerCrops_.clear();
     boundInputMaps_ = {};
     inputTarget_ = {};
     inputWorldRevision_ = ~UInt64{0};

@@ -2,6 +2,7 @@
 #include "software_blit.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <ranges>
 
 namespace opent1::gfx {
@@ -23,7 +24,21 @@ bool SoftwareSurface::setPalette(const Palette& palette) {
     if (!palette.valid()) {
         return false;
     }
-    palette_ = palette;
+    if (ownedPalette_ && ownedPalette_.use_count() == 2 && palette_.get() == ownedPalette_.get()) {
+        *ownedPalette_ = palette;
+    } else {
+        ownedPalette_ = std::make_shared<Palette>(palette);
+        palette_ = ownedPalette_;
+    }
+    return true;
+}
+
+bool SoftwareSurface::setSharedPalette(std::shared_ptr<const Palette> palette) {
+    if (!palette || (palette != palette_ && !palette->valid())) {
+        return false;
+    }
+    palette_ = std::move(palette);
+    ownedPalette_.reset();
     return true;
 }
 
@@ -136,6 +151,17 @@ bool SoftwareSurface::blit(const Bitmap& input, RectI source, Point2I destinatio
     const bool transparent = (bitmap.attributes & drawMask) == BitmapTransparent;
     const bool blend = translucent(bitmap);
     const auto* palette = palette_ ? &palette_->find(bitmap.paletteIndex) : nullptr;
+    if (!transparent && !blend && flip == Flip::None &&
+        (!palette || bitmap.paletteIndex == 0xffffffffU)) {
+        for (Int32 y = 0; y < source.height(); ++y) {
+            const auto src = bitmap.row(source.top + y)
+                                 .subspan(std::size_t(source.left), std::size_t(source.width()));
+            auto dst = bitmap_.row(target.top + y)
+                           .subspan(std::size_t(target.left), std::size_t(target.width()));
+            std::memcpy(dst.data(), src.data(), src.size());
+        }
+        return true;
+    }
     std::ranges::for_each(std::views::iota(Int32{0}, Int32(source.height())), [&](auto y) {
         const auto sy =
             (UInt8(flip) & UInt8(Flip::Y)) ? bitmap.height - 1 - source.top - y : source.top + y;

@@ -120,6 +120,7 @@ expand(const Bitmap& bitmap, const HardwareMaterial& material, const Palette* fa
         return {};
     }
     HardwareTexture result{bitmap.width, bitmap.height, {}, {}};
+    result.dynamic = material.dynamicTexture;
     const auto* sub = palette && (bitmap.bitDepth == 8 || alpha88)
                           ? &palette->find(bitmap.paletteIndex)
                           : nullptr;
@@ -309,7 +310,8 @@ struct ConversionHash {
 
 ConversionKey conversionKey(const HardwareMaterial& m) {
     return {m.texture,
-            UInt32(m.transparent) | (UInt32(m.paletteAlpha) << 1) | (UInt32(m.paletteMode) << 2),
+            UInt32(m.transparent) | (UInt32(m.paletteAlpha) << 1) | (UInt32(m.paletteMode) << 2) |
+                (UInt32(m.dynamicTexture) << 16),
             m.paletteGamma};
 }
 

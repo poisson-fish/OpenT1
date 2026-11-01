@@ -6,8 +6,10 @@
 #include <bit>
 #include <functional>
 #include <map>
+#include <memory_resource>
 #include <set>
 #include <tuple>
+#include <unordered_map>
 
 namespace opent1::world {
 namespace {
@@ -16,7 +18,42 @@ struct Tile {
     UInt32 index, bx, by, x, y, size;
 };
 
-using Edges = std::map<UInt32, std::set<UInt32>>;
+// Collect first, then sort/deduplicate once. Boundary queries retain the native
+// coordinate order without allocating a tree node for each reached edge point.
+class Edges {
+    using Point = std::pair<UInt32, UInt32>;
+    std::pmr::vector<Point> points_;
+
+public:
+    explicit Edges(std::pmr::memory_resource* memory) : points_(memory) {
+        points_.reserve(1024);
+    }
+
+    void insert(UInt32 fixed, UInt32 along) {
+        points_.emplace_back(fixed, along);
+    }
+
+    void prepare() {
+        std::ranges::sort(points_);
+        const auto duplicates = std::ranges::unique(points_);
+        points_.erase(duplicates.begin(), duplicates.end());
+    }
+
+    [[nodiscard]] std::span<const Point> range(UInt32 fixed, UInt32 lo, UInt32 hi) const {
+        const auto first = std::lower_bound(points_.begin(), points_.end(), Point{fixed, lo});
+        const auto last = std::upper_bound(first, points_.end(), Point{fixed, hi});
+        return {first, last};
+    }
+};
+
+struct PointHash {
+    std::size_t operator()(const std::pair<UInt32, UInt32>& point) const noexcept {
+        UInt64 hash = (UInt64(point.first) << 32) | point.second;
+        hash = (hash ^ (hash >> 30)) * 0xbf58476d1ce4e5b9ULL;
+        hash = (hash ^ (hash >> 27)) * 0x94d049bb133111ebULL;
+        return std::size_t(hash ^ (hash >> 31));
+    }
+};
 
 Flt32 height(const Tile& t, UInt32 x, UInt32 y) {
     return t.block->heights[std::size_t(y) * (t.block->width + 1) + x];
@@ -130,15 +167,20 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                  cache ? cache->evictions() : 0};
 
     try {
+        std::pmr::monotonic_buffer_resource frameMemory(32 * 1024);
         std::size_t work = MaxWork;
         std::vector<Tile> tiles;
-        Edges horizontal, vertical;
+        Edges horizontal(&frameMemory), vertical(&frameMemory);
 
         struct NativePoint {
             Flt32 height, distance;
         };
 
-        std::map<std::pair<UInt32, UInt32>, NativePoint> nativePoints;
+        std::pmr::unordered_map<std::pair<UInt32, UInt32>, NativePoint, PointHash> nativePoints(
+            &frameMemory);
+        if (view.nativeTraversal) {
+            nativePoints.reserve(1024);
+        }
         const auto introduce = [&](const Tile& t, UInt32 x, UInt32 y, UInt32 level, bool row) {
             spend(work);
             const auto key = std::pair{t.bx + x, t.by + y};
@@ -162,20 +204,20 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                 return false;
             }
             nativePoints.emplace(key, NativePoint{*h, distance});
-            horizontal[key.second].insert(key.first);
-            vertical[key.first].insert(key.second);
+            horizontal.insert(key.second, key.first);
+            vertical.insert(key.first, key.second);
             return true;
         };
         std::set<std::array<UInt32, 4>> nextSplit;
         const auto& clip = selection->clip;
-        std::map<Int32, UInt32> blockIndices;
+        std::pmr::map<Int32, UInt32> blockIndices(&frameMemory);
         for (UInt32 i = 0; i < grid.blocks.size(); ++i) {
             spend(work);
             if (!blockIndices.emplace(grid.blocks[i].id, i).second) {
                 return {};
             }
         }
-        std::set<const TerrainGridBlock*> validated;
+        std::pmr::set<const TerrainGridBlock*> validated(&frameMemory);
         for (std::size_t i = 0; i < grid.blockMap.size(); ++i) {
             spend(work);
             const auto id = grid.blockMap[i];
@@ -368,8 +410,8 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                     tiles.push_back(tile);
                     for (const auto xx : {bx + x, bx + x + size}) {
                         for (const auto yy : {by + y, by + y + size}) {
-                            horizontal[yy].insert(xx);
-                            vertical[xx].insert(yy);
+                            horizontal.insert(yy, xx);
+                            vertical.insert(xx, yy);
                         }
                     }
                     return true;
@@ -406,8 +448,8 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                                     Point2I{Int32(bx + x + half), Int32(by + y + half)},
                                     Point2I{Int32(bx + x + size), Int32(by + y + half)},
                                     Point2I{Int32(bx + x + half), Int32(by + y + size)}}) {
-                        horizontal[UInt32(p.y)].insert(UInt32(p.x));
-                        vertical[UInt32(p.x)].insert(UInt32(p.y));
+                        horizontal.insert(UInt32(p.y), UInt32(p.x));
+                        vertical.insert(UInt32(p.x), UInt32(p.y));
                     }
                 }
                 return select(x, y, half) && select(x + half, y, half) &&
@@ -451,6 +493,8 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                 return {};
             }
         }
+        horizontal.prepare();
+        vertical.prepare();
         WorldSurfaceMesh result;
         result.materials = resources.materials;
         using TextureKey = std::tuple<UInt32, UInt32, UInt32, UInt32, UInt32, UInt32, UInt32>;
@@ -460,9 +504,10 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
             TerrainTextureTile tile;
         };
 
-        std::map<TextureKey, DrawTexture> textures;
-        std::set<const gfx::LightMap*> countedMaps;
-        std::map<std::pair<UInt32, UInt32>, terrain_detail::PointLightMask> lightMasks;
+        std::pmr::map<TextureKey, DrawTexture> textures(&frameMemory);
+        std::pmr::set<const gfx::LightMap*> countedMaps(&frameMemory);
+        std::pmr::map<std::pair<UInt32, UInt32>, terrain_detail::PointLightMask> lightMasks(
+            &frameMemory);
         std::size_t textureBytes{};
         UInt32 drawMaterial{};
         std::shared_ptr<const gfx::LightMap> drawMap;
@@ -553,6 +598,8 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
             result.triangles.push_back(std::move(triangle));
             return true;
         };
+        std::pmr::vector<Point2I> boundary(&frameMemory);
+        boundary.reserve(16);
         for (const auto& t : tiles) {
             const auto blockIndex = std::ranges::find_if(resources.blocks, [&](const auto& b) {
                 return b.get() == t.block;
@@ -715,32 +762,40 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                 }
             }
             const auto x = t.bx + t.x, y = t.by + t.y, s = t.size;
-            std::vector<Point2I> boundary;
+            boundary.clear();
             const auto edge = [&](const Edges& table,
                                   UInt32 fixed,
                                   UInt32 lo,
                                   UInt32 hi,
                                   bool reverse,
                                   bool verticalEdge) {
-                const auto& values = table.at(fixed);
-                std::vector<UInt32> selected;
-                for (auto at = values.lower_bound(lo); at != values.end() && *at <= hi; ++at) {
+                const auto values = table.range(fixed, lo, hi);
+                std::optional<UInt32> previous;
+                const auto visit = [&](UInt32 coordinate) {
                     spend(work);
                     if (!view.nativeTraversal ||
-                        ((*at == lo || *at == hi || *at == (lo + hi) / 2) &&
-                         nativePoints.contains(verticalEdge ? std::pair{fixed, *at}
-                                                            : std::pair{*at, fixed}))) {
-                        selected.push_back(*at);
+                        ((coordinate == lo || coordinate == hi || coordinate == (lo + hi) / 2) &&
+                         nativePoints.contains(verticalEdge ? std::pair{fixed, coordinate}
+                                                            : std::pair{coordinate, fixed}))) {
+                        // Delay one point so the last corner remains the next
+                        // edge's first corner, in either traversal direction.
+                        if (previous) {
+                            boundary.push_back(
+                                verticalEdge
+                                    ? Point2I{Int32(fixed - t.bx), Int32(*previous - t.by)}
+                                    : Point2I{Int32(*previous - t.bx), Int32(fixed - t.by)});
+                        }
+                        previous = coordinate;
                     }
-                }
+                };
                 if (reverse) {
-                    std::ranges::reverse(selected);
-                }
-                // Last corner is the next edge's first corner.
-                for (std::size_t i = 0; i + 1 < selected.size(); ++i) {
-                    boundary.push_back(
-                        verticalEdge ? Point2I{Int32(fixed - t.bx), Int32(selected[i] - t.by)}
-                                     : Point2I{Int32(selected[i] - t.bx), Int32(fixed - t.by)});
+                    for (auto at = values.rbegin(); at != values.rend(); ++at) {
+                        visit(at->second);
+                    }
+                } else {
+                    for (const auto& point : values) {
+                        visit(point.second);
+                    }
                 }
             };
             edge(vertical, x, y, y + s, false, true);

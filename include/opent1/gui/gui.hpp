@@ -67,11 +67,13 @@ struct Event {
 };
 
 struct Style {
+    bool operator==(const Style&) const = default;
     UInt8 opaque{}, fill{}, selectedFill{}, ghostFill{}, border{}, borderColor{}, selectedBorder{},
         ghostBorder{};
 };
 
 struct Fields {
+    bool operator==(const Fields&) const = default;
     Point2I position{}, extent{50, 50};
     Style style;
     UInt32 flags{3}, tag{};
@@ -486,7 +488,7 @@ public:
         return roots_.empty() ? 0 : roots_.size() - 1;
     }
 
-    bool fitContent(Point2I extent) const;
+    bool fitContent(Point2I extent, bool onlyIfChanged = false) const;
     [[nodiscard]] std::shared_ptr<const gfx::Bitmap>
     render(Int32 width,
            Int32 height,
@@ -494,6 +496,17 @@ public:
            const gfx::Bitmap* background = nullptr,
            gfx::SoftwareSurface::BlendRenderer blendRenderer = {},
            bool fitRoots = false) const;
+    // Borrowed until the next retained render. Palette storage is immutable and
+    // shared; exported render() bitmaps retain independent owned snapshots.
+    // Direct changes to public control drawing state require resetUpdateRegions.
+    // Timed updates, backgrounds and ordered blend callbacks redraw in full.
+    [[nodiscard]] const gfx::Bitmap*
+    renderRetained(Int32 width,
+                   Int32 height,
+                   std::shared_ptr<const gfx::Palette>,
+                   const gfx::Bitmap* background = nullptr,
+                   gfx::SoftwareSurface::BlendRenderer blendRenderer = {},
+                   bool fitRoots = false) const;
     // Host callbacks must not mutate/destroy the tree during dispatch/render.
     // A false action leaves local interaction state rolled back.
     std::function<bool(Control&, UInt32, std::string_view)> onAction;
@@ -540,6 +553,17 @@ private:
     friend class Control;
     friend class Active;
     friend class Runtime;
+    bool renderInto(gfx::SoftwareSurface&,
+                    const gfx::Bitmap*,
+                    gfx::SoftwareSurface::BlendRenderer,
+                    bool fitRoots,
+                    bool incremental,
+                    bool forceFull = false) const;
+    mutable bool layoutDirty_{true}, retainedDirty_{true};
+    mutable Point2I fittedExtent_{};
+    mutable std::vector<Control*> fittedRoots_;
+    mutable std::unique_ptr<gfx::SoftwareSurface> retainedFront_, retainedBack_;
+    mutable double retainedTime_{};
     void invalidate(Control&);
     std::function<void()> interactionCheckpoint();
     std::vector<Control*> roots_, tabs_;

@@ -226,6 +226,10 @@ void Control::setCanvas(Canvas* value) {
         canvas_->invalidate(*this);
     }
     canvas_ = value;
+    if (canvas_) {
+        canvas_->layoutDirty_ = true;
+        canvas_->retainedDirty_ = true;
+    }
     for (auto* object : objects()) {
         static_cast<Control*>(object)->setCanvas(value);
     }
@@ -279,6 +283,8 @@ bool Control::addObject(sim::SimObject& object) {
     }
     child->setCanvas(canvas_);
     if (canvas_) {
+        canvas_->layoutDirty_ = true;
+        canvas_->retainedDirty_ = true;
         canvas_->rebuildTabs();
     }
     return true;
@@ -298,10 +304,20 @@ bool Control::removeObject(sim::SimObject& object) {
 }
 
 bool Control::configure(Fields value) {
-    if (!valid(value) || !resize(value.position, value.extent)) {
+    if (!valid(value)) {
+        return false;
+    }
+    if (value == fields_) {
+        return true;
+    }
+    if (!resize(value.position, value.extent)) {
         return false;
     }
     const auto oldTag = fields_.tag;
+    if (canvas_) {
+        canvas_->layoutDirty_ = true;
+        canvas_->retainedDirty_ = true;
+    }
     fields_ = std::move(value);
     const auto newTag = fields_.tag;
     fields_.tag = oldTag;
@@ -345,6 +361,10 @@ bool Control::resize(Point2I position, Point2I extent) {
         return false;
     }
     for (auto& change : changes) {
+        if (change.control->canvas_ && change.control->fields_ != change.fields) {
+            change.control->canvas_->layoutDirty_ = true;
+            change.control->canvas_->retainedDirty_ = true;
+        }
         change.control->fields_ = std::move(change.fields);
     }
     return true;
@@ -458,6 +478,9 @@ Control* Control::findRootTag(UInt32 value) {
 }
 
 void Control::visible(bool value) {
+    if (visible() != value && canvas_) {
+        canvas_->retainedDirty_ = true;
+    }
     if (value) {
         fields_.flags |= 1;
     } else {
@@ -1943,6 +1966,8 @@ bool Canvas::contains(const Control* c) const {
 }
 
 void Canvas::invalidate(Control& c) {
+    retainedDirty_ = true;
+    layoutDirty_ = true;
     if (capture_ == &c) {
         if (captureMouse) {
             try {
@@ -2449,6 +2474,7 @@ void Canvas::cancel() noexcept {
 }
 
 bool Canvas::dispatch(const Event& e) {
+    retainedDirty_ = true;
     if (dispatching_ || !top() || !top()->visible() || e.text.size() > 65536 ||
         e.point.x < -Control::MaxCoordinate || e.point.x > Control::MaxCoordinate ||
         e.point.y < -Control::MaxCoordinate || e.point.y > Control::MaxCoordinate) {
@@ -2807,6 +2833,7 @@ bool Canvas::addUpdateRegion(Point2I p, Point2I e) const {
 }
 
 void Canvas::resetUpdateRegions() const {
+    retainedDirty_ = true;
     const auto extent =
         updateExtent_.x ? updateExtent_ : (top() ? top()->fields().extent : Point2I{});
     currentUpdate_ =
@@ -2814,7 +2841,10 @@ void Canvas::resetUpdateRegions() const {
     oldUpdates_.fill(currentUpdate_);
 }
 
-bool Canvas::fitContent(Point2I extent) const {
+bool Canvas::fitContent(Point2I extent, bool onlyIfChanged) const {
+    if (onlyIfChanged && !layoutDirty_ && fittedExtent_ == extent && fittedRoots_ == roots_) {
+        return true;
+    }
     std::vector<std::pair<Control*, Fields>> saved;
     const auto save = [&](auto&& self, Control& c) -> void {
         saved.emplace_back(&c, c.fields_);
@@ -2833,6 +2863,9 @@ bool Canvas::fitContent(Point2I extent) const {
             return false;
         }
     }
+    fittedExtent_ = extent;
+    fittedRoots_ = roots_;
+    layoutDirty_ = false;
     resetUpdateRegions();
     return true;
 }
@@ -2843,10 +2876,63 @@ std::shared_ptr<const gfx::Bitmap> Canvas::render(Int32 width,
                                                   const gfx::Bitmap* background,
                                                   gfx::SoftwareSurface::BlendRenderer blendRenderer,
                                                   bool fitRoots) const {
-    auto s = gfx::SoftwareSurface::create(width, height);
-    if (!s || (palette && !s->setPalette(*palette))) {
+    auto surface = gfx::SoftwareSurface::create(width, height);
+    if (!surface || (palette && !surface->setPalette(*palette)) ||
+        !renderInto(*surface, background, std::move(blendRenderer), fitRoots, false)) {
         return {};
     }
+    auto output = std::move(*surface).releaseBitmap();
+    if (palette) {
+        output.palette = *palette;
+    }
+    return std::make_shared<const gfx::Bitmap>(std::move(output));
+}
+
+const gfx::Bitmap* Canvas::renderRetained(Int32 width,
+                                          Int32 height,
+                                          std::shared_ptr<const gfx::Palette> palette,
+                                          const gfx::Bitmap* background,
+                                          gfx::SoftwareSurface::BlendRenderer blendRenderer,
+                                          bool fitRoots) const {
+    const auto matches = [=](const auto& surface) {
+        return surface && surface->bitmap().width == width && surface->bitmap().height == height;
+    };
+    if (!matches(retainedBack_)) {
+        retainedBack_ = gfx::SoftwareSurface::create(width, height);
+    }
+    if (!retainedBack_ || (palette && !retainedBack_->setSharedPalette(palette))) {
+        return nullptr;
+    }
+    if (!palette) {
+        retainedBack_->clearPalette();
+    }
+    const bool forceFull = !matches(retainedFront_) || retainedFront_->palette() != palette.get() ||
+                           retainedDirty_ || retainedTime_ != time_ || background ||
+                           bool(blendRenderer) || bool(onHelp);
+    retainedBack_->resetClip();
+    if (!forceFull && !retainedBack_->blit(retainedFront_->bitmap(), {})) {
+        return nullptr;
+    }
+    const bool rendered =
+        renderInto(*retainedBack_, background, std::move(blendRenderer), fitRoots, true, forceFull);
+    retainedBack_->setBlendRenderer({});
+    if (!rendered) {
+        return nullptr;
+    }
+    retainedFront_.swap(retainedBack_);
+    retainedDirty_ = false;
+    retainedTime_ = time_;
+    return &retainedFront_->bitmap();
+}
+
+bool Canvas::renderInto(gfx::SoftwareSurface& surface,
+                        const gfx::Bitmap* background,
+                        gfx::SoftwareSurface::BlendRenderer blendRenderer,
+                        bool fitRoots,
+                        bool incremental,
+                        bool forceFull) const {
+    auto* s = &surface;
+    const auto width = s->bitmap().width, height = s->bitmap().height;
     s->setBlendRenderer(std::move(blendRenderer));
     // A viewport publishes its picking projection only with successful drawing.
     // Later roots/cursors may still reject the frame, so retain the same local
@@ -2862,6 +2948,9 @@ std::shared_ptr<const gfx::Bitmap> Canvas::render(Int32 width,
         save(save, *root);
     }
     undo.push_back([this,
+                    layoutDirty = layoutDirty_,
+                    fittedExtent = fittedExtent_,
+                    fittedRoots = fittedRoots_,
                     help = help_,
                     extent = updateExtent_,
                     current = currentUpdate_,
@@ -2874,6 +2963,9 @@ std::shared_ptr<const gfx::Bitmap> Canvas::render(Int32 width,
                     tag = controlCursorTag_,
                     control = controlCursor_,
                     controlFrame = controlCursorFrame_] {
+        layoutDirty_ = layoutDirty;
+        fittedExtent_ = fittedExtent;
+        fittedRoots_ = fittedRoots;
         help_ = help;
         updateExtent_ = extent;
         currentUpdate_ = current;
@@ -2905,7 +2997,10 @@ std::shared_ptr<const gfx::Bitmap> Canvas::render(Int32 width,
     // The main game canvas fits content/dialog roots before drawing; viewport
     // capture and editor callers retain their authored bounds for clipping.
     // Resizing also applies the children's center/edge/stretch constraints.
-    if (fitRoots && !fitContent({width, height})) {
+    if (forceFull) {
+        resetUpdateRegions();
+    }
+    if (fitRoots && !fitContent({width, height}, incremental)) {
         return {};
     }
     if (updateExtent_ != Point2I{width, height}) {
@@ -3000,7 +3095,14 @@ std::shared_ptr<const gfx::Bitmap> Canvas::render(Int32 width,
         onHelp(help);
     }
     help_ = std::move(help);
-    s->clear(0);
+    const auto damage = incremental ? displayedUpdate_ : std::optional(s->bitmap().bounds());
+    if (!damage) {
+        committed = true;
+        return true;
+    }
+    s->resetClip();
+    s->fill(*damage, 0);
+    s->setClip(*damage);
     if (background && !s->blit(*background, {0, 0})) {
         return {};
     }
@@ -3009,7 +3111,7 @@ std::shared_ptr<const gfx::Bitmap> Canvas::render(Int32 width,
             continue;
         }
         const auto origin = root->fields().position;
-        const auto clip = intersect(s->bitmap().bounds(), bounds(origin, root->fields().extent));
+        const auto clip = intersect(*damage, bounds(origin, root->fields().extent));
         if (clip) {
             s->setClip(*clip);
             if (!root->draw(*s, origin, *clip)) {
@@ -3018,7 +3120,7 @@ std::shared_ptr<const gfx::Bitmap> Canvas::render(Int32 width,
         }
     }
     if (cursorEnabled && cursorVisible && bitmap) {
-        s->setClip(s->bitmap().bounds());
+        s->setClip(*damage);
         auto transparent = *bitmap;
         transparent.attributes |= gfx::BitmapTransparent;
         if (!s->blit(transparent, cursorPoint_ - sprite.hotspot)) {
@@ -3029,13 +3131,8 @@ std::shared_ptr<const gfx::Bitmap> Canvas::render(Int32 width,
             cursorFrameTime_ = time_;
         }
     }
-    auto output = std::move(*s).releaseBitmap();
-    if (palette) {
-        output.palette = *palette;
-    }
-    auto result = std::make_shared<const gfx::Bitmap>(std::move(output));
     committed = true;
-    return result;
+    return true;
 }
 
 bool registerClasses(Persistent::ClassRegistry& r) {

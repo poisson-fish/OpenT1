@@ -290,6 +290,8 @@ private:
     std::deque<std::pair<Int32, std::string>> chatMessages_;
     std::weak_ptr<const void> chatDisplayLifetime_;
     world::NativeSoftwareTextureCache softwareTextureCache_;
+    // Stable source identities let converted overlay textures survive frames.
+    std::vector<std::unique_ptr<gfx::Bitmap>> hardwareLayerCrops_;
 };
 
 [[nodiscard]] int runFearMain(std::span<const std::string_view> commandLineArgs = {});

@@ -165,6 +165,18 @@ int opent1_test_software_rasterizer() {
         parity();
         drawing();
         transferFramebuffer();
+        auto surface = SoftwareSurface::create(4, 4);
+        auto original = palette(0);
+        original.palettes[0].colors[1].red = 12;
+        CHECK(surface && surface->setPalette(original));
+        const auto copy = *surface;
+        original.palettes[0].colors[1].red = 99;
+        CHECK(surface->setPalette(original));
+        CHECK(copy.palette()->palettes[0].colors[1].red == 12);
+        CHECK(surface->palette()->palettes[0].colors[1].red == 99);
+        auto shared = std::make_shared<const Palette>(original);
+        CHECK(surface->setSharedPalette(shared) && surface->palette() == shared.get());
+        CHECK(!surface->setSharedPalette({}) && surface->palette() == shared.get());
     });
 }
 

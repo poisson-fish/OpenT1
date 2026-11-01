@@ -5,6 +5,18 @@
 #include <format>
 
 namespace opent1::game {
+namespace {
+std::string escapeChatArgument(std::string_view value) {
+    std::string escaped;
+    for (const char ch : value) {
+        if (ch == '"' || ch == '\\') {
+            escaped.push_back('\\');
+        }
+        escaped.push_back(ch);
+    }
+    return escaped;
+}
+}
 
 FearGuiChat::FearGuiChat() {
     fields_.extent = {370, 30};
@@ -32,6 +44,7 @@ std::string_view FearGuiChat::historyPrev() {
         historyCursor_ = 0;
     }
     (void)setText(history_[static_cast<std::size_t>(historyCursor_)]);
+    cursor = anchor = text.size();
     return text;
 }
 
@@ -42,6 +55,7 @@ std::string_view FearGuiChat::historyNext() {
     if (historyCursor_ + 1 < static_cast<Int32>(history_.size())) {
         ++historyCursor_;
         (void)setText(history_[static_cast<std::size_t>(historyCursor_)]);
+        cursor = anchor = text.size();
     } else {
         historyCursor_ = static_cast<Int32>(history_.size());
         (void)setText("");
@@ -50,22 +64,24 @@ std::string_view FearGuiChat::historyNext() {
 }
 
 std::string FearGuiChat::submitLine(std::string_view rawInput) {
-    pushHistory(rawInput);
-    text.clear();
+    const std::string line(rawInput);
+    pushHistory(line);
+    (void)setText("");
     lineCount_ = 2;
-    if (rawInput.empty()) {
+    if (line.empty()) {
         return {};
     }
-    if (rawInput.starts_with("/msg ") || rawInput.starts_with("/MSG ")) {
-        const auto rest = rawInput.substr(5);
+    if (line.starts_with("/msg ") || line.starts_with("/MSG ")) {
+        const auto rest = std::string_view(line).substr(5);
         const auto sp = rest.find(' ');
         if (sp != std::string_view::npos) {
             const auto target = rest.substr(0, sp);
             const auto body = rest.substr(sp + 1);
-            return std::format("ircSend(\"{}\", \"{}\");", body, target);
+            return std::format("ircSend(\"{}\", \"{}\");",
+                               escapeChatArgument(body), escapeChatArgument(target));
         }
     }
-    return std::format("say({}, \"{}\");", channel_, rawInput);
+    return std::format("say({}, \"{}\");", channel_, escapeChatArgument(line));
 }
 
 void FearGuiChat::activate(Int32 chatChannel) {
@@ -89,7 +105,8 @@ bool FearGuiChat::event(const gui::Event& e) {
         if (e.key == gui::Key::Return) {
             const auto line = text;
             pushHistory(line);
-            text.clear();
+            (void)setText("");
+            lineCount_ = 2;
             deactivate();
             if (!line.empty() && sendLine) {
                 sendLine(channel_, line);
@@ -97,7 +114,7 @@ bool FearGuiChat::event(const gui::Event& e) {
             return true;
         }
         if (e.key == gui::Key::Escape) {
-            text.clear();
+            (void)setText("");
             deactivate();
             return true;
         }

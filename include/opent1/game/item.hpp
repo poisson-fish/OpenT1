@@ -142,6 +142,10 @@ public:
 
     void throwObject(GameBase* object, Flt32 speed, bool careless) override;
 
+    [[nodiscard]] std::string_view getScriptDefaultClass() const noexcept override {
+        return "Item";
+    }
+
     UInt32
     packUpdate(sim::network::GhostManager& gm, UInt32 mask, BitStream& stream) const override;
     bool unpackUpdate(sim::network::GhostManager& gm, BitStream& stream) override;
@@ -171,8 +175,10 @@ protected:
     UInt32 flags_{Visible};
     bool isRotate_{false};
     bool isCollideable_{false};
+    bool lastRest_{true};
     Int32 count_{0};
     SimTime updateTime_{0.0f};
+    SimTime dropTime_{0.0f};
     SimTime popTime_{0.0f};
     sim::SimObject* throwSource_{nullptr};
     Int32 explicitThrowGhostIndex_{-1};

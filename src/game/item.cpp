@@ -1,5 +1,6 @@
 #include <opent1/game/item.hpp>
 #include <opent1/game/player_manager.hpp>
+#include <opent1/math/random.hpp>
 
 #include <algorithm>
 #include <array>
@@ -18,7 +19,11 @@ constexpr UInt32 ServerCollisionMask = SimTerrainObjectType | SimInteriorObjectT
                                        MoveableObjectType;
 
 constexpr UInt32 ClientCollisionMask = SimTerrainObjectType | SimInteriorObjectType |
-                                       StaticObjectType | VehicleObjectType | MoveableObjectType;
+                                       SimPlayerObjectType | StaticObjectType | VehicleObjectType |
+                                       MoveableObjectType;
+
+constexpr UInt32 ScriptCollisionMask = VehicleObjectType | SimPlayerObjectType |
+                                       StaticObjectType | MineObjectType;
 
 template <class T> void writePod(BitStream& s, const T& val) {
     static_assert(std::is_trivially_copyable_v<T>);
@@ -138,6 +143,7 @@ bool Item::initResources(GameBaseData* in_data) {
     }
 
     initCollisionInfo();
+    collisionImage_->collisionLevel = ShapeCollisionImage::CollideBBox;
     if (outerCollisionImage_) {
         outerCollisionImage_->trigger = !isCollideable_;
     }
@@ -174,6 +180,7 @@ bool Item::onAdd() {
     }
 
     const SimTime nowSec = getManager() ? getManager()->getCurrentTime() : 0.0f;
+    dropTime_ = nowSec;
     if (isGhost()) {
         setCollisionMask(ClientCollisionMask);
     } else {
@@ -202,8 +209,9 @@ void Item::onDeleteNotify(sim::SimObject& object) {
 }
 
 void Item::onCollisionNotify(GameBase* object) {
-    if (!isGhost() && (flags_ & Visible) != 0) {
-        Parent::onCollisionNotify(object);
+    if (!isGhost() && object && object != throwSource_ &&
+        (object->getType() & ScriptCollisionMask) != 0) {
+        scriptOnCollision(object);
     }
 }
 
@@ -211,6 +219,10 @@ void Item::serverProcess(UInt32 curTime) {
     updateTimers();
 
     const Flt32 curTimeSec = static_cast<Flt32>(curTime) * 0.001f;
+    if (throwSource_ && curTimeSec > dropTime_ + ItemThrowBlackout) {
+        clearNotify(*throwSource_);
+        throwSource_ = nullptr;
+    }
     if ((flags_ & PopItem) != 0 && curTimeSec >= popTime_) {
         if (m_fading_ == NotFading) {
             startFadeOut(curTime);
@@ -222,6 +234,8 @@ void Item::serverProcess(UInt32 curTime) {
         }
     }
 
+    const bool restChanged = lastRest_ != isAtRest();
+    lastRest_ = isAtRest();
     if (!isAtRest() && !isRotate_) {
         Flt32 timeInterval = static_cast<Flt32>(curTime >= getLastProcessTime()
                                                     ? std::min(curTime - getLastProcessTime(), 256u)
@@ -236,16 +250,9 @@ void Item::serverProcess(UInt32 curTime) {
             updateTime_ = curTimeSec + ItemUpdatePosTime;
             setMaskBits(PositionMask | VelocityMask);
         }
-        if (getOwnerId() != 0 &&
-            curTimeSec >= (updateTime_ - ItemUpdatePosTime + ItemThrowBlackout)) {
-            setOwnerId(0);
-            throwerClientId_ = -1;
-            throwerClientLoginId_ = 0;
-        }
-    } else {
-        setOwnerId(0);
-        throwerClientId_ = -1;
-        throwerClientLoginId_ = 0;
+    }
+    if (restChanged && !isRotate_) {
+        setMaskBits(PositionMask | VelocityMask);
     }
 
     Parent::serverProcess(curTime);
@@ -311,12 +318,16 @@ void Item::hideItem(bool hide) {
 void Item::throwObject(GameBase* object, Flt32 speed, bool careless) {
     const SimTime nowSec = getManager() ? getManager()->getCurrentTime() : 0.0f;
     updateTime_ = nowSec + ItemUpdatePosTime;
+    dropTime_ = nowSec;
+    if (throwSource_) {
+        clearNotify(*throwSource_);
+    }
     throwSource_ = object;
     if (throwSource_) {
         deleteNotify(*throwSource_);
     }
 
-    if (careless || !object) {
+    if (!object) {
         setOwnerId(0);
         throwerClientId_ = -1;
         throwerClientLoginId_ = 0;
@@ -344,13 +355,19 @@ void Item::throwObject(GameBase* object, Flt32 speed, bool careless) {
     Point3F pos{0.0f, 0.0f, 0.0f};
     Point3F vel{0.0f, 1.0f, 0.0f};
     if (object) {
-        object->getThrowVector(&pos, &vel);
+        static Random random;
+        if (careless) {
+            pos = object->getBoxCenter();
+            vel.set(random.getFloat(-.733f, .733f),
+                    random.getFloat(-.733f, .733f),
+                    random.getFloat(.5f, 1.f));
+        } else {
+            object->getThrowVector(&pos, &vel);
+        }
         const Flt32 itemMass = (itemData_ && itemData_->mass > 0.001f) ? itemData_->mass : 1.0f;
         vel *= speed / itemMass;
         vel += object->getLinearVelocity();
-        if (const auto* sb = dynamic_cast<const ShapeBase*>(object)) {
-            setRot(Point3F{0.0f, 0.0f, sb->getRot().z});
-        }
+        setRot(Point3F{0.0f, 0.0f, random.getFloat(kTwoPi)});
     }
     setPos(pos);
     setLinearVelocity(vel);
@@ -361,14 +378,11 @@ bool Item::processCollision(MovementInfo& info) {
     for (std::size_t i = 0; i < info.collisionList.size();) {
         sim::SimObject* obj =
             getManager() ? info.collisionList[i].object.resolve(*getManager()) : nullptr;
-        if (obj && obj->getId() == getOwnerId()) {
+        if (obj && obj == throwSource_) {
             info.collisionList.erase(info.collisionList.begin() + static_cast<std::ptrdiff_t>(i));
         } else {
             ++i;
         }
-    }
-    if (info.collisionList.empty()) {
-        return true;
     }
     return Parent::processCollision(info);
 }

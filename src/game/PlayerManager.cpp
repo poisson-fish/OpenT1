@@ -1299,7 +1299,7 @@ void PlayerManager::displayCommandMessage(ClientRep* speaker, Int32 type, std::s
             }
         }
     }
-    if (onChatMessage) {
+    if (onChatMessage && !message.empty()) {
         onChatMessage(type, message);
     }
 }

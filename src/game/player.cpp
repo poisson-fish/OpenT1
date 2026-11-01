@@ -1187,6 +1187,18 @@ TMat3F Player::getLOSTransform() const noexcept {
     return getEyeTransform();
 }
 
+void Player::getThrowVector(Point3F* pos, Point3F* vec) const {
+    if (pos) {
+        *pos = getBoxCenter();
+    }
+    if (vec) {
+        const RMat3F view{EulerF{viewPitch_ + 0.5f * std::cos(viewPitch_), 0, 0}};
+        RMat3F rotation;
+        m_mul(view, static_cast<const RMat3F&>(getTransform()), rotation);
+        m_mul(Point3F{0, 1, 0}, rotation, *vec);
+    }
+}
+
 void Player::getCameraTransform(Flt32 camDist, TMat3F* transform) const {
     if (!transform) {
         return;

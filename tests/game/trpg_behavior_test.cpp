@@ -4,6 +4,8 @@
 #include <opent1/game/ai.hpp>
 #include <opent1/game/player.hpp>
 #include <opent1/game/player_manager.hpp>
+#include <opent1/game/chat_inventory_huds.hpp>
+#include <opent1/game/item.hpp>
 #include <opent1/world/world_collision_sim.hpp>
 #include <cstdlib>
 #include <cmath>
@@ -331,6 +333,101 @@ void installedRpgCombat() {
     CHECK(fired);
     CHECK(player->getDamageLevel() > playerDamage);
     std::printf("RPG pickaxe damaged bot; enemy AI acquired, fired at and damaged player.\n");
+
+    // Exercise the original RPG sling script, whose projectiles are Items.
+    CHECK(console.evaluate(std::format(R"(
+        storeData({0}, "LoadedProjectile Sling", SmallRock);
+        Player::incItemCount({0}, SmallRock, 2);
+        {0}.lastFireTime = -100;
+        ProjectileAttack({0}, Sling, 30);
+    )", bot->id)).ok());
+    auto* cleanupGroup = dynamic_cast<sim::SimGroup*>(globals.manager->findObject("MissionCleanup"));
+    CHECK(cleanupGroup);
+    Item* rock = nullptr;
+    for (auto* object : cleanupGroup->objects()) {
+        auto* candidate = dynamic_cast<Item*>(object);
+        if (candidate && candidate->getDatFileName() == "SmallRock" &&
+            candidate->throwSource() == bot->player()) {
+            rock = candidate;
+        }
+    }
+    CHECK(rock);
+    const auto start = rock->getPos();
+    rock->serverProcess(rock->getLastProcessTime() + 32);
+    CHECK((rock->getPos() - start).len() > .1f);
+
+    // A real chest/player overlap must invoke Item::onCollision and grant loot.
+    Int32 rockType = -1;
+    CHECK(globals.dbm->lookupDataBlock("SmallRock", DataBlockManager::ItemDataType, &rockType));
+    const auto inventory = player->getItemCount(rockType);
+    CHECK(console.evaluate(R"(
+        newObject(PathLoot, Item, Lootbag, 1, false);
+        GameBase::setPosition(PathLoot, "10000 10010 10000");
+        $loot[nameToId(PathLoot)] = "* * SmallRock 2";
+    )").ok());
+    auto* chest = globals.manager->findObject("PathLoot");
+    CHECK(chest);
+    const auto chestId = chest->getId();
+    player->setPos({10000, 10010, 10000});
+    CHECK(player->stepPosition(player->getTransform(), .1f, .3f));
+    globals.manager->advanceToTime(globals.manager->getCurrentTime());
+    CHECK(!globals.manager->findObject(chestId));
+    CHECK(player->getItemCount(rockType) == inventory + 2);
+
+    // Rechecking an unchanged enemy zone must announce the entry only once.
+    std::vector<std::string> messages;
+    auto* localPlayers = app.fearPlugin().clientGlobals().playerManager;
+    auto previousChat = localPlayers->onChatMessage;
+    localPlayers->onChatMessage = [&](Int32, std::string_view message) {
+        messages.emplace_back(message);
+    };
+    CHECK(console.evaluate(R"(
+        for (%z = 1; %z <= $numZones; %z++) {
+            if ($Zone::Type[%z] == "DUNGEON") {
+                GameBase::setPosition(2049, $Zone::Marker[%z]);
+                break;
+            }
+        }
+        DoZoneCheck(2, 0);
+        DoZoneCheck(2, 0);
+        DoZoneCheck(2, 0);
+    )").ok());
+    const auto entries = std::ranges::count_if(messages, [](const auto& message) {
+        return message.starts_with("You have entered ");
+    });
+    CHECK(entries == 1);
+    localPlayers->onChatMessage = std::move(previousChat);
+
+    // Check the loaded play.gui editor across rendering and repeated submission.
+    app.fearPlugin().syncLoopbackState(false);
+    CHECK(app.setGameplayGuiMode(1));
+    FearGuiChat* chat = nullptr;
+    const auto findChat = [&](auto&& self, gui::Control& control) -> void {
+        if (auto* candidate = dynamic_cast<FearGuiChat*>(&control)) {
+            chat = candidate;
+        }
+        for (auto* child : control.objects()) {
+            self(self, *static_cast<gui::Control*>(child));
+        }
+    };
+    findChat(findChat, *app.guiRuntime()->canvas.top());
+    CHECK(chat);
+    auto surface = gfx::SoftwareSurface::create(640, 480);
+    CHECK(surface && app.renderFrame(*surface));
+    for (int i = 0; i < 2; ++i) {
+        chat->activate();
+        CHECK(app.renderFrame(*surface));
+        gui::Event input;
+        input.type = gui::EventType::Text;
+        input.text = "RPG chat test";
+        CHECK(app.guiRuntime()->canvas.dispatch(input));
+        CHECK(chat->text == input.text);
+        input.type = gui::EventType::KeyDown;
+        input.key = gui::Key::Return;
+        CHECK(app.guiRuntime()->canvas.dispatch(input));
+        CHECK(!chat->visible());
+    }
+    std::printf("RPG bot sling, chest pickup, stable zone entry and reopened chat verified.\n");
 }
 }
 

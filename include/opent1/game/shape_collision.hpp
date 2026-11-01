@@ -13,6 +13,7 @@ class ShapeCollisionImage : public sim::SimCollisionImage {
 public:
     enum CollisionLevel : Int32 {
         CollideDepth = 0,
+        CollideBBox = CollideDepth,
         CollideFaces = 1,
     };
 

@@ -444,6 +444,7 @@ public:
     }
 
     [[nodiscard]] const TMat3F& getEyeTransform() const override;
+    void getThrowVector(Point3F* pos, Point3F* vec) const override;
     [[nodiscard]] TMat3F getLOSTransform() const noexcept override;
     void getCameraTransform(Flt32 camDist, TMat3F* transform) const override;
 

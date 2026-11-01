@@ -136,6 +136,10 @@ FearGuiChatDisplay::MessageEntry FearGuiChatDisplay::newMessage(std::string_view
     } else {
         entry.text = std::string(rawMsg);
     }
+    // Native sound-only messages do not consume a line in chat history.
+    if (msgType != MSG_Command && entry.text.empty()) {
+        return entry;
+    }
     if (msgType == MSG_Command) {
         commandSlot_ = entry;
     } else {

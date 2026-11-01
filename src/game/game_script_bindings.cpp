@@ -921,7 +921,8 @@ void FearPlugin::installGameplayCommands(Console& console) {
             if (client->packetStream) {
                 return client->packetStream->sendRemoteEvent(std::move(event)) ? "True" : "False";
             }
-            if (cg_.playerManager) {
+            if (cg_.playerManager && cg_.manager &&
+                client->id == static_cast<Int32>(cg_.manager->getId()) && client->loginStatus) {
                 game_.withWorld(sim::WorldType::Client, [&] {
                     (void)cg_.playerManager->processEvent(*event);
                 });

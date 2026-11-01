@@ -257,7 +257,7 @@ bool FearGameApp::escapeGameplay() {
     }
     if (auto* chat = findGameplayControl<FearGuiChat>(guiRuntime_->canvas.top());
         chat && chat->visible()) {
-        chat->text.clear();
+        (void)chat->setText("");
         chat->deactivate();
         return true;
     }

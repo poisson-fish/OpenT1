@@ -292,6 +292,7 @@ void ShapeBase::updateMovement(Flt32 slice) {
     TMat3F tmat = SimMovement::updateMovement();
     RMat3F rmat(EulerF{rotation_.x, rotation_.y, rotation_.z});
     static_cast<RMat3F&>(tmat) = rmat;
+    tmat.flags |= TMat3F::Matrix_HasTranslation;
 
     if (!SimMovement::stepPosition(tmat, movementStepSize_ * 0.3f, movementStepSize_)) {
         setRotation(rmat, true);

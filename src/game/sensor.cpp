@@ -155,9 +155,6 @@ UInt32 Sensor::packUpdate(sim::network::GhostManager& gm, UInt32 dwMask, BitStre
     if (stream.writeFlag((dwMask & InitialUpdate) != 0)) {
         packDatFile(stream);
     }
-    if (getGhostTag() == SensorPersTag && sensorKey != -1) {
-        stream.writeInt(sensorKey + 1, 8);
-    }
     return 0;
 }
 
@@ -166,12 +163,10 @@ bool Sensor::unpackUpdate(sim::network::GhostManager& gm, BitStream& stream) {
 
     const auto savedDatId = datFileId_;
     const auto savedSensorInit = hasUnpackedInitialSensor_;
-    const auto savedSensorKey = sensorKey;
 
     const auto rollback = [&]() noexcept {
         datFileId_ = savedDatId;
         hasUnpackedInitialSensor_ = savedSensorInit;
-        sensorKey = savedSensorKey;
         return false;
     };
 
@@ -184,9 +179,6 @@ bool Sensor::unpackUpdate(sim::network::GhostManager& gm, BitStream& stream) {
             return rollback();
         }
         hasUnpackedInitialSensor_ = true;
-    }
-    if (getGhostTag() == SensorPersTag && stream.remainingReadBits() != 0) {
-        sensorKey = stream.readInt(8) - 1;
     }
 
     if (!stream.isValid()) {

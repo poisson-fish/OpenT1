@@ -1133,9 +1133,6 @@ UInt32 Turret::packUpdate(sim::network::GhostManager& g, UInt32 mask, BitStream&
         stream.writeInt(static_cast<Int32>(state_), 4);
     }
     stream.writeFlag(m_fireState_ == Firing);
-    if (sensorKey != -1) {
-        stream.writeInt(sensorKey + 1, 8);
-    }
     return 0;
 }
 
@@ -1143,7 +1140,6 @@ bool Turret::unpackUpdate(sim::network::GhostManager& g, BitStream& stream) {
     BitStreamRollbackGuard guard(stream);
 
     const auto savedDatId = datFileId_;
-    const auto savedSensorKey = sensorKey;
     const auto savedRot = turretRotation_;
     const auto savedElev = turretElevation_;
     const auto savedDesRot = desiredRotation_;
@@ -1157,7 +1153,6 @@ bool Turret::unpackUpdate(sim::network::GhostManager& g, BitStream& stream) {
 
     const auto rollback = [&]() noexcept {
         datFileId_ = savedDatId;
-        sensorKey = savedSensorKey;
         turretRotation_ = savedRot;
         turretElevation_ = savedElev;
         desiredRotation_ = savedDesRot;
@@ -1230,9 +1225,6 @@ bool Turret::unpackUpdate(sim::network::GhostManager& g, BitStream& stream) {
     }
 
     const bool isFiring = stream.readFlag();
-    if (stream.remainingReadBits() != 0) {
-        sensorKey = stream.readInt(8) - 1;
-    }
     if (!stream.isValid()) {
         return rollback();
     }

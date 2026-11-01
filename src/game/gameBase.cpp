@@ -453,6 +453,13 @@ void GameBase::setTeam(Int32 team) {
                 (void)con->execute(cb, callArgs);
             }
         }
+        // 1.11 keeps the owner's roster team in sync with its body. AI target
+        // selection and mod damage scripts consult this representation too.
+        if (auto* players = PlayerManager::get(getManager()); ownerClientId_ && players) {
+            if (auto* owner = players->findBaseRep(ownerClientId_); owner && owner->team != teamId_) {
+                players->serverClientTeamChange(ownerClientId_, teamId_);
+            }
+        }
     }
 }
 

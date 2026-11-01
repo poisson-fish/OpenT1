@@ -89,6 +89,7 @@ bool PlayerCollisionImage::collide(const SimCollisionImage& image,
         // Ignore player's rotation when colliding with the terrain.
         TMat3F nmat{};
         nmat.p = transform.p;
+        nmat.flags |= TMat3F::Matrix_HasTranslation;
         TMat3F invTerr = ti->transform;
         invTerr.inverse();
         m_mul(nmat, invTerr, mat);
@@ -121,6 +122,7 @@ bool PlayerCollisionImage::collide(const SimCollisionImage& image,
         // Ignore player's rotation when colliding with interiors.
         TMat3F nmat{};
         nmat.p = transform.p;
+        nmat.flags |= TMat3F::Matrix_HasTranslation;
         TMat3F invInt = ii->transform;
         invInt.inverse();
         m_mul(nmat, invInt, mat);

@@ -1490,7 +1490,7 @@ void verifyRetainedResourcesAndWorldLifetimes() {
     player->setId(500);
     mgr.addObject(*player);
 
-    // Verify SimCollisionImageQuery returns PlayerCollisionImage with standing vs crouching bbox
+    // Crouching changes the ray hit box; movement keeps the standing box.
     {
         sim::SimCollisionImageQuery collQ{};
         player->setCrouching(false);
@@ -1506,7 +1506,9 @@ void verifyRetainedResourcesAndWorldLifetimes() {
         CHECK(collQ.images.size() == 1u);
         CHECK(
             approxEqual(player->collisionImage().bbox.fMax.z - player->collisionImage().bbox.fMin.z,
-                        playerData->boxCrouchHeight));
+                        playerData->boxNormalHeight));
+        CHECK(approxEqual(player->collisionImage().crouchBox.fMax.z,
+                          playerData->boxCrouchHeight));
     }
 
     // Mount lifetime notification: deleting mounted vehicle clears Player::getMountObject()

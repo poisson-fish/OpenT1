@@ -290,7 +290,7 @@ public:
     }
 
     [[nodiscard]] Flt32 coverage(Point3F eye) const;
-    [[nodiscard]] TMat3F getLOSTransform() const noexcept;
+    [[nodiscard]] virtual TMat3F getLOSTransform() const noexcept;
     sim::SimObject*
     findLOSObject(const TMat3F& mat, Flt32 range, UInt32 mask, Point3F* pos, Point3F* normal) const;
     bool aimedTransform(TMat3F* eyeMat, Point3F startPoint) const;

@@ -173,6 +173,7 @@ bool FearPlugin::configureRemoteStream(sim::network::PacketStream& stream) {
             auto event = std::make_unique<PlayerAddEvent>();
             event->flags = sim::SimEvent::Guaranteed | sim::SimEvent::Ordered;
             event->id = source.id;
+            event->isBaseRepType = !source.loginStatus;
             event->name = source.name;
             event->skinBase = source.skinBase;
             event->voiceBase = source.voiceBase;

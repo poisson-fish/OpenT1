@@ -355,6 +355,34 @@ Int32 Player::getImageState(Int32 imageSlot) const noexcept {
     return itemImageList_[static_cast<std::size_t>(imageSlot)].state;
 }
 
+void Player::scriptImageCallback(Int32 imageSlot, std::string_view callback) {
+    if (imageSlot < 0 || imageSlot >= MaxImageSlots) {
+        return;
+    }
+    auto* console = resolveConsole();
+    const auto& image = itemImageList_[static_cast<std::size_t>(imageSlot)];
+    const auto* imageData = getImageData(image.imageId);
+    const auto* itemData = getItemData(image.itemId);
+    if (!console || !imageData || !itemData) {
+        return;
+    }
+    // Player::scriptImageName in 1.11 resolves image name, item class, then
+    // ItemImage. Script weapons (including TRPG melee) have no projectile.
+    for (const std::string_view name : {std::string_view(imageData->dbmName),
+                                        std::string_view(itemData->className),
+                                        std::string_view("ItemImage")}) {
+        if (name.empty()) {
+            continue;
+        }
+        const auto function = std::format("{}::{}", name, callback);
+        if (console->isFunction(function)) {
+            const std::array<std::string, 2> args{scriptThis(), std::to_string(imageSlot)};
+            (void)console->execute(function, args);
+            return;
+        }
+    }
+}
+
 void Player::fireImage(Int32 imageSlot) {
     if (imageSlot < 0 || imageSlot >= MaxImageSlots) {
         return;
@@ -365,6 +393,10 @@ void Player::fireImage(Int32 imageSlot) {
         return;
     }
     if (!isGhost()) {
+        if (imgData->projectile.type == -1) {
+            scriptImageCallback(imageSlot, "onFire");
+            return;
+        }
         Flt32 energyUsed = 0.0f;
         Flt32 pOfM = 1.0f;
         const bool sustained = imgData->weaponType == Sustained;

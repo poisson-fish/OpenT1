@@ -1267,7 +1267,7 @@ std::size_t FearPlugin::syncLoopbackState(bool deliverMoves) {
             if (!cg_.playerManager->findBaseRep(srvRep->id)) {
                 PlayerAddEvent pEv;
                 pEv.id = srvRep->id;
-                pEv.isBaseRepType = (srvClient == nullptr);
+                pEv.isBaseRepType = !srvClient || !srvClient->loginStatus;
                 pEv.name = srvRep->name;
                 pEv.skinBase = srvRep->skinBase;
                 pEv.voiceBase = srvClient ? srvClient->voiceBase : std::string("male1");

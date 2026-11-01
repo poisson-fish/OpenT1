@@ -118,11 +118,11 @@ exercise the affected GPU backends before distributing a shader change.
 
 ## Test suite
 
-The full build registers 38 standard C++ cases in one executable and 12 subsystem suites:
+The full build registers 44 standard C++ cases in one executable and 12 subsystem suites:
 core, math, console, network, simulation, graphics, world, GUI, game, video,
 and optional audio/platform.
 CTest also runs an application smoke check, for 13 CTest checks in total.
-Headless builds register 36 standard C++ cases in 10 subsystem suites plus the smoke
+Headless builds register 42 standard C++ cases in 10 subsystem suites plus the smoke
 check, for 11 CTest checks. They omit the audio and platform cases. Default
 checks use the bundled fixtures and do not need a game installation, Python,
 or an external reference executable.
@@ -181,6 +181,18 @@ ownership, native string-table spellings, exports, EMF grouping and lighting.
 RPG acceptance also verifies the spawned race and skin, and renders installed
 melee weapon models in both views using the active palette. Synthetic coverage
 checks stale model spheres, skin ownership and palette selection without assets.
+
+The optional `trpg` suite hosts `rpgmap5`, spawns an enemy through the installed
+RPG scripts, and checks that the player's mounted pickaxe and the enemy's weapon
+both deal damage. It uses the same asset variable and a temporary write directory:
+
+```powershell
+.\build\x64-debug\tests\opent1_tests.exe --suite trpg
+```
+
+The ordinary `game` suite covers bot join announcements and teams, script weapon
+callbacks and fallback lookup, pitched melee traces, crouch collision bounds,
+uphill acceleration and turn timing, the jump arc, and grounded prediction during smoothing.
 
 ## Continuous integration and validation limits
 

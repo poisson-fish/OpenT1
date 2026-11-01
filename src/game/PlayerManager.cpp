@@ -1571,6 +1571,9 @@ bool PlayerManager::processEvent(const sim::SimEvent& event) {
                     cl->team = ev->team;
                     cl->commanderId = ev->commanderId;
                     cl->loginStatus = ev->isBaseRepType ? 0u : 1u;
+                    if (joined && ev->isBaseRepType) {
+                        --numClients_;
+                    }
                     buildCommandTrees();
                     if (joined && cl->loginStatus) {
                         if (boundConsole_ && boundConsole_->isFunction("onClientJoin")) {

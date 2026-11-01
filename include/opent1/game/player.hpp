@@ -444,6 +444,7 @@ public:
     }
 
     [[nodiscard]] const TMat3F& getEyeTransform() const override;
+    [[nodiscard]] TMat3F getLOSTransform() const noexcept override;
     void getCameraTransform(Flt32 camDist, TMat3F* transform) const override;
 
     [[nodiscard]] bool cameraZoomAndCrosshairsEnabled() const noexcept override {
@@ -474,6 +475,7 @@ public:
     void updateImageState(Int32 imageSlot, Flt32 dt);
     void updateItemImages(Flt32 dt);
     void fireImage(Int32 imageSlot);
+    void scriptImageCallback(Int32 imageSlot, std::string_view callback);
     void updateImageFire(Int32 imageSlot);
     void stopImageFire(Int32 imageSlot);
     void updateImageMass();

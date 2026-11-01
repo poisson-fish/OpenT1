@@ -16,8 +16,7 @@ Player::Player() {
                      CorpseObjectType | TriggerObjectType | ItemObjectType);
     setMovementFlags(UseFriction | UseElasticity | UseDrag | UseCurrent | AtRest |
                      AlwaysCalcAVelocity);
-    setForceMask(sim::MovementGravityForce | sim::MovementBuoyancyForce | TribesJetForce |
-                 TribesRocketForce);
+    setForceMask(~UInt32{0});
     setTimeSlice(0.032f);
 
     for (auto& img : itemImageList_) {
@@ -464,8 +463,6 @@ void Player::setCrouching(bool newCrouch) {
         const Flt32 h = crouching_ ? playerData_->boxCrouchHeight : playerData_->boxNormalHeight;
         if (h > 0.0f) {
             collisionImage_.crouchBox.fMax.z = h;
-            collisionImage_.bbox.fMax.z = h;
-            setLocalBoundingBox(collisionImage_.bbox);
         }
     }
 }
@@ -1184,6 +1181,10 @@ const TMat3F& Player::getEyeTransform() const {
     }
     m_mul(localEye, getTransform(), eyeTransformCache_);
     return eyeTransformCache_;
+}
+
+TMat3F Player::getLOSTransform() const noexcept {
+    return getEyeTransform();
 }
 
 void Player::getCameraTransform(Flt32 camDist, TMat3F* transform) const {

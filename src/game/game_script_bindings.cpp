@@ -813,7 +813,7 @@ void FearPlugin::installGameplayCommands(Console& console) {
                            const auto* object =
                                args.size() == 2 ? player(sg_.manager, sg_.playerManager, args[1])
                                                 : nullptr;
-                           return object && object->getOwnerClient() <= 0 ? "True" : "False";
+                           return object && object->isAiControlled() ? "True" : "False";
                        });
     console.addCommand(0,
                        "Client::getGuiMode",

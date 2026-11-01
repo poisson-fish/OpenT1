@@ -457,11 +457,11 @@ void Player::updateMove(const PlayerMove* curMove, bool server) {
         const Point3F relVel{sideAxisMovement_, forwardAxisMovement_, 0.0f};
         // rotation_ already includes this move's turn. The collision transform
         // is committed below so last tick's contact survives traction, but
-        // legacy resolves the desired velocity against the new heading.
+        // vanilla ShapeBase::setRot defers its matrix update until movement.
+        // Acceleration therefore uses the previous heading for this tick.
         const Point3F& rotation = getRot();
-        const RMat3F movementRotation{EulerF{rotation.x, rotation.y, rotation.z}};
         Point3F vel{};
-        m_mul(relVel, movementRotation, vel);
+        m_mul(relVel, static_cast<const RMat3F&>(getTransform()), vel);
         const Point3F sVel = getLinearVelocity();
         updateLinearVelocity();
 
@@ -595,6 +595,7 @@ void Player::ghostSetMove(const PlayerMove& move,
         deltaRot_ = dRot * invTime;
         deltaPitch_ = (viewPitch_ - oldPitch) * invTime;
 
+        const bool predictedContact = didContact();
         if (!mount_) {
             setPos(oldPos);
         }
@@ -607,6 +608,9 @@ void Player::ghostSetMove(const PlayerMove& move,
             m_mul(TMat3F(EulerF{rotation.x, rotation.y, oldRot}, {}), mountTransform, result);
             setPosition(result, true);
         }
+        // Smoothing changes the presentation transform, preserving the ground
+        // contact computed by prediction just as 1.11's setPos/setRot did.
+        setContact(predictedContact);
     }
 }
 

@@ -433,6 +433,12 @@ public:
         return simTime_;
     }
 
+    // Script mission time can restart while event queues and frame clocks stay
+    // monotonic, including when a mission changes inside a scheduled callback.
+    void resetScriptTime(SimTime base) noexcept {
+        scriptTimeBase_ = base;
+    }
+
     [[nodiscard]] SimObject* findObject(std::string_view, SimManager* preferred = nullptr) const;
     SimObject* createObject(std::string_view className,
                             std::string_view name = {},
@@ -493,6 +499,7 @@ private:
     std::shared_ptr<const UInt8> inspectionOwner_{std::make_shared<const UInt8>(0)};
     std::array<UInt64, 2> worldRevisions_{};
     double wallTime_{}, simTime_{}, timeScale_{1};
+    SimTime scriptTimeBase_{};
     bool started_{}, driving_{}, switching_{};
     std::size_t declarationDepth_{};
 };

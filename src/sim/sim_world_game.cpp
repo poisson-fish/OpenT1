@@ -989,7 +989,8 @@ SimGame::invokeCommand(Console& console, Int32 id, std::span<const std::string> 
         return "True";
     }
     if (id == GetTime) {
-        return size == 1 ? number(destination->getCurrentTime()) : "False";
+        return size == 1 ? number(std::max(0.f, destination->getCurrentTime() - scriptTimeBase_))
+                         : "False";
     }
     if (id == Schedule) {
         if (size != 3 && size != 4) {

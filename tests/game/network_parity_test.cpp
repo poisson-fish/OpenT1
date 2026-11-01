@@ -10,6 +10,7 @@
 #include <opent1/game/status_combat_huds.hpp>
 #include <opent1/world/scene_objects.hpp>
 #include <opent1/game/sound.hpp>
+#include <opent1/game/sensor_manager.hpp>
 #include <opent1/sim/sim_resource_volume.hpp>
 #include <opent1/game/server_irc_controls.hpp>
 #include <chrono>
@@ -499,6 +500,24 @@ void networkCommands() {
     deliver(*from.stream, *to.stream);
     CHECK(destination->getNumClients() == 1 && destination->findClient(2049)->curCommand == -1 &&
           destination->findClient(2049)->scoreString == "keep");
+
+    CHECK(registerSensorManagerEvents(*protocol));
+    auto* sensors = add<SensorManager>(from.manager());
+    auto* receivedSensors = add<SensorManager>(to.manager());
+    auto* target = add<GameBase>(from.manager());
+    const auto key = sensors->addTarget(target, "West generator");
+    CHECK(key >= 0);
+    deliver(*from.stream, *to.stream);
+    CHECK(receivedSensors->target(key).name == "West generator");
+    sensors->changeTargetName(key, "East generator");
+    deliver(*from.stream, *to.stream);
+    CHECK(receivedSensors->target(key).name == "East generator");
+    sensors->newClient(2049);
+    deliver(*from.stream, *to.stream);
+    CHECK(receivedSensors->target(key).name == "East generator");
+    target->deleteObject();
+    deliver(*from.stream, *to.stream);
+    CHECK(receivedSensors->target(key).name.empty());
 }
 
 struct IrcPipe {

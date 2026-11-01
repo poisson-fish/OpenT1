@@ -350,6 +350,17 @@ bool Turret::isTargetable(GameBase* target) {
         if (pl->isDead() || !pl->isExposed()) {
             return false;
         }
+        if (auto* console = resolveConsole()) {
+            const auto callback = scriptName("verifyTarget");
+            if (!callback.empty()) {
+                const std::array<std::string, 2> args{scriptThis(), pl->scriptThis()};
+                const auto result = console->execute(callback, args);
+                if (!result.value.empty() && (result.value.front() == 'F' ||
+                                              result.value.front() == 'f' || result.value == "0")) {
+                    return false;
+                }
+            }
+        }
         Flt32 r = 0.0f;
         Flt32 e = 0.0f;
         if (!inDeadZone(leadPosition(target), &r, &e) &&

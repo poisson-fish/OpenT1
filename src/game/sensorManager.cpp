@@ -109,6 +109,11 @@ void SensorManager::newClient(Int32 managerId) {
     if (!getManager()) {
         return;
     }
+    auto* players = PlayerManager::get(getManager());
+    auto* client = players ? players->findClient(managerId) : nullptr;
+    if (!client || !client->packetStream) {
+        return;
+    }
     for (Int32 i = 0; i < MaxTargets; ++i) {
         const auto& entry = targets_[static_cast<std::size_t>(i)];
         if (entry.obj && !entry.name.empty()) {
@@ -116,8 +121,7 @@ void SensorManager::newClient(Int32 managerId) {
             ev->targId = i;
             ev->name = entry.name;
             ev->address.objectId = SensorManagerId;
-            ev->address.managerId = static_cast<sim::SimObjectId>(managerId);
-            getManager()->postEvent(std::move(ev));
+            (void)client->packetStream->sendRemoteEvent(std::move(ev));
         }
     }
 }
@@ -137,12 +141,14 @@ void SensorManager::changeTargetName(Int32 key, std::string_view name) {
     if (auto* pm = PlayerManager::get(getManager())) {
         for (PlayerManager::ClientRep* cl = pm->getClientList(); cl != nullptr;
              cl = static_cast<PlayerManager::ClientRep*>(cl->nextClient)) {
+            if (!cl->packetStream) {
+                continue;
+            }
             auto ev = std::make_unique<TargetNameEvent>();
             ev->targId = key;
             ev->name = entry.name;
             ev->address.objectId = SensorManagerId;
-            ev->address.managerId = static_cast<sim::SimObjectId>(cl->id);
-            getManager()->postEvent(std::move(ev));
+            (void)cl->packetStream->sendRemoteEvent(std::move(ev));
         }
     }
 }

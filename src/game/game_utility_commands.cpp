@@ -487,10 +487,9 @@ void FearPlugin::installLegacyUtilityCommands(Console& console) {
     console.addCommand(
         0, "resetSimTime", [this](Console&, Int32, std::span<const std::string>) -> std::string {
             if (sg_.manager) {
-                sg_.manager->resetTime();
-            }
-            if (cg_.manager) {
-                cg_.manager->resetTime();
+                game_.resetScriptTime(sg_.manager->getCurrentTime());
+            } else if (cg_.manager) {
+                game_.resetScriptTime(cg_.manager->getCurrentTime());
             }
             return "true";
         });

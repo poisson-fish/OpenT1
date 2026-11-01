@@ -1,4 +1,5 @@
 #include <opent1/game/status_combat_huds.hpp>
+#include <opent1/game/sensor_manager.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -8,6 +9,18 @@ namespace opent1::game {
 
 namespace {
 constexpr Flt32 kPi = 3.14159265358979323846f;
+
+Flt32 targetDamage(const ShapeBase& target) {
+    auto damage = target.getDamageLevel();
+    const auto* data = dynamic_cast<const ShapeBaseData*>(target.getDatPtr());
+    // Static/vehicle ghosts carry a fraction; player ghosts retain absolute
+    // damage for movement and health HUD calculations.
+    if (data && data->maxDamage > 0 &&
+        (!target.isGhost() || dynamic_cast<const Player*>(&target))) {
+        damage /= data->maxDamage;
+    }
+    return damage;
+}
 } // namespace
 
 Crosshair::Crosshair() {
@@ -38,7 +51,7 @@ Crosshair::ReticleMetrics Crosshair::computeReticleMetrics(Point2I parentExtent,
     if (targetObj != nullptr) {
         out.hasTarget = true;
         out.targetFriendly = (observerTeam >= 0 && targetObj->getTeam() == observerTeam);
-        out.targetDamage = targetObj->getDamageLevel();
+        out.targetDamage = targetDamage(*targetObj);
         out.targetName = std::string(targetLabel);
         if (projectileVelocity > 0.0f) {
             const Point3F tgtPos = targetObj->getLinearPosition();
@@ -168,7 +181,7 @@ void Crosshair::updateLive(sim::SimManager& manager,
                     position.z += .65f;
                 }
                 const auto screen = project(position);
-                if (!screen || !unobstructed(target, position)) {
+                if (!screen || !unobstructed(target, target->getBoxCenter())) {
                     continue;
                 }
                 const bool friendly = players && players->getNumTeams() > 1 &&
@@ -190,13 +203,21 @@ void Crosshair::updateLive(sim::SimManager& manager,
                 distance = range;
                 metrics_.hasTarget = true;
                 metrics_.targetFriendly = friendly;
-                metrics_.targetDamage = width >= 1 ? target->getDamageLevel() : -1;
+                metrics_.targetDamage = width >= 1 ? targetDamage(*target) : -1;
                 if (const auto* rep = player && players
                                           ? players->findBaseRep(player->getOwnerClient())
                                           : nullptr) {
                     metrics_.targetName = rep->name;
                 } else {
-                    metrics_.targetName = std::string(target->getName());
+                    const auto* sensor =
+                        dynamic_cast<const SensorManager*>(manager.findObject(SensorManagerId));
+                    metrics_.targetName = sensor && target->sensorKey >= 0 &&
+                                                  target->sensorKey < SensorManager::MaxTargets
+                                              ? sensor->target(target->sensorKey).name
+                                              : std::string{};
+                    if (metrics_.targetName.empty()) {
+                        metrics_.targetName = std::string(target->getName());
+                    }
                     if (metrics_.targetName.empty() && target->getDatPtr()) {
                         metrics_.targetName = target->getDatPtr()->description;
                     }

@@ -139,8 +139,20 @@ void ScriptPlugin::init(Console& console, sim::SimManager* manager) {
                                return "-1";
                            }
                            const Int32 clientId = parseIntAscii(argv[1]);
-                           const auto* cl = findClient(clientId);
-                           if (!cl || cl->observerCameraId == 0) {
+                           auto* cl = findClient(clientId);
+                           if (!cl) {
+                               return "-1";
+                           }
+                           const auto* camera =
+                               dynamic_cast<ObserverCamera*>(srv->findObject(cl->observerCameraId));
+                           if (!camera || camera->clientId() != clientId) {
+                               auto* cleanup =
+                                   dynamic_cast<sim::SimGroup*>(srv->findObject("MissionCleanup"));
+                               auto replacement = std::make_unique<ObserverCamera>(clientId);
+                               auto* added = srv->addObject(std::move(replacement), cleanup);
+                               ensureClient(clientId).observerCameraId = added ? added->getId() : 0;
+                           }
+                           if (!cl->observerCameraId) {
                                return "-1";
                            }
                            return std::to_string(cl->observerCameraId);

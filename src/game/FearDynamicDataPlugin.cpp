@@ -37,15 +37,18 @@ constexpr std::array<std::string_view, 15> kMatTypeNames{{
     "PackedEarth",
 }};
 
-constexpr std::array<std::pair<std::string_view, UInt32>, 8> kSoundFlagTokens{{
-    {"SFX_IS_2D", 0x00000001u},
-    {"SFX_IS_3D", 0x00000002u},
+constexpr std::array<std::pair<std::string_view, UInt32>, 11> kSoundFlagTokens{{
+    {"SFX_IS_2D", 0u},
+    {"SFX_IS_3D", (1u << 4) | (1u << 5)},
     {"SFX_USE_HARDWARE_2D", 0x00000010u},
     {"SFX_USE_HARDWARE_3D", 0x00000020u},
-    {"SFX_IS_LOOPING", 0x00001000u},
-    {"SFX_IS_STREAMING", 0x00002000u},
-    {"SFX_STREAMING_2D", 0x00002001u},
-    {"SFX_STREAMING_3D", 0x00002002u},
+    {"SFX_IS_LOOPING", 1u << 1},
+    {"SFX_IS_STREAMING", 1u << 2},
+    {"SFX_IS_PITCHING", 1u << 3},
+    {"SFX_IS_SOFTWARE_3D", 1u << 4},
+    {"SFX_IS_HARDWARE_3D", 1u << 5},
+    {"SFX_STREAMING_2D", 1u << 2},
+    {"SFX_STREAMING_3D", (1u << 2) | (1u << 4) | (1u << 5)},
 }};
 
 [[nodiscard]] std::size_t hashFieldName(std::string_view name, std::size_t tableSize) noexcept {

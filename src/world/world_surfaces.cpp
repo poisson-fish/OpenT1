@@ -325,7 +325,7 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::interior(const InteriorShapeRe
         }
         if (s.material >= result.materials.textures.size() ||
             s.material >= result.materials.list.materials.size() ||
-            s.firstVertex > g.vertices.size() || s.vertexCount < 3 || s.vertexCount > 32 ||
+            s.firstVertex > g.vertices.size() || s.vertexCount < 3 ||
             s.vertexCount > g.vertices.size() - s.firstVertex) {
             return {};
         }

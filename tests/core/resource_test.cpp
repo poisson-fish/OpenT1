@@ -67,6 +67,9 @@ auto archive(StreamCompressType codec, std::string_view text) {
     put(dict, static_cast<UInt32>(original.size()));
     dict.push_back(static_cast<std::byte>(codec));
     block(bytes, kVolIdsTag, dict);
+    // The legacy compressed CRC range may extend past the compressed payload.
+    // Give it defined backing bytes, independently of decoder output.
+    bytes.resize(std::max(bytes.size(), std::size_t{16} + original.size()), std::byte{0x5a});
     return bytes;
 }
 
@@ -122,7 +125,8 @@ void tests() {
         CHECK(manager.getSize("sub/asset.dat") == 4 &&
               manager.getFullPath("sub/asset.dat") ==
                   std::filesystem::absolute(root / "first/sub/Asset.dat"));
-        CHECK(manager.findMatches("SUB/*.D?T") == std::vector<std::string>{"sub/asset.dat"});
+        CHECK(manager.findMatches("SUB/*.D?T") ==
+              std::vector<std::string>({"sub\\Asset.dat", "sub\\Asset.dat"}));
         auto a = manager.load<RawData>("sub/asset.dat");
         CHECK(a && text(a->bytes) == disk && a.name() == "sub/asset.dat");
         auto copy = a;
@@ -220,7 +224,14 @@ void tests() {
             std::vector<std::byte> output;
             CHECK(manager.read("sub/asset.dat", output) && text(output) == payload);
             UInt32 crc{};
-            CHECK(manager.getCrc("sub/asset.dat", crc) && crc == CRC::calculate(output));
+            const auto encoded = archive(codec, payload);
+            // Vanilla reads the declared decoded size directly from the raw
+            // archive payload, crossing into following blocks when compressed.
+            CHECK(manager.getCrc("sub/asset.dat", crc) &&
+                  crc == CRC::calculate(std::span(encoded).subspan(16, payload.size())));
+            const UInt32 seed = 0x12345678U;
+            CHECK(manager.getCrc("sub/asset.dat", crc, seed) &&
+                  crc == CRC::calculate(std::span(encoded).subspan(16, payload.size()), seed));
             save(root / "second/newer.vol", archive(codec, "newer"));
             CHECK(manager.setSearchPaths(roots) && manager.addVolume("newer.vol"));
             CHECK(text(manager.load<RawData>("sub/asset.dat")->bytes) == "newer" &&

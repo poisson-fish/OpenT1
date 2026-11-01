@@ -71,6 +71,10 @@ public:
     void shutdown() noexcept override;
     void setManager(sim::SimManager* manager) override;
 
+    void setWriteRoot(std::filesystem::path root) {
+        writeRoot_ = std::move(root);
+    }
+
     // SimDataBlockManager / ConsoleDataManager interface
     [[nodiscard]] bool contains(std::string_view name) const override;
     void declareDataBlock(std::string_view className, std::string_view name) override;

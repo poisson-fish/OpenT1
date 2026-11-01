@@ -2,6 +2,7 @@
 #include <opent1/core/res_manager.hpp>
 #include <algorithm>
 #include <cmath>
+#include <charconv>
 
 namespace opent1::sim {
 namespace {
@@ -656,6 +657,13 @@ bool SimInputManager::submit(SimInputEvent event) {
     if (!manager || isRemoved() || !validInput(event)) {
         return false;
     }
+    const auto device = deviceActive_.find({event.deviceType, event.deviceInst});
+    const auto type = typeActive_.find(event.deviceType);
+    if (!(device != deviceActive_.end() ? device->second
+          : type != typeActive_.end()   ? type->second
+                                        : allActive_)) {
+        return false;
+    }
     bool result = false;
     manager->dispatch([&] {
         UInt8 modifier = 0;
@@ -681,6 +689,54 @@ bool SimInputManager::submit(SimInputEvent event) {
         }
     });
     return result;
+}
+
+bool SimInputManager::activateDevice(std::string_view name, bool active) {
+    std::string text(name);
+    std::ranges::transform(text, text.begin(), [](char c) {
+        return char(c >= 'A' && c <= 'Z' ? c + 32 : c);
+    });
+    if (text == "all") {
+        if (!active) {
+            release();
+        }
+        allActive_ = active;
+        deviceActive_.clear();
+        typeActive_.clear();
+        return true;
+    }
+    for (const auto& [prefix, type] :
+         std::array<std::pair<std::string_view, UInt8>, 4>{{{"keyboard", InputKeyboard},
+                                                            {"mouse", InputMouse},
+                                                            {"joystick", InputJoystick},
+                                                            {"device", InputDevice}}}) {
+        if (!text.starts_with(prefix)) {
+            continue;
+        }
+        const auto suffix = std::string_view(text).substr(prefix.size());
+        if (suffix.empty()) {
+            if (!active) {
+                release();
+            }
+            typeActive_[type] = active;
+            std::erase_if(deviceActive_, [type](const auto& item) {
+                return item.first.first == type;
+            });
+        } else {
+            UInt32 instance{};
+            const auto parsed =
+                std::from_chars(suffix.data(), suffix.data() + suffix.size(), instance);
+            if (parsed.ec != std::errc{} || parsed.ptr != suffix.data() + suffix.size()) {
+                return false;
+            }
+            if (!active) {
+                releaseDevice(type, instance);
+            }
+            deviceActive_[{type, instance}] = active;
+        }
+        return true;
+    }
+    return false;
 }
 
 bool SimInputManager::processEvent(const SimEvent& event) {

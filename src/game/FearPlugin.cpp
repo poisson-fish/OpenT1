@@ -1,6 +1,8 @@
 #include <opent1/game/mine.hpp>
 #include <opent1/gfx/bitmap_content.hpp>
 #include <opent1/core/text.hpp>
+#include <opent1/core/filename.hpp>
+#include <opent1/sim/bayes_ai.hpp>
 #include <opent1/game/flier.hpp>
 #include <opent1/game/ai.hpp>
 #include <opent1/game/chat_inventory_huds.hpp>
@@ -597,6 +599,19 @@ struct WeatherGeometry {
     }
 };
 
+class EmfInterior final : public InteriorShape {
+public:
+    bool prepareArguments(std::span<const std::string> args) override {
+        if (args.size() != 1 || args[0].empty()) {
+            return false;
+        }
+        // createObject registers before processArguments. Set the filename
+        // before onAdd so geometry is actually loaded and validated.
+        setFileName(args[0]);
+        return true;
+    }
+};
+
 class FearMissionPath final : public world::SimPath {
 public:
     FearMissionPath() {
@@ -633,6 +648,15 @@ public:
         scalar("hazeDistance", next.hazeDistance);
         scalar("hazeVerticalMin", next.hazeMin);
         scalar("hazeVerticalMax", next.hazeMax);
+        // Vertical haze was disabled in the native terrain renderer. Exported
+        // RPG missions contain uninitialized NaNs in these dormant fields.
+        // Keep finite defaults rather than passing them into validated state.
+        if (!std::isfinite(next.hazeMin)) {
+            next.hazeMin = state().hazeMin;
+        }
+        if (!std::isfinite(next.hazeMax)) {
+            next.hazeMax = state().hazeMax;
+        }
         scalar("perspectiveDistance", next.perspectiveDistance);
         scalar("screenSize", next.screenSize);
         scalar("contDrag", next.drag);
@@ -955,6 +979,8 @@ bool FearPlugin::createClientWorld() {
     cg_.timeBase = static_cast<UInt32>(game_.simulationTime() * 1000.0);
     cg_.currentTime = cg_.timeBase;
     cg_.lastTime = cg_.timeBase;
+    // Local hosting receives the same PSC headers as remote connections.
+    bindClientControlCallbacks();
 
     // Packet timestamps and queued input must use the same integer clock.
     // The manager's float event time may still refer to the previous frame
@@ -971,8 +997,10 @@ bool FearPlugin::createClientWorld() {
 }
 
 void FearPlugin::destroyServerWorld() {
+    pendingLocalKick_.reset();
     if (scriptPlugin_) {
         scriptPlugin_->clearClients();
+        scriptPlugin_->setServerManager(nullptr);
     }
     pendingRemoteControls_.clear();
     serverToClientGhosts_.clear();
@@ -985,6 +1013,7 @@ void FearPlugin::destroyServerWorld() {
 
 void FearPlugin::destroyClientWorld() {
     connectAddress_.clear();
+    pendingLocalKick_.reset();
     serverToClientGhosts_.clear();
     loopbackSourceGenerations_.clear();
     dataFinishedFlag_ = false;
@@ -1134,7 +1163,6 @@ std::size_t FearPlugin::syncLoopbackState(bool deliverMoves) {
     if (!sg_.world || !cg_.world || connectAddress_ != "LOOPBACK:28001") {
         return 0;
     }
-    const auto* previousControl = cg_.playerPSC ? cg_.playerPSC->getControlObject() : nullptr;
 
     // 1. Replicate server datablocks to client DataBlockManager via BitStream
     if (sg_.dbm && cg_.dbm) {
@@ -1243,7 +1271,7 @@ std::size_t FearPlugin::syncLoopbackState(bool deliverMoves) {
                 pEv.name = srvRep->name;
                 pEv.skinBase = srvRep->skinBase;
                 pEv.voiceBase = srvClient ? srvClient->voiceBase : std::string("male1");
-                pEv.gender = (srvClient && srvClient->gender == "Female") ? 0 : 1;
+                pEv.gender = (srvClient && srvClient->gender == "FEMALE") ? 0 : 1;
                 pEv.commanderId = srvClient ? srvClient->commanderId : -1;
                 pEv.team = srvRep->team;
                 std::array<std::byte, 1024> pBuf{};
@@ -1430,10 +1458,6 @@ std::size_t FearPlugin::syncLoopbackState(bool deliverMoves) {
                 for (Int32 item = 0; item < Player::MaxItemTypes; ++item) {
                     clientPlayer->setItemCount(item, serverPlayer->getItemCount(item));
                 }
-                if (sg_.playerPSC && cg_.playerPSC &&
-                    sg_.playerPSC->getControlObject() == serverPlayer) {
-                    cg_.playerPSC->setControlObject(clientPlayer);
-                }
             }
         }
         ++syncedGhosts;
@@ -1457,10 +1481,6 @@ std::size_t FearPlugin::syncLoopbackState(bool deliverMoves) {
                                             "Loopback player control packet rejected");
             }
         }
-    }
-    if (cg_.playerPSC && cg_.playerPSC->getControlObject() &&
-        cg_.playerPSC->getControlObject() != previousControl && onPlayerControl) {
-        onPlayerControl();
     }
     return syncedGhosts;
 }
@@ -2120,6 +2140,8 @@ void FearPlugin::init(Console& console, sim::SimManager* manager) {
             if ((!cg_.world || !cg_.playerPSC) && !createClientWorld()) {
                 return "False";
             }
+            const bool connecting = connectAddress_ != "LOOPBACK:28001" ||
+                                    (sg_.playerManager && !sg_.playerManager->findClient(2049));
             connectAddress_ = "LOOPBACK:28001";
             game_.console().setVariable("Server::Address", connectAddress_);
             game_.console().setVariable("ConnectedToServer", "true");
@@ -2160,6 +2182,27 @@ void FearPlugin::init(Console& console, sim::SimManager* manager) {
                     }
                 }
             }
+            if (connecting) {
+                // Match the remote join order. The server initializes/clears
+                // client state first; onConnection then sends PCFG::Info and
+                // the other profile fields through the script's SetCLInfo.
+                // Both must precede datablock completion and mission drop.
+                game_.withWorld(sim::WorldType::Server, [&] {
+                    if (game_.console().isFunction("Server::onClientConnect")) {
+                        const std::array<std::string, 1> args{"2049"};
+                        (void)game_.console().execute("Server::onClientConnect", args);
+                    }
+                });
+                game_.withWorld(sim::WorldType::Client, [&] {
+                    if (game_.console().isFunction("onConnection")) {
+                        const std::array<std::string, 1> args{"Accepted"};
+                        (void)game_.console().execute("onConnection", args);
+                    }
+                });
+                if (onConnectionAccepted) {
+                    onConnectionAccepted();
+                }
+            }
             (void)syncLoopbackState();
             return "True";
         });
@@ -2189,7 +2232,19 @@ void FearPlugin::init(Console& console, sim::SimManager* manager) {
             const std::string_view reason =
                 (argv.size() >= 3) ? std::string_view(argv[2])
                                    : std::string_view("You were kicked from the server.");
+            if (peerId == 2049 && connectAddress_ == "LOOPBACK:28001") {
+                // The hosted client has no PacketStream. Retire its worlds
+                // after the frame, outside a running script/manager dispatch.
+                pendingLocalKick_ = std::string(reason);
+                return "True";
+            }
             return sg_.csDelegate->kick(peerId, reason, sg_.currentTime) ? "True" : "False";
+        });
+    console.addCommand(
+        0, "Net::kick", [](Console& con, Int32, std::span<const std::string> args) -> std::string {
+            return args.size() == 2 || args.size() == 3
+                       ? con.execute("kick", args.subspan(1)).value
+                       : "False";
         });
 
     console.addCommand(
@@ -2411,9 +2466,10 @@ void FearPlugin::init(Console& console, sim::SimManager* manager) {
                            if (argv.size() < 2 || !mgr) {
                                return "0 0 0";
                            }
-                           if (const auto* sb =
-                                   dynamic_cast<const ShapeBase*>(resolveSimObject(mgr, argv[1]))) {
-                               const Point3F r = sb->getRot();
+                           if (const auto* object =
+                                   dynamic_cast<const GameBase*>(resolveSimObject(mgr, argv[1]))) {
+                               EulerF r;
+                               object->getTransform().angles(r);
                                return std::format("{:g} {:g} {:g}", r.x, r.y, r.z);
                            }
                            return "0 0 0";
@@ -2740,10 +2796,15 @@ void FearPlugin::init(Console& console, sim::SimManager* manager) {
                            auto* cl = sg_.playerManager->findClient(parseIntSv(argv[1]));
                            auto* gb =
                                dynamic_cast<GameBase*>(resolveSimObject(sg_.manager, argv[2]));
-                           if (!cl || !gb) {
+                           if (!cl) {
                                return "False";
                            }
-                           cl->controlObject = gb;
+                           if (cl->controlObject && cl->controlObject != gb) {
+                               cl->controlObject->setControlClient(0);
+                           }
+                           if (gb) {
+                               gb->setControlClient(cl->id);
+                           }
                            if (cl->playerPSC) {
                                cl->playerPSC->setControlObject(gb);
                            }
@@ -2768,6 +2829,7 @@ void FearPlugin::shutdown() noexcept {
         console_->removeCommand("localConnect");
         console_->removeCommand("disconnect");
         console_->removeCommand("kick");
+        console_->removeCommand("Net::kick");
         console_->removeCommand("Sad");
         console_->removeCommand("SadSetPassword");
         console_->removeCommand("quit");
@@ -2889,6 +2951,24 @@ FearGameApp::FearGameApp() : FearGameApp(Config{}) {}
 FearGameApp::FearGameApp(Config config)
     : config_(std::move(config)), resources_(std::make_shared<ResourceManager>()),
       banList_(std::make_shared<BanList>()), game_(resources_) {
+    game_.console().setFileRoot(config_.writeRoot);
+    game_.console().bindVariable("OpenT1::MountedVolumes",
+                                 [this] {
+                                     return std::to_string(resources_->mountedVolumes().size());
+                                 },
+                                 {});
+    game_.console().bindVariable(
+        "ConsoleWorld::DefaultSearchPath",
+        [this] {
+            return searchPath_;
+        },
+        [this](std::string_view value) {
+            if (applySearchPath(value)) {
+                searchPath_ = value;
+            } else {
+                game_.console().print("Cannot apply resource search path: " + std::string(value));
+            }
+        });
     filePlugin_ = std::make_shared<FilePlugin>(resources_, banList_, config_.writeRoot);
     scriptPlugin_ = std::make_shared<ScriptPlugin>();
     dynamicDataPlugin_ = std::make_shared<FearDynamicDataPlugin>(resources_, config_.writeRoot);
@@ -2953,6 +3033,7 @@ void FearGameApp::registerGameClassesAndFactories() {
     gfx::registerPaletteLoaders(*resources_);
     gfx::registerBitmapFontLoaders(*resources_);
     sim::registerSimActionMapResource(*resources_);
+    sim::registerBayesResource(*resources_);
     world::registerTsLoaders(*resources_);
     world::registerTerrainLoaders(*resources_);
     world::registerInteriorLoaders(*resources_);
@@ -2997,6 +3078,7 @@ void FearGameApp::registerGameClassesAndFactories() {
     classes.registerClass<Marker>("Marker", MarkerPersTag);
     classes.registerClass<Marker>("DropPointMarker", FearDropPointMarkerPersTag);
     classes.registerClass<Marker>("MapMarker", FearMissionMarkerPersTag);
+    classes.registerClass<EmfInterior>("SimInterior");
     classes.registerClass<SensorManager>("SensorManager");
 
     // 3. Register script/console factories that auto-bind active world managers
@@ -3132,6 +3214,9 @@ void FearGameApp::registerGameClassesAndFactories() {
     game_.registerFactory("InteriorShape", [bindGameBase]() {
         return bindGameBase(std::make_unique<InteriorShape>());
     });
+    game_.registerFactory("SimInterior", [bindGameBase]() {
+        return bindGameBase(std::make_unique<EmfInterior>());
+    });
     game_.registerFactory("SimPath", []() {
         return std::make_unique<FearMissionPath>();
     });
@@ -3260,91 +3345,81 @@ std::filesystem::path FearGameApp::discoverAssetRoot(const std::filesystem::path
     return {};
 }
 
+bool FearGameApp::applySearchPath(std::string_view path) {
+    std::vector<std::filesystem::path> roots;
+    const auto anchor =
+        mountedAssetRoot_.empty() ? std::filesystem::current_path() : mountedAssetRoot_;
+    while (!path.empty()) {
+        const auto end = path.find(';');
+        const auto part = path.substr(0, end);
+        if (!part.empty()) {
+            // A separate write root overlays only the corresponding selected
+            // directories, never the entire installation or inactive mods.
+            if (!config_.writeRoot.empty() && config_.writeRoot != anchor) {
+                const auto writable = resolveFilePath(config_.writeRoot, part);
+                std::error_code ec;
+                if (std::filesystem::is_directory(writable, ec)) {
+                    roots.push_back(writable);
+                }
+            }
+            const auto directory = resolveFilePath(anchor, part);
+            std::error_code ec;
+            if (std::filesystem::is_directory(directory, ec)) {
+                roots.push_back(directory);
+            }
+        }
+        if (end == path.npos) {
+            break;
+        }
+        path.remove_prefix(end + 1);
+    }
+    return resources_->setSearchPaths(roots);
+}
+
 bool FearGameApp::mountAssetRoot(const std::filesystem::path& assetRoot) {
     if (!resources_) {
         return false;
     }
     std::error_code ec;
-    std::filesystem::path root = assetRoot;
-    if (std::filesystem::is_regular_file(root / "entities.vol", ec) ||
-        std::filesystem::is_regular_file(root / "Entities.vol", ec)) {
-        root = root.parent_path();
-    }
-    const auto baseDir = root / "base";
-    if (!std::filesystem::is_directory(baseDir, ec)) {
+    auto root = std::filesystem::absolute(assetRoot, ec).lexically_normal();
+    if (ec) {
         return false;
     }
-
-    // Match FearMain::initInstance() and TRIBES/console.cs search path setup
-    game_.console().setVariable("CommandLinePath", std::format(".;{}", root.string()));
+    if (std::filesystem::is_regular_file(resolveFilePath(root, "entities.vol"), ec)) {
+        root = root.parent_path();
+    }
+    if (!std::filesystem::is_directory(resolveFilePath(root, "base"), ec)) {
+        return false;
+    }
+    if (mountedAssetRoot_ == root) {
+        return applySearchPath(searchPath_);
+    }
+    if (!mountedAssetRoot_.empty() && mountedAssetRoot_ != root) {
+        fearPlugin_->destroyClientWorld();
+        fearPlugin_->destroyServerWorld();
+        mountedVolumes_.clear();
+    }
+    const auto previousRoot = mountedAssetRoot_;
+    mountedAssetRoot_ = root;
+    if (!applySearchPath("config;base;base\\missions;base\\fonts;base\\skins;base\\voices;"
+                         "base\\scripts;recordings;temp")) {
+        mountedAssetRoot_ = previousRoot;
+        return false;
+    }
+    const auto writeRoot =
+        config_.writeRoot.empty() ? root : std::filesystem::absolute(config_.writeRoot);
+    game_.console().setFileRoot(writeRoot);
+    filePlugin_->setWriteRoot(writeRoot);
+    dynamicDataPlugin_->setWriteRoot(writeRoot);
+    fearPlugin_->setWriteRoot(writeRoot);
+    game_.console().setVariable("CommandLinePath", root.string());
     game_.console().setVariable("ConsoleWorld::DefaultSearchPath",
                                 "config;base;base\\missions;base\\fonts;base\\skins;base\\voices;"
                                 "base\\scripts;recordings;temp");
     game_.console().setVariable("Console::GFXFont", "interface.pft");
-
-    std::vector<std::filesystem::path> searchRoots;
-    auto appendSearchDir = [&](const std::filesystem::path& p) {
-        std::error_code dirEc;
-        if (std::filesystem::is_directory(p, dirEc)) {
-            searchRoots.push_back(p);
-        }
-    };
-    appendSearchDir(root);
-    appendSearchDir(root / "config");
-    appendSearchDir(baseDir);
-    appendSearchDir(baseDir / "missions");
-    appendSearchDir(baseDir / "fonts");
-    appendSearchDir(baseDir / "skins");
-    appendSearchDir(baseDir / "Skins");
-    appendSearchDir(baseDir / "voices");
-    appendSearchDir(baseDir / "scripts");
-    if (!config_.writeRoot.empty()) {
-        appendSearchDir(config_.writeRoot);
-    }
-    if (!resources_->setSearchPaths(searchRoots)) {
-        return false;
-    }
-
-    // Mount core and biome SimVolume archives in TRIBES/console.cs priority order
-    constexpr std::array<std::string_view, 37> kCoreVolumes{{
-        "fonts.vol",       "scripts.vol",      "gui.vol",           "edit.vol",
-        "editor.vol",      "darkstar.vol",     "interface.vol",     "shell.vol",
-        "shellcommon.vol", "sound.vol",        "lushWorld.vol",     "lushTerrain.vol",
-        "lushDML.vol",     "savanaWorld.vol",  "savanaTerrain.vol", "savanaDML.vol",
-        "mudWorld.vol",    "mudTerrain.vol",   "mudDML.vol",        "iceWorld.vol",
-        "iceTerrain.vol",  "iceDML.vol",       "desertWorld.vol",   "desertTerrain.vol",
-        "desertDML.vol",   "marsWorld.vol",    "marsTerrain.vol",   "marsDML.vol",
-        "alienWorld.vol",  "alienTerrain.vol", "alienDML.vol",      "human1DML.vol",
-        "titanDML.vol",    "base7DML.vol",     "entities.vol",      "NewOpts.vol",
-        "Raindance.vol",
-    }};
-
-    mountedVolumes_.clear();
-    for (const std::string_view volName : kCoreVolumes) {
-        if (resources_->contains(volName) && resources_->addVolume(volName)) {
-            mountedVolumes_.emplace_back(volName);
-        }
-    }
-
-    if (mountedVolumes_.empty()) {
-        return false;
-    }
-
-    mountedAssetRoot_ = root.lexically_normal();
-    game_.console().setVariable("OpenT1::AssetRoot", mountedAssetRoot_.string());
-    game_.console().setVariable("OpenT1::MountedVolumes", std::to_string(mountedVolumes_.size()));
-
-    // Preload real default palette (lush.day.ppl) and bitmap font (interface.pft) if available
-    if (resources_->contains("lush.day.ppl")) {
-        if (auto pal = resources_->load<gfx::Palette>("lush.day.ppl")) {
-            setActivePalette(std::make_shared<gfx::Palette>(*pal));
-        }
-    }
-    if (resources_->contains("interface.pft")) {
-        if (auto fnt = resources_->load<gfx::BitmapFont>("interface.pft")) {
-            defaultFont_ = std::make_shared<gfx::BitmapFont>(*fnt);
-        }
-    }
+    game_.console().setVariable("OpenT1::AssetRoot", root.string());
+    game_.console().setVariable("OpenT1::MountedVolumes", "0");
+    // console.cs and mission SimVolumes own all archive mounts.
     ensureFallbackRenderAssets();
     return true;
 }
@@ -3743,7 +3818,7 @@ void FearGameApp::installRuntimeServices() {
                     return;
                 }
                 if (delegate->discoveredServers().empty()) {
-                    std::ifstream saved(config_.writeRoot / "config" / "GameServerList.cs");
+                    std::ifstream saved(game_.console().filePath("config/GameServerList.cs"));
                     if (saved) {
                         std::ostringstream text;
                         text << saved.rdbuf();
@@ -3759,8 +3834,8 @@ void FearGameApp::installRuntimeServices() {
             };
             list->saveServers = [this] {
                 if (auto* delegate = fearPlugin_->clientGlobals().csDelegate) {
-                    (void)delegate->saveServerDatabase(config_.writeRoot / "config" /
-                                                       "GameServerList.cs");
+                    (void)delegate->saveServerDatabase(
+                        game_.console().filePath("config/GameServerList.cs"));
                 }
             };
             list->serverSelected = [this, list](const auto& server, bool doubleClick) {
@@ -3781,8 +3856,8 @@ void FearGameApp::installRuntimeServices() {
                 if (auto* delegate = fearPlugin_->clientGlobals().csDelegate) {
                     (void)delegate->setBrowserPreference(
                         server.transportAddress, server.favorite, server.neverPing);
-                    (void)delegate->saveServerDatabase(config_.writeRoot / "config" /
-                                                       "GameServerList.cs");
+                    (void)delegate->saveServerDatabase(
+                        game_.console().filePath("config/GameServerList.cs"));
                 }
             };
         }
@@ -4428,8 +4503,8 @@ void FearGameApp::installRuntimeServices() {
     console.removeCommand("cursorOff");
     guiRuntime_->install();
     installShellCommands();
-    // server.cs owns the public script spelling. Install the application bridge
-    // immediately after that script defines it, before console.cs can host.
+    legacySound.install(console);
+    // Track explicitly required exec failures without replacing script functions.
     console.addCommand(
         0, "exec", [this](Console& con, Int32, std::span<const std::string> args) -> std::string {
             if (args.size() != 2) {
@@ -4446,33 +4521,47 @@ void FearGameApp::installRuntimeServices() {
                     }
                 }
             }
-            if (equalIgnoreCase(args[1], "server.cs") || equalIgnoreCase(args[1], "server")) {
-                con.addCommand(
-                    0,
-                    "createServer",
-                    [this](Console&, Int32, std::span<const std::string> values) -> std::string {
-                        if (values.size() < 2) {
+            if (resourceType(args[1]) == resourceType(".mis")) {
+                if (!result.ok() || result.value == "False") {
+                    const auto error = result.diagnostics.empty()
+                                           ? "Mission script failed: " + args[1]
+                                           : result.diagnostics.front().format();
+                    con.setVariable("OpenT1::LastMissionEvalError", error);
+                    con.setVariable("OpenT1::LastMissionError", error);
+                    return "False";
+                }
+                // Native services depend on the completed declaration graph.
+                // Preserve these registrations while the script owns its game
+                // callbacks and server initialization order.
+                auto* manager = fearPlugin_->serverGlobals().manager;
+                if (manager) {
+                    std::vector<sim::SimObject*> objects;
+                    collectGroupObjectsRecursive(*manager, objects);
+                    std::vector<sim::SimAddress> addresses;
+                    for (auto* object : objects) {
+                        addresses.push_back(object->address());
+                    }
+                    for (const auto address : addresses) {
+                        auto* path = dynamic_cast<world::SimPath*>(address.resolve(*manager));
+                        if (path && !path->publish()) {
+                            con.setVariable("OpenT1::LastMissionError",
+                                            "Mission path publication failed");
                             return "False";
                         }
-                        game_.console().setVariable("OpenT1::HostCommand", values[1]);
-                        if (deferMissionLoading_) {
-                            if (pendingMission_) {
-                                return "False";
-                            }
-                            pendingMission_ = PendingMission{
-                                values[1], values.size() > 2 && parseBoolSv(values[2])};
-                            game_.console().setVariable("loadingMission", "true");
-                            game_.console().setVariable("MissionName", values[1]);
-                            if (guiRuntime_ && !guiRuntime_->open("gui/Loading.gui")) {
-                                pendingMission_.reset();
-                                return "False";
-                            }
-                            return "True";
+                    }
+                    for (const auto address : addresses) {
+                        auto* object = address.resolve(*manager);
+                        if (auto* base = dynamic_cast<GameBase*>(object)) {
+                            base->updateTeamId();
+                            base->updatePowerCount();
                         }
-                        return loadMission(values[1], values.size() > 2 && parseBoolSv(values[2]))
-                                   ? "True"
-                                   : "False";
-                    });
+                        if (auto* moveable = dynamic_cast<Moveable*>(address.resolve(*manager))) {
+                            moveable->onGroupAdd();
+                        }
+                    }
+                    loadedMissionName_ = FileName(args[1]).getBase();
+                }
+                con.setVariable("OpenT1::LastMissionEvalError", "OK");
             }
             return result.value;
         });
@@ -4504,7 +4593,7 @@ void FearGameApp::installRuntimeServices() {
 }
 
 bool FearGameApp::executeConsoleCS() {
-    if (mountedVolumes_.empty()) {
+    if (mountedAssetRoot_.empty()) {
         const auto root = !config_.assetRoot.empty() ? config_.assetRoot : discoverAssetRoot();
         if (!root.empty()) {
             (void)mountAssetRoot(root);
@@ -4514,7 +4603,15 @@ bool FearGameApp::executeConsoleCS() {
     console.setVariable("OpenT1::ConsoleCSExecuted", "false");
     console.setVariable("OpenT1::StartupError", "");
     console.setVariable("OpenT1::LastMissionError", "");
-    const auto result = console.executeFile("console.cs");
+    // Native Tribes bootstraps this physical file, before resource scripts.
+    std::ifstream bootstrap(resolveFilePath(mountedAssetRoot_, "console.cs"), std::ios::binary);
+    const std::string source((std::istreambuf_iterator<char>(bootstrap)), {});
+    auto result = console.evaluate(source, "console.cs");
+    if (!bootstrap.is_open()) {
+        result.value = "False";
+    } else if (result.ok()) {
+        result.value = "True";
+    }
     std::vector<std::string> reported;
     for (const auto& line : console.log()) {
         if ((line.find("Unknown command") != line.npos || line.find("GUI resource") != line.npos) &&
@@ -4552,6 +4649,9 @@ bool FearGameApp::executeConsoleCS() {
         return false;
     }
     console.setVariable("OpenT1::ConsoleCSExecuted", "true");
+    if (auto font = resources_->load<gfx::BitmapFont>("interface.pft")) {
+        defaultFont_ = std::make_shared<gfx::BitmapFont>(*font);
+    }
     return true;
 }
 
@@ -4621,26 +4721,17 @@ bool FearGameApp::loadMission(std::string_view missionNameOrFile, bool dedicated
     if (!initialized_ && !init()) {
         return false;
     }
-    if (mountedVolumes_.empty()) {
+    if (mountedAssetRoot_.empty()) {
         const auto root = !config_.assetRoot.empty() ? config_.assetRoot : discoverAssetRoot();
         if (!root.empty()) {
             (void)mountAssetRoot(root);
         }
     }
 
-    bool replacing = false;
-    const auto fail = [this, &replacing](std::string message) {
+    const auto fail = [this](std::string message) {
         game_.console().setVariable("OpenT1::LastMissionError", message);
         game_.console().print(message);
         std::cerr << message << '\n';
-        if (replacing) {
-            fearPlugin_->destroyClientWorld();
-            fearPlugin_->destroyServerWorld();
-            loadedMissionName_.clear();
-            if (guiRuntime_) {
-                (void)guiRuntime_->open("gui/MainMenu.gui");
-            }
-        }
         return false;
     };
     game_.console().setVariable("OpenT1::LastMissionError", "");
@@ -4652,246 +4743,28 @@ bool FearGameApp::loadMission(std::string_view missionNameOrFile, bool dedicated
         stem.resize(stem.size() - 4);
     }
     const std::string misFile = stem + ".mis";
-    const std::string tedFile = stem + ".ted";
-    const std::string volFile = stem + ".vol";
 
-    auto tryMountVolume = [this](std::string_view vname) {
-        if (!resources_ || vname.empty()) {
-            return;
-        }
-        if (resources_->contains(vname) && resources_->addVolume(vname)) {
-            if (std::ranges::find(mountedVolumes_, vname) == mountedVolumes_.end()) {
-                mountedVolumes_.emplace_back(vname);
-            }
-        }
-    };
-    tryMountVolume(tedFile);
-    tryMountVolume(volFile);
-
-    // Pre-scan the .mis file for any SimVolume fileName declarations so terrain/DML/interior volumes
-    // are mounted in ResourceManager before SimTerrain::onAdd and InteriorShape::onAdd execute.
-    std::string misScriptText{};
-    if (resources_ && resources_->contains(misFile)) {
-        if (auto raw = resources_->load<RawData>(misFile)) {
-            misScriptText.resize(raw->bytes.size());
-            if (!raw->bytes.empty()) {
-                std::memcpy(misScriptText.data(), raw->bytes.data(), raw->bytes.size());
-            }
-        }
-    }
-    if (misScriptText.empty() && !mountedAssetRoot_.empty()) {
-        const auto diskMis = mountedAssetRoot_ / "base" / "missions" / misFile;
-        std::ifstream in(diskMis, std::ios::binary);
-        if (in.is_open()) {
-            misScriptText.assign((std::istreambuf_iterator<char>(in)),
-                                 std::istreambuf_iterator<char>());
-        }
-    }
-    if (!misScriptText.empty()) {
-        std::size_t searchPos = 0;
-        while ((searchPos = misScriptText.find("SimVolume", searchPos)) != std::string::npos) {
-            const std::size_t braceEnd = misScriptText.find("};", searchPos);
-            const std::size_t fnPos = misScriptText.find("fileName", searchPos);
-            if (fnPos != std::string::npos && (braceEnd == std::string::npos || fnPos < braceEnd)) {
-                const std::size_t q1 = misScriptText.find('"', fnPos);
-                if (q1 != std::string::npos && (braceEnd == std::string::npos || q1 < braceEnd)) {
-                    const std::size_t q2 = misScriptText.find('"', q1 + 1);
-                    if (q2 != std::string::npos && q2 > q1 + 1) {
-                        tryMountVolume(std::string_view(misScriptText).substr(q1 + 1, q2 - q1 - 1));
-                    }
-                }
-            }
-            searchPos += 9;
-        }
-    }
-    game_.console().setVariable("OpenT1::MountedVolumes", std::to_string(mountedVolumes_.size()));
-
-    if (misScriptText.empty()) {
+    std::vector<std::byte> missionBytes;
+    if (!resources_ || !resources_->read(misFile, missionBytes)) {
         return fail("Mission file not found: " + misFile);
     }
 
-    if (dedicated) {
-        fearPlugin_->destroyClientWorld();
-    }
-    game_.console().setVariable("Server::Dedicated", dedicated ? "true" : "false");
-    if (!fearPlugin_->createServerWorld(stem, dedicated)) {
-        return fail("Cannot create mission server");
-    }
-    game_.console().setVariable("ghosting", "false");
-    game_.console().setVariable("matchStarted", "false");
-    game_.console().setVariable("countdownStarted", "false");
-
-    replacing = true;
-    auto& sg = fearPlugin_->serverGlobals();
-    if (sg.manager) {
-        if (auto* preGroup = sg.manager->findObject("MissionGroup")) {
-            preGroup->deleteObject();
+    if (game_.console().isFunction("createServer")) {
+        const std::array<std::string, 2> arguments{stem, dedicated ? "true" : "false"};
+        const auto result = game_.console().execute("createServer", arguments);
+        auto* manager = fearPlugin_->serverGlobals().manager;
+        if (!result.ok() || result.value == "False" || !manager ||
+            !manager->findObject("MissionGroup") ||
+            !game_.console().getVariable("OpenT1::LastMissionError").empty()) {
+            return fail("Script server startup failed: " + stem +
+                        (result.diagnostics.empty() ? std::string{}
+                                                    : ": " + result.diagnostics.front().format()));
         }
-    }
-
-    // Same dependency order as the original createServer() in server.cs.
-    for (const auto script :
-         {"admin.cs",          "Marker.cs",       "Trigger.cs",   "NSound.cs",  "BaseExpData.cs",
-          "BaseDebrisData.cs", "BaseProjData.cs", "ArmorData.cs", "Mission.cs", "Item.cs",
-          "Player.cs",         "Vehicle.cs",      "Turret.cs",    "Beacon.cs",  "StaticShape.cs",
-          "Station.cs",        "Moveable.cs",     "Sensor.cs",    "Mine.cs",    "AI.cs",
-          "InteriorLight.cs",  "ComChat.cs"}) {
-        const auto result = game_.console().executeFile(script);
-        if (!result.ok() || result.value != "True") {
-            return fail(std::format("Required server script failed: {}", script));
-        }
-    }
-    bool executedMis = false;
-    if (!misScriptText.empty()) {
-        const auto evalRes = game_.console().evaluate(misScriptText, misFile);
-        if (!evalRes.ok() && !evalRes.diagnostics.empty()) {
-            game_.console().setVariable("OpenT1::LastMissionEvalError",
-                                        evalRes.diagnostics[0].format());
-        } else {
-            game_.console().setVariable("OpenT1::LastMissionEvalError", "OK");
-        }
-        executedMis = evalRes.ok();
-    } else if (resources_ && resources_->contains(misFile)) {
-        const auto res = game_.console().executeFile(misFile);
-        executedMis = res.ok();
-    }
-
-    if (!executedMis) {
-        return fail("Mission evaluation failed: " +
-                    game_.console().getVariable("OpenT1::LastMissionEvalError"));
-    }
-
-    if (!sg.manager || !sg.manager->findObject("MissionGroup")) {
-        return fail("Mission script did not create MissionGroup: " + misFile);
-    }
-    std::vector<sim::SimObject*> missionObjects;
-    collectGroupObjectsRecursive(*sg.manager, missionObjects);
-    for (auto* object : missionObjects) {
-        if (auto* path = dynamic_cast<world::SimPath*>(object); path && !path->publish()) {
-            return fail("Mission path publication failed");
-        }
-    }
-    for (auto* object : missionObjects) {
-        if (auto* base = dynamic_cast<GameBase*>(object)) {
-            base->updateTeamId();
-            base->updatePowerCount();
-        }
-        if (auto* moveable = dynamic_cast<Moveable*>(object)) {
-            moveable->onGroupAdd();
-        }
-    }
-    for (const auto callback : {"Mission::init", "Mission::reinitData"}) {
-        const auto result = game_.console().execute(callback);
-        if (!result.ok()) {
-            return fail(std::format(
-                "Mission callback failed: {}: {}",
-                callback,
-                result.diagnostics.empty() ? result.value : result.diagnostics.front().format()));
-        }
-    }
-    if (game_.console().evaluate("preloadServerDataBlocks();").value != "True") {
-        return fail("Server datablock preload failed: " + sg.dbm->lastDataBlockError());
-    }
-    // Server::finishMissionLoad publishes this only after mission objects and
-    // datablocks are ready. remoteDataFinished uses it to start the native
-    // ghost-always/CGADone/initialMissionDrop handshake.
-    game_.console().setVariable("ghosting", "true");
-
-    // Preserve Server::finishMissionLoad's match-start policy. Without this,
-    // Game::playerSpawn leaves every respawn in pregame camera control forever.
-    const auto matchStart =
-        game_.console().evaluate("if ($SinglePlayer) Game::startMatch(); "
-                                 "else if ($Server::warmupTime && !$Server::TourneyMode) "
-                                 "Server::Countdown($Server::warmupTime); "
-                                 "else if (!$Server::TourneyMode) Game::startMatch();");
-    if (!matchStart.ok()) {
-        return fail("Mission match initialization failed: " + stem);
-    }
-
-    if (dedicated) {
         loadedMissionName_ = stem;
         game_.console().setVariable("MissionName", stem);
         return true;
     }
-    if (game_.console().execute("newClient").value != "True") {
-        return fail("Cannot create local client");
-    }
-    if (defaultPalette_) {
-        setActivePalette(defaultPalette_);
-    }
-    game_.console().setVariable("OpenT1::LastNetworkError", "");
-    chatMessages_.clear();
-    chatDisplayLifetime_.reset();
-    if (game_.console().execute("localConnect").value != "True") {
-        return fail("Local connection failed");
-    }
-
-    (void)fearPlugin_->focusServer();
-    const std::array<std::string, 2> spawnArgs{"0", "false"};
-    const auto markerResult = game_.console().execute("Game::pickTeamSpawn", spawnArgs);
-    auto* marker = markerResult.ok()
-                       ? dynamic_cast<Marker*>(sg.manager->findObject(markerResult.value))
-                       : nullptr;
-    if (!marker) {
-        return fail("Mission has no valid team spawn marker: " + stem);
-    }
-    const auto spawned =
-        fearPlugin_->spawnPlayer("larmor", marker->getLinearPosition(), marker->getAngPosition());
-    if (!spawned) {
-        return fail("Mission player spawn failed: " + stem);
-    }
-    game_.console().setVariable("OpenT1::SpawnMarker", std::to_string(marker->getId()));
-    const std::array<std::string, 3> spawnedArgs{std::to_string(*spawned), "2049", "larmor"};
-    const auto spawnedResult = game_.console().execute("Game::playerSpawned", spawnedArgs);
-    if (!spawnedResult.ok()) {
-        return fail("Player spawn callback failed: " + stem);
-    }
-    // The local initial drop must use Game::playerSpawn's pregame control
-    // state too; otherwise players can die during warmup and respawn into a
-    // pregame camera that Observer::triggerUp immediately clears from the mode.
-    const auto initialControl = game_.console().evaluate(
-        "if (!$matchStarted) { "
-        "%cl = 2049; %cl.observerMode = \"pregame\"; "
-        "Client::setControlObject(%cl, Client::getObserverCamera(%cl)); "
-        "Observer::setOrbitObject(%cl, Client::getOwnedObject(%cl), 3, 3, 3); "
-        "if ($Server::TourneyMode && !$CountdownStarted) { "
-        "%cl.notready = true; %cl.notreadyCount = \"\"; "
-        "bottomprint(%cl, \"<f1><jc>Press FIRE when ready.\", 0); } }");
-    if (!initialControl.ok()) {
-        return fail("Initial player control failed: " + stem);
-    }
-    (void)fearPlugin_->focusClient();
-    if (guiRuntime_ && !guiRuntime_->open("gui\\play.gui")) {
-        return fail("Cannot load gui/play.gui");
-    }
-    gameplayPalette_ = defaultPalette_;
-    gameplayGuiMode_ = 1;
-    showingScores_ = false;
-    (void)fearPlugin_->syncLoopbackState();
-    if (const auto error = game_.console().getVariable("OpenT1::LastNetworkError");
-        !error.empty()) {
-        return fail(error);
-    }
-
-    loadedMissionName_ = stem;
-    game_.console().setVariable("MissionName", loadedMissionName_);
-    // The local path spawns directly instead of going through the remote
-    // connection/ghost handshake. Publish the same client metadata callbacks.
-    auto& console = game_.console();
-    const std::array<std::string, 6> serverInfo{"2048",
-                                                std::string(FearVersion),
-                                                console.getVariable("Server::HostName"),
-                                                console.getVariable("modList"),
-                                                console.getVariable("Server::Info"),
-                                                console.getVariable("ItemFavoritesKey")};
-    if (console.isFunction("remoteSVInfo")) {
-        (void)console.execute("remoteSVInfo", serverInfo);
-    }
-    const std::array<std::string, 2> missionInfo{"2048", stem};
-    if (console.isFunction("remoteMInfo")) {
-        (void)console.execute("remoteMInfo", missionInfo);
-    }
-    return true;
+    return fail("No script createServer function is loaded for the selected installation");
 }
 
 bool FearGameApp::loadPendingMission() {
@@ -5626,7 +5499,7 @@ bool FearGameApp::init(std::span<const std::string_view> commandLineArgs) {
         }
     }
     initialized_ = true;
-    execConsoleCs = execConsoleCs || (!spawnDemo && !mountedVolumes_.empty());
+    execConsoleCs = execConsoleCs || (!spawnDemo && !mountedAssetRoot_.empty());
     if (execConsoleCs && !noAssets && !executeConsoleCS()) {
         shutdown();
         return false;
@@ -5732,6 +5605,7 @@ bool FearGameApp::stepFrame(double wallTimeSeconds) {
     }
     lastWallTime_ = wallTimeSeconds;
     game_.frame(simulationWallTime_);
+    fearPlugin_->processPendingLocalDisconnect();
     if (guiRuntime_) {
         (void)guiRuntime_->canvas.advance(game_.simulationTime());
     }

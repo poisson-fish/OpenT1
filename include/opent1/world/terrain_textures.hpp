@@ -24,7 +24,7 @@ class TerrainTextureCache {
 public:
     explicit TerrainTextureCache(TerrainGridResources,
                                  std::size_t maximumBytes = 16U * 1024U * 1024U,
-                                 UInt32 maximumEntries = 1024);
+                                 UInt32 maximumEntries = 2048);
     TerrainTextureCache(const TerrainTextureCache&);
     TerrainTextureCache& operator=(const TerrainTextureCache&);
     TerrainTextureCache(TerrainTextureCache&&) noexcept = default;

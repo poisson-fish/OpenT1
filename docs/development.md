@@ -118,11 +118,11 @@ exercise the affected GPU backends before distributing a shader change.
 
 ## Test suite
 
-The full build registers 36 standard C++ cases in one executable and 12 subsystem suites:
+The full build registers 38 standard C++ cases in one executable and 12 subsystem suites:
 core, math, console, network, simulation, graphics, world, GUI, game, video,
 and optional audio/platform.
 CTest also runs an application smoke check, for 13 CTest checks in total.
-Headless builds register 34 standard C++ cases in 10 subsystem suites plus the smoke
+Headless builds register 36 standard C++ cases in 10 subsystem suites plus the smoke
 check, for 11 CTest checks. They omit the audio and platform cases. Default
 checks use the bundled fixtures and do not need a game installation, Python,
 or an external reference executable.
@@ -165,7 +165,22 @@ $env:OPENT1_TEST_ASSETS = 'C:\Games\Tribes'
 .\build\x64-debug\tests\opent1_tests.exe --suite fixpack
 ```
 
-The optional case does not bundle game assets or run unless this variable is set.
+The optional cases do not bundle game assets or run unless this variable is set.
+
+When the selected installation includes `RPG/scripts.vol`, the same `fixpack`
+suite also hosts `rpgmap5`, checks the mission terrain, advances eight simulation
+frames and renders their world geometry, prepares a hardware frame, switches
+resource roots and script volumes back to base, and hosts Raindance. It also checks
+new-character group/class menus through Tab and numeric input, the Back option,
+player spawning, save/reload, returning characters, and delayed disconnection of
+wrong/empty-password profiles. These checks require the installed mod's quoted
+kick reason to be escaped in `connectivity.cs`. It uses a separate temporary
+write directory. The ordinary `game` suite includes synthetic coverage for mod
+priority, duplicate enumeration, changed enumeration patterns, mission archive
+ownership, native string-table spellings, exports, EMF grouping and lighting.
+RPG acceptance also verifies the spawned race and skin, and renders installed
+melee weapon models in both views using the active palette. Synthetic coverage
+checks stale model spheres, skin ownership and palette selection without assets.
 
 ## Continuous integration and validation limits
 

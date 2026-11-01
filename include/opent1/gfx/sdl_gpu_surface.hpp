@@ -76,7 +76,7 @@ public:
     // each material/haze layer, preserving primitive and transparency order.
     // Waits for this surface's preceding hardware submission to bound memory.
     bool render(const HardwareBatch&, const GpuFrameConfig& = {});
-    // Per-device content cache: 1024 entries, expanded when needed by
+    // Per-device content cache: 2048 entries, expanded when needed by
     // the current frame's native lightmaps; 64 MiB of GPU RGBA with shared
     // immutable CPU snapshots for collision-safe comparison. Hits/uploads count
     // successful frames; evictions include explicit clears and failed frames.

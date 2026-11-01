@@ -104,6 +104,11 @@ public:
     void endFrame() override;
 
     bool createServerWorld(std::string_view missionName = {}, bool dedicated = false);
+
+    void setWriteRoot(std::filesystem::path root) {
+        writeRoot_ = std::move(root);
+    }
+
     bool createClientWorld();
     void destroyServerWorld();
     void destroyClientWorld();
@@ -116,6 +121,7 @@ public:
                                                 Int32 clientId = 2049,
                                                 Int32 teamId = 0);
     std::size_t syncLoopbackState(bool deliverMoves = true);
+    void processPendingLocalDisconnect();
     [[nodiscard]] sim::SimObject*
     findGhostForServerObject(sim::SimObjectId serverId) const noexcept;
 
@@ -206,6 +212,7 @@ private:
     void stepServerSimulation();
     void stepClientSimulation();
     bool configureRemoteStream(sim::network::PacketStream&);
+    void bindClientControlCallbacks();
     void updateRemoteControls();
     void installRemoteCommands(Console&);
     void installNetworkCommands(Console&);
@@ -236,6 +243,7 @@ private:
     std::unordered_map<sim::SimObjectId, sim::SimObjectId> pendingRemoteControls_;
     std::string sadPassword_;
     std::string connectAddress_;
+    std::optional<std::string> pendingLocalKick_;
     bool quitRequested_{};
     bool cursorVisible_{true};
     bool fullscreenMode_{};

@@ -1,3 +1,4 @@
+#include <opent1/core/filename.hpp>
 #include "opent1/game/fear_dynamic_data_plugin.hpp"
 #include <opent1/core/text.hpp>
 
@@ -317,9 +318,9 @@ FearDynamicDataPlugin::FieldEntry makeScalarField(std::string_view name,
         }
     };
     entry.setter = [=](GameBaseData& base,
-                                  std::size_t,
-                                  std::span<const std::string> values,
-                                  FearDynamicDataPlugin& plugin) -> bool {
+                       std::size_t,
+                       std::span<const std::string> values,
+                       FearDynamicDataPlugin& plugin) -> bool {
         (void)plugin;
         auto* d = dynamic_cast<Derived*>(&base);
         if (!d || values.empty()) {
@@ -448,8 +449,7 @@ FearDynamicDataPlugin::FieldEntry makeArrayField(std::string_view name,
     entry.name = std::string(name);
     entry.type = type;
     entry.arraySize = N;
-    entry.getter = [=](const GameBaseData& base,
-                                             std::size_t idx) -> std::string {
+    entry.getter = [=](const GameBaseData& base, std::size_t idx) -> std::string {
         const auto* d = dynamic_cast<const Derived*>(&base);
         if (!d || idx >= N) {
             return {};
@@ -496,9 +496,9 @@ FearDynamicDataPlugin::FieldEntry makeArrayField(std::string_view name,
         }
     };
     entry.setter = [=](GameBaseData& base,
-                                  std::size_t idx,
-                                  std::span<const std::string> values,
-                                  FearDynamicDataPlugin& plugin) -> bool {
+                       std::size_t idx,
+                       std::span<const std::string> values,
+                       FearDynamicDataPlugin& plugin) -> bool {
         (void)plugin;
         auto* d = dynamic_cast<Derived*>(&base);
         if (!d || idx >= N || values.empty()) {
@@ -647,10 +647,7 @@ void FearDynamicDataPlugin::init(Console& console, sim::SimManager* manager) {
             if (!obj) {
                 return std::string("False");
             }
-            std::filesystem::path targetPath(argv[2]);
-            if (targetPath.is_relative() && !writeRoot_.empty()) {
-                targetPath = writeRoot_ / targetPath;
-            }
+            const auto targetPath = resolveFilePath(writeRoot_, argv[2]);
             std::error_code ec;
             if (targetPath.has_parent_path()) {
                 std::filesystem::create_directories(targetPath.parent_path(), ec);
@@ -813,7 +810,8 @@ void FearDynamicDataPlugin::declareDataBlock(std::string_view className, std::st
         return;
     }
 
-    if (auto* created = dbm.createDataBlock(name, schema->groupId)) {
+    if (auto* created = dbm.createDataBlock(
+            console_ ? console_->internString(name) : std::string(name), schema->groupId)) {
         created->pluginClassName = schema->name;
         tx.groupId = created->dbmGroup;
         tx.blockId = created->dbmIndex;
@@ -892,10 +890,12 @@ std::string FearDynamicDataPlugin::getDataField(std::string_view objectName,
     const Int32 idx =
         (arrayIndex.has_value() && !arrayIndex->empty()) ? parseIntValue(*arrayIndex) : -1;
     if (idx == -1 && fld->arraySize == 1) {
-        return fld->getter(*dat, 0);
+        const auto value = fld->getter(*dat, 0);
+        return console_ && fld->type == TypeString ? console_->internString(value) : value;
     }
     if (idx >= 0 && static_cast<std::size_t>(idx) < fld->arraySize) {
-        return fld->getter(*dat, static_cast<std::size_t>(idx));
+        const auto value = fld->getter(*dat, static_cast<std::size_t>(idx));
+        return console_ && fld->type == TypeString ? console_->internString(value) : value;
     }
     return "False";
 }
@@ -927,6 +927,14 @@ void FearDynamicDataPlugin::setDataField(std::optional<std::string_view> objectN
     const auto* fld = findClassField(dat->pluginClassName, fieldName);
     if (!fld) {
         return;
+    }
+
+    std::vector<std::string> strings;
+    if (console_ && fld->type == TypeString) {
+        for (const auto& value : values) {
+            strings.push_back(console_->internString(value));
+        }
+        values = strings;
     }
 
     const Int32 idx =

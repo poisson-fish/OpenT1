@@ -83,6 +83,18 @@ void textureFormats() {
     b->palette = p;
     b->palette->palettes[0].colors[1].red = 99;
     CHECK(prepare(quad(), m, &p)->textures()[1].rgba[4] == std::byte{99});
+    m.useSurfacePalette = true;
+    CHECK(prepare(quad(), m, &p)->textures()[1].rgba[4] == std::byte{12});
+    CHECK(prepare(quad(), m)->textures()[1].rgba[4] == std::byte{99});
+    const auto mixedVertices = quad();
+    auto embedded = m;
+    embedded.useSurfacePalette = false;
+    const std::array<HardwarePolygon, 2> mixed{{{mixedVertices, m}, {mixedVertices, embedded}}};
+    const auto mixedBatch = HardwareBatch::prepare(mixed, &p);
+    CHECK(mixedBatch && mixedBatch->textures().size() == 3);
+    CHECK(mixedBatch->textures()[1].rgba[4] == std::byte{12});
+    CHECK(mixedBatch->textures()[2].rgba[4] == std::byte{99});
+    m.useSurfacePalette = false;
     auto extra = p.palettes[0];
     extra.index = 7;
     extra.colors[1].green = 90;

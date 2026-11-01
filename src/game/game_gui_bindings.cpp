@@ -537,6 +537,61 @@ void FearGameApp::updateGameplayGui() {
 
 void FearGameApp::installShellCommands() {
     auto& console = game_.console();
+    console.addCommand(0,
+                       "isFullscreenMode",
+                       [](Console& con, Int32, std::span<const std::string> args) -> std::string {
+                           return args.size() <= 2 &&
+                                          script::toBool(con.getVariable("pref::VideoFullScreen"))
+                                      ? "True"
+                                      : "False";
+                       });
+    console.addCommand(0,
+                       "setFullscreenMode",
+                       [](Console& con, Int32, std::span<const std::string> args) -> std::string {
+                           if (args.size() != 3) {
+                               return "False";
+                           }
+                           con.setVariable("pref::VideoFullScreen", args[2]);
+                           return "True";
+                       });
+    console.addCommand(0,
+                       "setFSResolution",
+                       [](Console& con, Int32, std::span<const std::string> args) -> std::string {
+                           if (args.size() != 3) {
+                               return "False";
+                           }
+                           const auto separator = args[2].find('x');
+                           if (separator == std::string::npos) {
+                               return "False";
+                           }
+                           Int32 width{}, height{};
+                           const auto begin = args[2].data(), end = begin + args[2].size();
+                           const auto a = std::from_chars(begin, begin + separator, width);
+                           const auto b = std::from_chars(begin + separator + 1, end, height);
+                           if (a.ec != std::errc{} || a.ptr != begin + separator ||
+                               b.ec != std::errc{} || b.ptr != end || width < 640 || height < 480 ||
+                               width > 16384 || height > 16384) {
+                               return "False";
+                           }
+                           con.setVariable("pref::VideoFullScreenRes", args[2]);
+                           return "True";
+                       });
+    for (const auto name : {"inputActivate", "inputDeactivate"}) {
+        console.addCommand(
+            0,
+            name,
+            [this, name](Console&, Int32, std::span<const std::string> args) -> std::string {
+                auto* manager = game_.manager();
+                auto* input = manager ? dynamic_cast<sim::SimInputManager*>(
+                                            manager->findObject(sim::InputManagerId))
+                                      : nullptr;
+                return input && args.size() == 2 &&
+                               input->activateDevice(args[1],
+                                                     std::string_view(name) == "inputActivate")
+                           ? "True"
+                           : "False";
+            });
+    }
     const auto integer = [](std::string_view value) {
         Int32 result{};
         (void)std::from_chars(value.data(), value.data() + value.size(), result);

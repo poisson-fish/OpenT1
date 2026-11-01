@@ -36,6 +36,8 @@ struct HardwareMaterial {
     // while retaining bilinear minification and nearest authored mip selection.
     std::optional<bool> magnificationLinear{};
     bool dynamicTexture{}; // transient overlays may reuse same-layout GPU storage
+    // Legacy world textures use the active palette over embedded colors.
+    bool useSurfacePalette{};
 };
 
 struct HardwarePolygon {
@@ -101,7 +103,8 @@ struct HardwareDraw {
 // Input order is retained: submit opaque geometry before back-to-front alpha
 // overlays. Alpha overlays normally use TestOnly; cutouts may TestAndWrite.
 // Prepares indexed 8-bit, BGR24 and RGB565/Alpha88 textures. An embedded palette
-// overrides the supplied fallback. Palette indices select original RGB entries;
+// overrides the supplied fallback unless useSurfacePalette is set. Palette
+// indices select original RGB entries;
 // software shade/blend lookup tables are not hardware color/alpha encodings.
 // Zero transparency, palette alpha and Alpha88 are explicit. Alpha88 is low-byte
 // index plus high-byte opacity; indexed flags are used only with paletteAlpha.

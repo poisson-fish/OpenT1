@@ -22,7 +22,7 @@ struct InteriorCollisionSurface {
     UInt32 plane{};
     bool planeFront{true};
     Int32 material{-1};            // -1 is the original null material
-    std::vector<Point3F> vertices; // original winding, 3..32; Strict requires convex/coplanar
+    std::vector<Point3F> vertices; // original UInt8 count, 3..255; Strict requires convex/coplanar
 };
 
 // Owned, validated BSP collision geometry. Child >=0 indexes a node; negative

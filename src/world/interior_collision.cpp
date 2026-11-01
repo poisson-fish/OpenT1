@@ -194,7 +194,7 @@ InteriorCollision::prepare(std::span<const PlaneF> planes,
     std::size_t work = MaxWork;
     for (const auto& s : surfaces) {
         if (s.plane >= planes.size() || s.material < -1 || s.vertices.size() < 3 ||
-            s.vertices.size() > 32 || s.vertices.size() * s.vertices.size() > work) {
+            s.vertices.size() > 255 || s.vertices.size() * s.vertices.size() > work) {
             return {};
         }
         work -= s.vertices.size() * s.vertices.size();

@@ -8,6 +8,9 @@
 #include <opent1/game/string_table.hpp>
 #include <opent1/game/game_app.hpp>
 #include <opent1/game/status_combat_huds.hpp>
+#include <opent1/game/observer_camera.hpp>
+#include <opent1/game/item.hpp>
+#include <opent1/game/marker.hpp>
 #include <opent1/world/scene_objects.hpp>
 #include <opent1/game/sound.hpp>
 #include <opent1/game/sensor_manager.hpp>
@@ -24,6 +27,205 @@ using namespace opent1::game;
 using namespace sim_net_test;
 
 namespace {
+void localProfileDelivery() {
+    FearGameApp app;
+    CHECK(app.init());
+    auto& plugin = app.fearPlugin();
+    auto& console = app.console();
+    CHECK(plugin.createServerWorld({}, true));
+    console.setVariable("PCFG::Info", "dummy RPG password \"quoted\" \\ value");
+    console.setVariable("PCFG::RealName", "Profile Name");
+    CHECK(console.evaluate(R"(
+        function Server::onClientConnect(%client) {
+            $profileConnectCount++;
+            $profileConnectWorld = getManagerId();
+            $profileAddress = Client::getTransportAddress(%client);
+            $Client::info[%client, 5] = "";
+        }
+        function onConnection(%message) {
+            $profileAcceptedCount++;
+            $profileAcceptedWorld = getManagerId();
+            $profileAcceptedMessage = %message;
+            remoteEval(2048, "SetCLInfo", $PCFG::SkinBase, $PCFG::RealName,
+                       $PCFG::EMail, $PCFG::Tribe, $PCFG::URL, $PCFG::Info,
+                       $pref::autoWaypoint, $pref::noEnterInvStation, $pref::messageMask);
+        }
+        function remoteSetCLInfo(%client, %skin, %name, %email, %tribe, %url,
+                                 %info, %autowp, %enterInv, %msgMask) {
+            $profileSender = %client;
+            $profileName = %name;
+            $Client::info[%client, 5] = %info;
+        }
+        function dataFinished() {
+            $profileAtDataFinished = $Client::info[2049, 5];
+        }
+    )").ok());
+    // connect(LOOPBACK) must run the same script handshake as a remote join,
+    // before datablock completion can trigger RPG's initial mission drop.
+    CHECK(console.evaluate("connect(\"LOOPBACK:28001\");").value == "True");
+    CHECK(console.getVariable("profileConnectCount") == "1");
+    CHECK(console.getVariable("profileAcceptedCount") == "1");
+    CHECK(console.getVariable("profileAcceptedMessage") == "Accepted");
+    CHECK(console.getVariable("profileConnectWorld") ==
+          std::to_string(plugin.serverGlobals().manager->getId()));
+    CHECK(console.getVariable("profileAcceptedWorld") == "2049");
+    CHECK(console.getVariable("profileAddress") == "LOOPBACK:28001");
+    CHECK(console.getVariable("profileSender") == "2049");
+    CHECK(console.getVariable("profileName") == "Profile Name");
+    CHECK(console.getVariable("profileAtDataFinished") == console.getVariable("PCFG::Info"));
+    CHECK(console.execute("localConnect").value == "True");
+    CHECK(console.getVariable("profileConnectCount") == "1");
+    CHECK(console.getVariable("profileAcceptedCount") == "1");
+    // Rehosting creates a new server-side client even when the client world
+    // and loopback address survive. It must send the current profile again.
+    CHECK(plugin.createServerWorld({}, true));
+    console.setVariable("PCFG::Info", "");
+    CHECK(console.execute("localConnect").value == "True");
+    CHECK(console.getVariable("profileConnectCount") == "2");
+    CHECK(console.getVariable("profileAcceptedCount") == "2");
+    CHECK(console.getVariable("profileAtDataFinished").empty());
+}
+
+void localObserverMenuState() {
+    FearGameApp app;
+    CHECK(app.init());
+    auto& plugin = app.fearPlugin();
+    CHECK(plugin.createServerWorld({}, true));
+    CHECK(app.console().execute("localConnect").value == "True");
+    auto* server = plugin.serverGlobals().manager;
+    auto camera = std::make_unique<ObserverCamera>(2049);
+    auto* observer = server->addObject(std::move(camera));
+    CHECK(observer);
+    const std::array<std::string, 2> control{"2049", std::to_string(observer->getId())};
+    CHECK(app.console().execute("Client::setControlObject", control).value == "True");
+    CHECK(dynamic_cast<GameBase*>(observer)->getControlClient() == 2049);
+    CHECK(app.console()
+              .evaluate("Client::setGuiMode(2049, 1); Client::setMenuScoreVis(2049, true);")
+              .ok());
+    std::vector<std::string> events;
+    plugin.onPlayerControl = [&] {
+        events.emplace_back("control");
+    };
+    plugin.onGuiMode = [&](UInt32 mode) {
+        events.emplace_back("mode" + std::to_string(mode));
+    };
+    plugin.onScoresVisible = [&](bool visible) {
+        events.emplace_back(visible ? "show" : "hide");
+    };
+    CHECK(plugin.syncLoopbackState() > 0);
+    CHECK(dynamic_cast<ObserverCamera*>(plugin.clientGlobals().playerPSC->getControlObject()));
+    CHECK(plugin.clientGlobals().playerPSC->scoresVisible());
+    CHECK(!events.empty() && events.back() == "show");
+    CHECK(std::find(events.begin(), events.end(), "control") != events.end());
+    events.clear();
+    CHECK(plugin.syncLoopbackState() > 0);
+    CHECK(events.empty());
+    CHECK(app.console().evaluate("Client::setMenuScoreVis(2049, false);").ok());
+    (void)plugin.syncLoopbackState();
+    CHECK(!plugin.clientGlobals().playerPSC->scoresVisible());
+    const std::array<std::string, 2> clear{"2049", "-1"};
+    CHECK(app.console().execute("Client::setControlObject", clear).value == "True");
+    CHECK(dynamic_cast<GameBase*>(observer)->getControlClient() == 0);
+    CHECK(!plugin.serverGlobals().playerPSC->getControlObject());
+}
+
+void scriptObserverTransforms() {
+    FearGameApp app;
+    CHECK(app.init());
+    auto& plugin = app.fearPlugin();
+    CHECK(plugin.createServerWorld({}, true));
+    CHECK(app.console().execute("localConnect").value == "True");
+    CHECK(plugin.focusServer());
+    auto marker = std::make_unique<Marker>();
+    marker->assignName("ObserverMarker");
+    marker->setLinearPosition({-2500, -260, 120});
+    marker->setAngPosition({.15f, -.2f, -.94f});
+    auto* source = dynamic_cast<Marker*>(plugin.serverGlobals().manager->addObject(std::move(marker)));
+    CHECK(source);
+    CHECK(app.console().evaluate(R"(
+        $observerCamera = Client::getObserverCamera(2049);
+        Client::setControlObject(2049, $observerCamera);
+        Observer::setFlyMode(2049, GameBase::getPosition(ObserverMarker),
+                            GameBase::getRotation(ObserverMarker), false, true);
+    )").ok());
+    auto* camera = dynamic_cast<ObserverCamera*>(plugin.serverGlobals().playerPSC->getControlObject());
+    CHECK(camera && camera->mode() == ObserverCamera::FreeRotateMode);
+    const auto matches = [&](const TMat3F& actual) {
+        CHECK((actual.p - source->getLinearPosition()).len() < .001f);
+        for (int row = 0; row < 3; ++row) {
+            for (int col = 0; col < 3; ++col) {
+                CHECK(std::abs(actual.m[row][col] - source->getTransform().m[row][col]) < .00001f);
+            }
+        }
+    };
+    matches(camera->getEyeTransform());
+    CHECK(plugin.syncLoopbackState() > 0);
+    auto* client = dynamic_cast<ObserverCamera*>(plugin.clientGlobals().playerPSC->getControlObject());
+    CHECK(client && client->mode() == ObserverCamera::FreeRotateMode);
+    matches(client->getEyeTransform());
+    // Disabled translation must preserve the scripted position while looking around.
+    PlayerMove move;
+    move.forwardAction = 1;
+    move.turnRot = .1f;
+    client->update(0, 32, &move);
+    CHECK((client->getLinearPosition() - source->getLinearPosition()).len() < .001f);
+    CHECK(app.console()
+              .evaluate("Observer::setOrbitPoint(2049, \"10 20 30\", 5, 2, 8, \"0 0 .3\");")
+              .value == "True");
+    CHECK(camera->mode() == ObserverCamera::OrbitPointMode);
+    CHECK(camera->curOrbitPoint() == Point3F(10, 20, 30));
+    CHECK(camera->orbitDist() == 5 && camera->minOrbitDist() == 2 && camera->maxOrbitDist() == 8);
+    CHECK(plugin.syncLoopbackState() > 0);
+    CHECK(client->mode() == ObserverCamera::OrbitPointMode && client->curOrbitPoint() == Point3F(10, 20, 30));
+    CHECK(app.console()
+              .evaluate("Observer::setFlyMode(2049, \"1 2 3\", \"0 0 0\", false, false);")
+              .value == "True");
+    CHECK(camera->mode() == ObserverCamera::StationaryMode && camera->getLinearPosition() == Point3F(1, 2, 3));
+}
+
+void scriptCreatedItems() {
+    FearGameApp app;
+    CHECK(app.init());
+    auto& plugin = app.fearPlugin();
+    CHECK(plugin.createServerWorld({}, true));
+    CHECK(plugin.focusServer());
+    CHECK(app.console()
+              .evaluate(R"(
+        ItemData TestTownBot { description = "Town bot"; mass = 2; };
+        $createdItem = newObject("ScriptTownBot", Item, TestTownBot, 3, false, true, false);
+    )")
+              .ok());
+    auto* item = dynamic_cast<Item*>(plugin.serverGlobals().manager->findObject("ScriptTownBot"));
+    CHECK(item && item->getDatPtr() && item->getDatFileId() >= 0);
+    CHECK(item->getDatFileName() == "TestTownBot");
+    CHECK(item->getCount() == 3 && item->isRotating() && !item->isCollideable());
+    CHECK(app.console()
+              .evaluate("return newObject(\"BadTownBot\", Item, MissingData, 1, false);")
+              .value == "False");
+    CHECK(!plugin.serverGlobals().manager->findObject("BadTownBot"));
+}
+
+void localScriptKick() {
+    FearGameApp app;
+    CHECK(app.init());
+    auto& plugin = app.fearPlugin();
+    CHECK(plugin.createServerWorld({}, true));
+    CHECK(app.console().execute("localConnect").value == "True");
+    CHECK(app.console()
+              .evaluate(R"(
+        function Server::onClientDisconnect(%id) { $droppedClient = %id; }
+        function onConnection(%state) { $connectionState = %state; }
+        schedule("Net::kick(2049, \"Dummy profile rejection\");", 0);
+    )")
+              .ok());
+    CHECK(app.stepFrame(0));
+    CHECK(!plugin.isConnected() && !plugin.serverGlobals().manager && plugin.clientGlobals().manager);
+    CHECK(app.console().getVariable("ConnectedToServer") == "false");
+    CHECK(app.console().getVariable("droppedClient") == "2049");
+    CHECK(app.console().getVariable("connectionState") == "Dropped");
+    CHECK(app.console().getVariable("errorString") == "Dummy profile rejection");
+}
+
 void nativeSkinDelivery() {
     FearGameApp app;
     CHECK(app.init());
@@ -420,6 +622,8 @@ void networkCommands() {
     };
     CHECK(call("Client::getVoiceBase", {"2051"}) == "female2");
     CHECK(call("Client::getSkinBase", {"2051"}) == "base");
+    CHECK(call("Client::getGender", {"2051"}) == "Female");
+    CHECK(call("Client::getGender", {"999"}).empty());
     CHECK(call("Client::getVoiceBase", {"999"}).empty());
     CHECK(call("Client::getTransportAddress", {"2051"}).empty());
     CHECK(call("getClientByIndex", {"0"}) == "2051");
@@ -1065,6 +1269,11 @@ void hostnameConnection() {
 }
 
 int opent1_test_game_network_parity() {
+    localProfileDelivery();
+    localObserverMenuState();
+    scriptObserverTransforms();
+    scriptCreatedItems();
+    localScriptKick();
     nativeSkinDelivery();
     nativeChatDelivery();
     nativeLightGhosts();

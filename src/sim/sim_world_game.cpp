@@ -3,10 +3,12 @@
 #include <opent1/sim/sim_irc.hpp>
 #include <opent1/sim/sim_palette.hpp>
 #include <opent1/sim/sim_native_media.hpp>
+#include <opent1/sim/sim_interior_grouping.hpp>
 #include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <cstdio>
+#include <fstream>
 #include <limits>
 #include <stdexcept>
 
@@ -408,6 +410,11 @@ SimGame::SimGame(std::shared_ptr<ResourceManager> resources)
         throw std::logic_error("simulation class registration failed");
     }
     console_.setDataManager(makeSimConsoleDataManager(*this));
+    registerInteriorGroupingResource(*resources_);
+    classes_.registerClass<SimInteriorGrouping>("SimInteriorGrouping");
+    registerFactory("SimInteriorGrouping", [this] {
+        return std::make_unique<SimInteriorGrouping>(this);
+    });
     console_.bindVariable(
         "SimTimeScale",
         [this] {
@@ -457,6 +464,15 @@ SimGame::SimGame(std::shared_ptr<ResourceManager> resources)
     registerFactory("MovPlay", [] {
         return std::make_unique<MovPlay>();
     });
+    console_.addCommand(0,
+                        "Object::getName",
+                        [this](Console&, Int32, std::span<const std::string> args) -> std::string {
+                            auto* current = manager();
+                            auto* object = current && args.size() == 2
+                                               ? current->findObject(args[1])
+                                               : nullptr;
+                            return object ? std::string(object->getName()) : std::string{};
+                        });
     const auto commands =
         std::to_array<std::pair<Int32, std::string_view>>({{Schedule, "schedule"},
                                                            {GetTime, "getSimTime"},
@@ -869,6 +885,15 @@ SimGame::invokeCommand(Console& console, Int32 id, std::span<const std::string> 
     if (id == Unfocus && size == 1) {
         return yes(focus({}));
     }
+    if (id == IsFile) {
+        if (size < 2) {
+            return "False";
+        }
+        return yes(std::ranges::all_of(args.subspan(1), [&](const auto& name) {
+            std::ifstream file(console.filePath(name), std::ios::binary);
+            return file.is_open();
+        }));
+    }
     if (!destination) {
         return "False";
     }
@@ -933,7 +958,7 @@ SimGame::invokeCommand(Console& console, Int32 id, std::span<const std::string> 
             }
         }
         return yes(object && object != object->getManager() &&
-                   storeObject(*object, std::filesystem::path(args[2]), user));
+                   storeObject(*object, console.filePath(args[2]), user));
     }
     if (id == RemoteEval) {
         if (size < 3 || size > 33) {
@@ -1012,10 +1037,6 @@ SimGame::invokeCommand(Console& console, Int32 id, std::span<const std::string> 
         }
         auto* object = createObject(args[2], args[1], nullptr, args.subspan(3));
         return object ? std::to_string(object->getId()) : "False";
-    }
-    if (id == IsFile) {
-        auto* resource = SimResource::find(*destination);
-        return yes(size == 2 && resource && resource->shared()->contains(args[1]));
     }
     if (size < 2) {
         return "False";

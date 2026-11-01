@@ -7,6 +7,11 @@
 namespace opent1 {
 inline constexpr std::size_t kFileNameMaxLength = 1024;
 
+// Resolve legacy Windows spelling on every host. Missing output components are
+// retained, so this also works for newly exported files.
+[[nodiscard]] std::filesystem::path resolveFilePath(const std::filesystem::path& root,
+                                                    std::string_view name);
+
 // Text is UTF-8. Component parsing recognizes both slash styles and drive colons
 // on every host; filesystem conversion normalizes separators and dot components.
 class FileName {

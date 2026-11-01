@@ -219,6 +219,18 @@ void ScriptPlugin::init(Console& console, sim::SimManager* manager) {
                            cl->maxOrbitDist = parseFloatAscii(argv[5]);
                            cl->observerRot = (argv.size() == 7) ? parsePoint3F(argv[6])
                                                                 : Point3F{0.0f, 0.0f, 0.0f};
+                           auto* camera = dynamic_cast<ObserverCamera*>(
+                               srv->findObject(cl->observerCameraId));
+                           if (!camera) {
+                               return "false";
+                           }
+                           camera->setOrbitMode(
+                               nullptr,
+                               cl->observerPos,
+                               EulerF{cl->observerRot.x, cl->observerRot.y, cl->observerRot.z},
+                               cl->minOrbitDist,
+                               cl->maxOrbitDist,
+                               cl->curOrbitDist);
                            return "True";
                        });
 
@@ -239,6 +251,16 @@ void ScriptPlugin::init(Console& console, sim::SimManager* manager) {
                            cl->observerRot = parsePoint3F(argv[3]);
                            cl->canMove = parseConsoleBool(argv[4]);
                            cl->canRotate = parseConsoleBool(argv[5]);
+                           auto* camera = dynamic_cast<ObserverCamera*>(
+                               srv->findObject(cl->observerCameraId));
+                           if (!camera) {
+                               return "false";
+                           }
+                           camera->setFlyMode(
+                               cl->canMove,
+                               cl->canRotate,
+                               cl->observerPos,
+                               EulerF{cl->observerRot.x, cl->observerRot.y, cl->observerRot.z});
                            return "True";
                        });
 

@@ -568,7 +568,7 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
         pending.size() + std::size_t(std::ranges::count_if(textures_, [](const auto& t) {
             return t.pinned;
         }));
-    const auto entryLimit = std::max(std::size_t{1024}, frameEntries);
+    const auto entryLimit = std::max(std::size_t{2048}, frameEntries);
     while (textures_.size() + pending.size() > entryLimit ||
            stats_.bytes + pendingBytes > Bitmap::MaxFileBytes) {
         const auto victim =

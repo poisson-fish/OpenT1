@@ -87,10 +87,9 @@ Item::Item() {
 }
 
 bool Item::processArguments(std::span<const std::string> args) {
-    if (args.size() < 3) {
+    if (args.size() < 3 || args.size() > 5) {
         return false;
     }
-    setDatFileName(args[0]);
 
     Int32 parsedCount = 1;
     std::from_chars(args[1].data(), args[1].data() + args[1].size(), parsedCount);
@@ -98,6 +97,7 @@ bool Item::processArguments(std::span<const std::string> args) {
 
     if (parseBoolArg(args[2])) {
         flags_ |= PopItem;
+        popTime_ = (getManager() ? getManager()->getCurrentTime() : 0.0f) + 30.0f;
     }
     if (args.size() >= 4) {
         isRotate_ = parseBoolArg(args[3]);
@@ -105,7 +105,9 @@ bool Item::processArguments(std::span<const std::string> args) {
     if (args.size() >= 5) {
         isCollideable_ = parseBoolArg(args[4]);
     }
-    return true;
+    // Script newObject calls processArguments after registration. Resolving the
+    // name alone leaves datFileId_ at -1 and sends an invalid ghost datablock.
+    return Parent::processArguments(args.first(1));
 }
 
 bool Item::initResources(GameBaseData* in_data) {

@@ -2,6 +2,7 @@
 #include <opent1/console/eval.hpp>
 #include <opent1/console/tag_dictionary.hpp>
 #include <functional>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <span>
@@ -64,6 +65,8 @@ public:
     [[nodiscard]] std::shared_ptr<void> scopedCommand(Int32, std::string_view, Command);
     bool removeCommand(std::string_view name);
     [[nodiscard]] bool isFunction(std::string_view name) const;
+    // Native StringTableEntry fields share script identifiers' first spelling.
+    [[nodiscard]] std::string internString(std::string_view text);
     // Host variable APIs always address globals and supply an omitted '$'.
     void setVariable(std::string_view name, std::string_view value);
     [[nodiscard]] std::string getVariable(std::string_view name) const;
@@ -78,6 +81,8 @@ public:
     void bindVariable(std::string_view name, double& value);
     void setDataManager(std::shared_ptr<ConsoleDataManager> manager);
     void setScriptLoader(ScriptLoader loader);
+    void setFileRoot(std::filesystem::path root);
+    [[nodiscard]] std::filesystem::path filePath(std::string_view name) const;
     void setOutput(Output output);
     // Keep the returned token alive to subscribe. Releasing it detaches safely,
     // even after Console destruction; setOutput remains an independent sink.

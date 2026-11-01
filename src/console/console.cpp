@@ -1,4 +1,5 @@
 #include "runtime_internal.hpp"
+#include <opent1/core/filename.hpp>
 #include <opent1/core/res_manager.hpp>
 #include <algorithm>
 #include <array>
@@ -464,8 +465,23 @@ void Console::setVariable(std::string_view name, std::string_view value) {
     impl_->write(name.starts_with('$') ? std::string(name) : "$" + std::string(name), value);
 }
 
+void Console::setFileRoot(std::filesystem::path root) {
+    const auto mode = impl_->logMode;
+    impl_->setLogMode(0);
+    impl_->fileRoot = std::move(root);
+    impl_->setLogMode(mode);
+}
+
+std::filesystem::path Console::filePath(std::string_view name) const {
+    return resolveFilePath(impl_->fileRoot, name);
+}
+
 std::string Console::getVariable(std::string_view name) const {
     return impl_->read(globalName(name));
+}
+
+std::string Console::internString(std::string_view text) {
+    return impl_->intern(text);
 }
 
 bool Console::hasVariable(std::string_view name) const {
@@ -614,7 +630,7 @@ void Console::Impl::setLogMode(Int32 mode) {
     logFile.clear();
     logMode = mode;
     if (mode == 2) {
-        logFile.open("console.log", std::ios::binary | std::ios::app);
+        logFile.open(fileRoot / "console.log", std::ios::binary | std::ios::app);
     }
 }
 
@@ -624,7 +640,7 @@ void Console::Impl::logToFile(std::string_view line) {
     }
     if (logMode == 1) {
         logFile.clear();
-        logFile.open("console.log", std::ios::binary | std::ios::app);
+        logFile.open(fileRoot / "console.log", std::ios::binary | std::ios::app);
     }
     if (logFile) {
         if (newLogFile) {
@@ -781,7 +797,15 @@ void Console::Impl::builtins(Console& c) {
                     });
                 }
                 if (a.size() >= 3) {
-                    std::ofstream file(a[2],
+                    const auto path = console.filePath(a[2]);
+                    if (path.has_parent_path()) {
+                        std::error_code ec;
+                        std::filesystem::create_directories(path.parent_path(), ec);
+                        if (ec) {
+                            return "False";
+                        }
+                    }
+                    std::ofstream file(path,
                                        std::ios::binary | (a.size() == 4 && script::toBool(a[3])
                                                                ? std::ios::app
                                                                : std::ios::trunc));

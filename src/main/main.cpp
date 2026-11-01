@@ -463,6 +463,23 @@ protected:
                     dev.emplace(devOpts);
                 }
                 audioRuntime_ = std::make_unique<audio::Runtime>(std::move(*dev));
+                app_.legacySound.play = [this](UInt32 id,
+                                               std::string_view file,
+                                               const audio::Profile& profile,
+                                               float priority) -> UInt64 {
+                    auto wave = app_.resources().load<audio::Wave>(file);
+                    const auto key = id | 0x40000000U;
+                    return wave && audioRuntime_ &&
+                                   audioRuntime_->define(key, std::move(wave), profile, priority)
+                               ? audioRuntime_->play(
+                                     key,
+                                     {},
+                                     (profile.flags & (audio::Software3D | audio::Hardware3D)) != 0)
+                               : 0;
+                };
+                app_.legacySound.stop = [this](UInt64 handle) {
+                    return audioRuntime_ && audioRuntime_->stop(handle);
+                };
                 movieAudio_->device(audioRuntime_->device());
                 audioRuntime_->setHardware3D(
                     script::toBool(app_.console().getVariable("$pref::useDSound3D")));

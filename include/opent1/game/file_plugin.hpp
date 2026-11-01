@@ -51,8 +51,8 @@ private:
     std::filesystem::path writeRoot_;
     Console* console_{};
     sim::SimManager* manager_{};
-    std::vector<std::string> findMatches_;
-    std::size_t findIndex_{};
+    UInt64 findCursor_{};
+    bool finding_{};
 };
 
 } // namespace opent1::game

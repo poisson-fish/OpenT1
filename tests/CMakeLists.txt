@@ -34,6 +34,8 @@ add_executable(
     game/mission_editor_test.cpp
     game/e2e_integration_test.cpp
     game/gameplay_fix_pack_test.cpp
+    game/compatibility_test.cpp
+    game/model_rendering_test.cpp
     video/video_test.cpp
 )
 target_link_libraries(opent1_tests PRIVATE opent1_game)

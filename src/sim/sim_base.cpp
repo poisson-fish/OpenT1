@@ -1,4 +1,5 @@
 #include <opent1/sim/sim_base.hpp>
+#include <opent1/console/console.hpp>
 #include <charconv>
 #include <cmath>
 #include <exception>
@@ -969,10 +970,21 @@ SimObject* SimManager::adoptObjects(std::vector<std::unique_ptr<SimObject>> obje
         })) {
         return nullptr;
     }
-    std::ranges::transform(objects, std::back_inserter(ordered), [](const auto& p) {
-        return p.get();
-    });
-    std::ranges::stable_sort(ordered, {}, depth);
+    // Preserve declaration order, moving only a not-yet-seen ancestor ahead
+    // of its child. Breadth-first initialization runs a root-level interior
+    // before volumes declared earlier inside the mission's Volumes group.
+    std::unordered_set<SimObject*> scheduled;
+    std::vector<SimObject*> ancestors;
+    for (const auto& object : objects) {
+        ancestors.clear();
+        for (auto* p = object.get(); p && !scheduled.contains(p); p = p->getGroup()) {
+            ancestors.push_back(p);
+        }
+        for (auto* p : ancestors | std::views::reverse) {
+            scheduled.insert(p);
+            ordered.push_back(p);
+        }
+    }
     owned_.reserve(owned_.size() + objects.size());
     bool success = true;
     dispatch([&] {
@@ -1018,6 +1030,10 @@ SimObject* SimManager::adoptObjects(std::vector<std::unique_ptr<SimObject>> obje
                     return;
                 }
                 success = p->onAdd() && !p->removed_;
+                if (!success && console_) {
+                    console_->print("Simulation initialization failed: " +
+                                    std::string(p->getName()) + " (" + typeid(*p).name() + ")");
+                }
                 if (success) {
                     p->added_ = true;
                 }

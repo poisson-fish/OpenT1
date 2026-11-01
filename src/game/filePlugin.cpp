@@ -1,3 +1,4 @@
+#include <opent1/core/filename.hpp>
 #include <opent1/game/file_plugin.hpp>
 #include <algorithm>
 #include <cctype>
@@ -120,12 +121,10 @@ void FilePlugin::init(Console& console, sim::SimManager* manager) {
                            if (argv.size() != 2) {
                                return {};
                            }
-                           findMatches_ = resources_->findMatches(argv[1]);
-                           findIndex_ = 0;
-                           if (findMatches_.empty()) {
-                               return {};
-                           }
-                           return findMatches_[findIndex_++];
+                           const auto match = resources_->findMatch(argv[1]);
+                           finding_ = match.has_value();
+                           findCursor_ = match ? match->cursor : 0;
+                           return match ? match->name : std::string{};
                        });
 
     console.addCommand(0,
@@ -134,10 +133,13 @@ void FilePlugin::init(Console& console, sim::SimManager* manager) {
                            if (argv.size() != 2) {
                                return {};
                            }
-                           if (findIndex_ >= findMatches_.size()) {
+                           if (!finding_) {
                                return {};
                            }
-                           return findMatches_[findIndex_++];
+                           const auto match = resources_->findMatch(argv[1], findCursor_);
+                           finding_ = match.has_value();
+                           findCursor_ = match ? match->cursor : 0;
+                           return match ? match->name : std::string{};
                        });
 
     console.addCommand(
@@ -182,9 +184,7 @@ void FilePlugin::init(Console& console, sim::SimManager* manager) {
             if (!isValidRelativeWriteFileName(argv[1])) {
                 return "False";
             }
-            const auto targetPath = writeRoot_.empty()
-                                        ? std::filesystem::path(argv[1])
-                                        : (writeRoot_ / std::filesystem::path(argv[1]));
+            const auto targetPath = resolveFilePath(writeRoot_, argv[1]);
             std::error_code ec;
             if (std::filesystem::remove(targetPath, ec) && !ec) {
                 return "TRUE";
@@ -339,7 +339,7 @@ void FilePlugin::init(Console& console, sim::SimManager* manager) {
                                if (!isValidRelativeWriteFileName(argv[1])) {
                                    return "false";
                                }
-                               banList_->exportToFile(writeRoot_ / std::filesystem::path(argv[1]),
+                               banList_->exportToFile(resolveFilePath(writeRoot_, argv[1]),
                                                       argv[1]);
                            } else {
                                banList_->exportToFile(std::string_view(argv[1]));

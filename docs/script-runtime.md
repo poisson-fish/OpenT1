@@ -105,7 +105,8 @@ clears the in-memory log.
 
 File logging is implemented by `opent1_console` itself. `$Console::logMode = 0`
 disables it, mode `1` opens and closes `console.log` for each line, and mode `2`
-keeps the file open. Both enabled modes append in the process working directory.
+keeps the file open. Both enabled modes append at the console filesystem root
+(the process working directory unless the host sets `Console::setFileRoot`).
 The `export` and `exportFunctions` built-ins can also write caller-supplied
 filesystem paths; without a filename they print the selected entries.
 

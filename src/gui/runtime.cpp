@@ -1389,7 +1389,12 @@ bool Runtime::action(Control& control, UInt32 message, std::string_view command)
     if (stopped_) {
         return false;
     }
-    const auto& variable = control.fields().variable;
+    // A command or onAction callback may replace the screen and destroy its
+    // sender synchronously (movie completion also runs outside dispatch).
+    // Own script inputs and observe the sender before crossing either callback.
+    const auto variable = control.fields().variable;
+    const auto script = std::string(command);
+    const auto life = control.lifetime();
     const bool had = !variable.empty() && console_.hasVariable(variable);
     const auto old = variable.empty() ? std::string{} : console_.getVariable(variable);
     const auto rollback = [&] {
@@ -1405,9 +1410,12 @@ bool Runtime::action(Control& control, UInt32 message, std::string_view command)
         if (!variable.empty()) {
             console_.setVariable(variable, scriptValue(control));
         }
-        if (!command.empty() && !console_.evaluate(command).ok()) {
+        if (!script.empty() && !console_.evaluate(script).ok()) {
             rollback();
             return false;
+        }
+        if (life.expired()) {
+            return true;
         }
         const auto name = control.getName();
         if (!name.empty()) {
@@ -1416,6 +1424,9 @@ bool Runtime::action(Control& control, UInt32 message, std::string_view command)
                 rollback();
                 return false;
             }
+        }
+        if (life.expired()) {
+            return true;
         }
         if (message && !control.message(control, message)) {
             rollback();

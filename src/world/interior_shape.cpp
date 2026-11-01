@@ -217,8 +217,8 @@ std::unique_ptr<InteriorGeometry> InteriorGeometry::load(StreamIO& stream, UInt3
         return {};
     }
     if (std::ranges::any_of(g->surfaces, [&](const auto& s) {
-            return s.plane >= nplane || s.vertexCount < 3 || s.vertexCount > 32 ||
-                   s.firstVertex > nv || s.vertexCount > nv - s.firstVertex ||
+            return s.plane >= nplane || s.vertexCount < 3 || s.firstVertex > nv ||
+                   s.vertexCount > nv - s.firstVertex ||
                    !g->bitIndices(s.pointIndex, s.pointCount, np);
         })) {
         return {};
@@ -480,6 +480,11 @@ std::unique_ptr<InteriorLighting> InteriorLighting::load(StreamIO& stream, UInt3
             return {};
         }
         r.take(std::size_t(parent.getPosition()));
+        // Legacy LZHWStream::detach emits a zero terminator even when the
+        // mission has no index pairs. No decoder read consumes it in that case.
+        if (count == 0 && r.position + 1 == r.bytes.size() && r.bytes[r.position] == std::byte{}) {
+            r.take(1);
+        }
         Reader indices{decoded};
         indices.array(l->missionEntries, count, 8, [&] {
             const auto a = indices.scalar<Int32>(), b = indices.scalar<Int32>();

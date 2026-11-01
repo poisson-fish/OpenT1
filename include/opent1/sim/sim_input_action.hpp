@@ -1,6 +1,7 @@
 #pragma once
 #include <opent1/sim/sim_base.hpp>
 #include <opent1/console/console.hpp>
+#include <map>
 
 namespace opent1::sim {
 // Retain the original file values without including DirectInput or Windows.
@@ -172,6 +173,7 @@ public:
     // SDL adapter sends normalized events here. Callback targets may remove the
     // manager/handler safely; graph access still needs external synchronization.
     bool submit(SimInputEvent);
+    bool activateDevice(std::string_view name, bool active = true);
     void release();
     void releaseDevice(UInt8 type, UInt32 instance);
 
@@ -181,6 +183,9 @@ public:
 
 private:
     UInt8 modifiers_{};
+    std::map<std::pair<UInt8, UInt32>, bool> deviceActive_;
+    std::map<UInt8, bool> typeActive_;
+    bool allActive_{true};
 };
 
 bool registerSimInputClasses(Persistent::ClassRegistry&);

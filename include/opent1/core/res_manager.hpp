@@ -112,6 +112,11 @@ struct RawData {
     std::vector<std::byte> bytes;
 };
 
+struct ResourceMatch {
+    UInt64 cursor{};
+    std::string name;
+};
+
 // Indexed recursive disk roots (first root wins), then mounted archives (last
 // mounted wins), then added objects. ASCII case folding and both slashes match
 // legacy asset names. Virtual names reject traversal/absolute paths. All streams
@@ -128,6 +133,12 @@ public:
     bool addVolume(std::string_view name);    // volume must be in indexed disk roots
     bool removeVolume(std::string_view name); // repeated mounts are reference counted
     [[nodiscard]] bool contains(std::string_view name) const;
+    [[nodiscard]] std::vector<std::string> mountedVolumes() const;
+    // A cursor identifies a source, including shadowed/duplicate names. Removed
+    // cursors end enumeration safely; newly prepended resources are not revisited.
+    [[nodiscard]] std::optional<ResourceMatch> findMatch(std::string_view expression,
+                                                         UInt64 after = 0) const;
+    // Resource-list order, original spelling/backslashes, including shadowed sources.
     [[nodiscard]] std::vector<std::string> findMatches(std::string_view expression = "*") const;
     [[nodiscard]] std::optional<UInt32> getSize(std::string_view name) const;
     [[nodiscard]] std::optional<std::filesystem::path> getFullPath(std::string_view name) const;

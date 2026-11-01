@@ -75,11 +75,11 @@ bool unit(Flt32 value) {
     return std::isfinite(value) && value >= 0 && value <= 1;
 }
 
-bool vertexValid(const PolygonVertex& v, bool wrap) {
+bool vertexValid(const PolygonVertex& v, bool extendedTextureCoordinates) {
     return std::isfinite(v.position.x) && std::isfinite(v.position.y) &&
            std::abs(v.position.x) <= Bitmap::MaxDimension &&
            std::abs(v.position.y) <= Bitmap::MaxDimension &&
-           (wrap ? std::isfinite(v.texture.x) && std::isfinite(v.texture.y) &&
+           (extendedTextureCoordinates ? std::isfinite(v.texture.x) && std::isfinite(v.texture.y) &&
                        std::abs(v.texture.x) <= Bitmap::MaxDimension &&
                        std::abs(v.texture.y) <= Bitmap::MaxDimension
                  : unit(v.texture.x) && unit(v.texture.y)) &&
@@ -276,7 +276,7 @@ bool perspectiveSpans(const std::vector<Span>& rows,
                       bool wrapped,
                       bool constantLight,
                       bool transparent,
-                      bool clampTexture,
+                      bool clampOrRepeatTexture,
                       const Bitmap& texture,
                       std::vector<Span>& output) {
     const auto at = [vertexLight](Plane p, Int32 x, Int32 y) {
@@ -306,10 +306,10 @@ bool perspectiveSpans(const std::vector<Span>& rows,
             const Int32 remaining = row.originRight - x;
             const Int32 distance = length == remaining ? length - 1 : length;
             // Native wrapping/unclamped spans use fpNewInfoTable[0] == 1.
-            // Clamped world surfaces can project to a one-pixel sliver: its
+            // Clamped and unpacked repeating surfaces can project to a one-pixel sliver: its
             // nonexistent next pixel may lie behind the perspective plane.
             // Sample the sole visible endpoint without extrapolating past it.
-            const Int32 count = clampTexture && remaining == 1 ? 0 : std::max(distance, 1);
+            const Int32 count = clampOrRepeatTexture && remaining == 1 ? 0 : std::max(distance, 1);
             const Float inverse = float(1. / std::max(count, 1)); // original float lookup
             depth = depth + Float(count) * w.dx;
             if (!std::isfinite(depth.stored()) || depth.stored() <= 0) {
@@ -349,7 +349,7 @@ bool perspectiveSpans(const std::vector<Span>& rows,
             } else {
                 span.u += Int64(advance) * span.du;
                 span.v += Int64(advance) * span.dv;
-                if (span.right > span.left && !clampTexture) {
+                if (span.right > span.left && !clampOrRepeatTexture) {
                     for (const Int64 offset : {Int64{0}, Int64(span.right - span.left - 1)}) {
                         const auto tx = whole(span.u + offset * span.du),
                                    ty = whole(span.v + offset * span.dv);
@@ -394,10 +394,12 @@ bool SoftwareSurface::polygonSpans(std::span<const PolygonVertex> vertices,
                                    std::span<const VisibilitySpan> visible,
                                    bool sorted,
                                    std::size_t& spanCount) {
+    // Clamped meshes can author UVs beyond an edge; sampling already clamps
+    // those coordinates. Retain the finite/range bounds used for wrapping.
     if (vertices.size() < 3 || vertices.size() > 100 ||
         !std::ranges::all_of(vertices,
                              [&](const auto& v) {
-                                 return vertexValid(v, material.wrap);
+                                 return vertexValid(v, material.wrap || material.clampTexture);
                              }) ||
         !sourceValid(material.shadeSource) || !sourceValid(material.hazeSource) ||
         !unit(material.shade) || !unit(material.haze)) {
@@ -434,10 +436,12 @@ bool SoftwareSurface::polygonSpans(std::span<const PolygonVertex> vertices,
     if (material.texture && (!material.texture->valid() || material.texture->bitDepth != 8)) {
         return false;
     }
-    if (wrapped && (!std::has_single_bit(UInt32(material.texture->stride())) ||
-                    !std::has_single_bit(UInt32(material.texture->height)))) {
-        return false;
-    }
+    // Keep the native packed-coordinate path for power-of-two textures.
+    // Other dimensions wrap logical texels explicitly, excluding row padding.
+    const bool packedWrap = wrapped && std::has_single_bit(UInt32(material.texture->width)) &&
+                            std::has_single_bit(UInt32(material.texture->stride())) &&
+                            std::has_single_bit(UInt32(material.texture->height));
+    const bool generalWrap = wrapped && !packedWrap;
     const UInt32 index = material.texture ? material.texture->paletteIndex : material.paletteIndex;
     const SubPalette* sub = palette_ ? &palette_->find(index) : nullptr;
     if ((shade || haze || material.lightMap) &&
@@ -582,7 +586,8 @@ bool SoftwareSurface::polygonSpans(std::span<const PolygonVertex> vertices,
             if (material.perspective) {
                 w = perspectivePlane(polygon, 2);
             }
-            const auto textureSpan = material.clampTexture ? texture->width : texture->stride();
+            const auto textureSpan =
+                material.clampTexture || generalWrap ? texture->width : texture->stride();
             u.dx = (Float(u.dx) * textureSpan).stored();
             u.dy = (Float(u.dy) * textureSpan).stored();
             u.origin = (Float(u.origin) * textureSpan).stored();
@@ -626,10 +631,10 @@ bool SoftwareSurface::polygonSpans(std::span<const PolygonVertex> vertices,
                                   w,
                                   s,
                                   vertexShade || vertexHaze,
-                                  wrapped,
+                                  packedWrap,
                                   shade || haze,
                                   material.transparent,
-                                  material.clampTexture,
+                                  material.clampTexture || generalWrap,
                                   *texture,
                                   segments)) {
                 return false;
@@ -712,6 +717,10 @@ bool SoftwareSurface::polygonSpans(std::span<const PolygonVertex> vertices,
     const auto wrapMaskU = texture ? UInt32(textureStride - 1) : 0;
     const auto wrapMaskV =
         texture ? (UInt32(texture->height - 1) << std::countr_zero(UInt32(textureStride))) : 0;
+    const auto repeat = [](Int64 coordinate, Int32 size) {
+        const auto remainder = whole(coordinate) % size;
+        return std::size_t(remainder < 0 ? remainder + size : remainder);
+    };
     for (const auto& primitive : primitives) {
         for (auto span : primitive.spans) {
             auto row = bitmap_.row(span.y);
@@ -722,7 +731,10 @@ bool SoftwareSurface::polygonSpans(std::span<const PolygonVertex> vertices,
                 UInt8 value = fillColor;
                 if (texture) {
                     const auto offset =
-                        wrapped ? ((UInt32(span.u) & wrapMaskU) | (UInt32(span.v) & wrapMaskV))
+                        packedWrap ? ((UInt32(span.u) & wrapMaskU) | (UInt32(span.v) & wrapMaskV))
+                        : generalWrap
+                            ? repeat(span.v, texture->height) * std::size_t(textureStride) +
+                                  repeat(span.u, texture->width)
                         : material.clampTexture
                             ? std::size_t(
                                   std::clamp(whole(span.v), Int64{0}, Int64(texture->height - 1))) *
@@ -756,7 +768,7 @@ bool SoftwareSurface::polygonSpans(std::span<const PolygonVertex> vertices,
                     }
                     destination = std::byte(value);
                 }
-                if (wrapped) {
+                if (packedWrap) {
                     if (shade || haze) {
                         const UInt64 sum = UInt64(UInt32(span.u)) + UInt32(span.du);
                         span.u = UInt32(sum);

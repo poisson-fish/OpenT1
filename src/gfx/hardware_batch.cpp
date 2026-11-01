@@ -93,6 +93,14 @@ UInt64 expandedBytes(const Bitmap& bitmap) {
     return result;
 }
 
+const Palette*
+texturePalette(const Bitmap& bitmap, const HardwareMaterial& material, const Palette* surface) {
+    if (material.useSurfacePalette && surface) {
+        return surface;
+    }
+    return bitmap.palette ? &*bitmap.palette : surface;
+}
+
 std::optional<HardwareTexture>
 expand(const Bitmap& bitmap, const HardwareMaterial& material, const Palette* fallback) {
     const auto transparent = material.transparent, paletteAlpha = material.paletteAlpha;
@@ -101,7 +109,7 @@ expand(const Bitmap& bitmap, const HardwareMaterial& material, const Palette* fa
         return {};
     }
     const bool alpha88 = bitmap.bitDepth == 16 && (bitmap.attributes & BitmapAlpha88);
-    const auto* palette = bitmap.palette ? &*bitmap.palette : fallback;
+    const auto* palette = texturePalette(bitmap, material, fallback);
     // prepare() validates each shared palette once for this synchronous batch.
     if ((bitmap.bitDepth == 8 || alpha88) && !palette) {
         return {};
@@ -311,7 +319,7 @@ struct ConversionHash {
 ConversionKey conversionKey(const HardwareMaterial& m) {
     return {m.texture,
             UInt32(m.transparent) | (UInt32(m.paletteAlpha) << 1) | (UInt32(m.paletteMode) << 2) |
-                (UInt32(m.dynamicTexture) << 16),
+                (UInt32(m.useSurfacePalette) << 4) | (UInt32(m.dynamicTexture) << 16),
             m.paletteGamma};
 }
 
@@ -485,7 +493,7 @@ std::optional<HardwareBatch> HardwareBatch::prepare(std::span<const HardwarePoly
                     }
                     if (m.texture->bitDepth == 8 ||
                         (m.texture->bitDepth == 16 && (m.texture->attributes & BitmapAlpha88))) {
-                        const auto* colors = m.texture->palette ? &*m.texture->palette : palette;
+                        const auto* colors = texturePalette(*m.texture, m, palette);
                         if (!colors) {
                             return false;
                         }
@@ -504,7 +512,7 @@ std::optional<HardwareBatch> HardwareBatch::prepare(std::span<const HardwarePoly
                         return false;
                     }
                     const auto& bitmap = *m.texture;
-                    const auto* colors = bitmap.palette ? &*bitmap.palette : palette;
+                    const auto* colors = texturePalette(bitmap, m, palette);
                     const bool indexed =
                         bitmap.bitDepth == 8 ||
                         (bitmap.bitDepth == 16 && (bitmap.attributes & BitmapAlpha88));

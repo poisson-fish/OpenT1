@@ -429,19 +429,9 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
         result.resources_ = std::move(resources);
         return result;
     }
-    if (view.automaticDetail && !(view.shapeToCamera.flags & RMat3F::Matrix_HasScale)) {
-        // Match the native shape-sphere admission before visiting animated
-        // meshes. Offscreen/behind-camera objects otherwise select their most
-        // expensive detail and transform/light every triangle only to clip it.
-        const auto visibility = tsSphereVisibility(view, shape.center, shape.radius);
-        if (!visibility) {
-            return {};
-        }
-        if (*visibility & 0x80U) {
-            result.resources_ = std::move(resources);
-            return result;
-        }
-    }
+    // Native ShapeInstance uses the exported sphere to select detail, then
+    // clips the meshes. Modded weapons can retain stale export spheres that
+    // exclude visible geometry, so the sphere cannot reject the whole shape.
     if (shape.nodes.empty() || shape.nodes.size() > 65536 ||
         (shape.details.empty() ? detail != 0 : !at(detail, shape.details.size()))) {
         return {};
@@ -667,6 +657,7 @@ TsStaticShapeFrame::hardwarePolygons(const gfx::Palette* palette, Flt32 paletteG
             if (source.type() == 3) {
                 material.wrap = p.repeatTexture;
                 material.texture = resources_.materials.textures[p.material].get();
+                material.useSurfacePalette = true;
                 if (!material.texture) {
                     return false;
                 }

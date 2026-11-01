@@ -20,9 +20,7 @@ bool close(Flt32 a, Flt32 b) {
     return std::abs(a - b) <= .0005f * std::max({1.f, std::abs(a), std::abs(b)});
 }
 
-void near(Point3F a,
-          Point3F b,
-          std::source_location at = std::source_location::current()) {
+void near(Point3F a, Point3F b, std::source_location at = std::source_location::current()) {
     test::check(close(a.x, b.x) && close(a.y, b.y) && close(a.z, b.z),
                 std::format("({},{},{}) != ({},{},{})", a.x, a.y, a.z, b.x, b.y, b.z),
                 at);
@@ -316,6 +314,20 @@ void interiorBoxesAndValidation() {
     const std::array<InteriorCollisionLeaf, 2> leaves{{{false, {}}, {true, {0}}}};
     auto halfSpace = InteriorCollision::prepare(planes, nodes, leaves, std::span(&wall, 1));
     CHECK(halfSpace);
+    // RPG castle surfaces use the complete serialized UInt8 vertex range.
+    auto polygon = wall;
+    polygon.vertices.clear();
+    for (int i = 0; i < 51; ++i) {
+        const auto angle = Flt32(i) * 2.f * std::numbers::pi_v<Flt32> / 51.f;
+        polygon.vertices.push_back({0, 2.f * std::cos(angle), 2.f * std::sin(angle)});
+    }
+    const auto castle = InteriorCollision::prepare(
+        planes, nodes, leaves, std::span(&polygon, 1), InteriorSurfacePolicy::Native);
+    CHECK(castle && castle->line({-1, 0, 0}, {1, 0, 0}, list));
+    polygon.vertices.resize(256, polygon.vertices.front());
+    CHECK(!InteriorCollision::prepare(
+        planes, nodes, leaves, std::span(&polygon, 1), InteriorSurfacePolicy::Native));
+
     CHECK(halfSpace->line({-1, 0, 0}, {1, 0, 0}, list));
     near(list.surfaces[0].normal, {-1, 0, 0});
     CHECK(halfSpace->sphere({-.25f, 0, 0}, .5f, list));

@@ -642,7 +642,7 @@ std::string Player::getDamageLocation(const Point3F& pos) const {
 std::string_view Player::getSkinBase() const noexcept {
     if (auto* mgr = getManager()) {
         if (const auto* pm = PlayerManager::get(mgr)) {
-            if (const auto* cr = pm->findBaseRep(getControlClient())) {
+            if (const auto* cr = pm->findBaseRep(getLastOwnerClient())) {
                 if (!cr->skinBase.empty()) {
                     return cr->skinBase;
                 }

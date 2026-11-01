@@ -105,6 +105,7 @@ struct Console::Impl {
     Int32 logMode = 0;
     bool newLogFile = false;
     std::ofstream logFile;
+    std::filesystem::path fileRoot;
     void setLogMode(Int32);
     void logToFile(std::string_view);
 

@@ -1093,7 +1093,8 @@ void FearPlugin::installGameplayCommands(Console& console) {
                                args.size() == 2 && sg_.playerManager
                                    ? sg_.playerManager->findClient(integer(args[1]))
                                    : nullptr;
-                           return client ? client->gender : "";
+                           // Scripts concatenate this native spelling into race/model names.
+                           return client ? (client->gender == "FEMALE" ? "Female" : "Male") : "";
                        });
     console.addCommand(
         0,

@@ -41,6 +41,15 @@ the little-endian assigned-client/server-manager ID pair. Servers use
 2048; client peers use 2049 through 3071. A manager's local address remains object
 ID zero independently of its network identity.
 
+The game's local host path also runs `Server::onClientConnect(2049)`, then
+`onConnection(Accepted)` in the client world, before completing datablock transfer.
+The client script sends profile fields with `remoteEval(2048, "SetCLInfo", ...)`.
+The Other Info field is `$PCFG::Info`; the server script stores it in
+`$Client::info[clientId, 5]`. RPG uses that value as the character password.
+These fields travel through the script callback rather than the initial join
+packet. Repeated `localConnect` calls within a session do not repeat the callbacks;
+hosting a new server runs them again with the current profile.
+
 The delegate owns transport/session state and removes all its streams on removal.
 Each stream is an owning simulation group for its registered packet clients.
 Ghost managers own staged bootstrap objects, then transfer ownership to the
@@ -172,6 +181,12 @@ server correction. Datablock codecs and validated shape strings use explicit
 wire serialization and resource checksums. The game advertises compatibility
 version `1.11`; those protocol identifiers are distinct from a project release
 version or build timestamp.
+
+Local hosting shares the remote client's PSC GUI/control callbacks, including
+server-menu visibility while an observer camera is controlled. Control assignment
+maintains the object's controlling-client backlink. The legacy `Net::kick`
+command also handles the direct local connection: it defers world teardown until
+after the simulation frame, then runs the disconnect script callbacks.
 
 Regression cases cover selected event, ghost, control, discovery, and game
 handshake paths. The default suite runs against test peers and bundled records,

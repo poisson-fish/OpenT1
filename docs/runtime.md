@@ -11,9 +11,9 @@ platforms.
 .\build\x64-debug\opent1.exe --assets "C:\Games\Tribes"
 ```
 
-The root should contain `base/` and the game VOL archives. Normal startup mounts
-available core volumes and executes `console.cs`, which supplies the shell and
-game scripts. A missing or failing required startup script stops initialization.
+The root should contain `base/`, the game VOL archives, and `console.cs`.
+Normal startup reads that physical bootstrap file; its scripts select the mods,
+search directories, archive mounts, shell, and game initialization. A missing or failing required startup script stops initialization.
 The small built-in demo can run independently of an installation:
 
 ```powershell
@@ -27,9 +27,15 @@ content replacement or an installation compatibility test.
 
 `--assets PATH` explicitly selects the installation and requests mounting.
 `mountAssetRoot` also accepts its `base/` directory when it contains
-`entities.vol`. Search directories include the root, `config/`, `base/`, and
-the existing mission, font, skin, voice, and script subdirectories. Named core
-and biome volumes are mounted in the order listed in `FearPlugin.cpp`.
+`entities.vol`. `$ConsoleWorld::DefaultSearchPath` controls resource discovery;
+assigning it rescans the selected directories relative to the installation.
+`console.cs` normally selects config, active mods, base, recordings and temp.
+Each selected root is recursive, with additional roots supplying the legacy
+bare-name aliases. Missing directories are skipped, and path components match
+Windows spelling on case-sensitive hosts. The installation root and inactive
+mods are not implicit resource roots. `SimVolume` objects mount archives in
+script order and release them when removed. Mission scripts execute through
+this same namespace; their declarations initialize in declaration order.
 
 Without an explicit path, discovery searches a starting directory and up to
 six parents, checking each directory itself and its `TRIBES/` and `PCRPG/`
@@ -50,12 +56,19 @@ script handles its startup command conventions. Other `+command` arguments
 dispatch console commands, and a quoted `'$VariableName' VALUE` pair sets a
 console variable. These operations have the same capabilities as the console.
 
-Selecting an installation does not change the process working directory.
-The standalone host uses an empty `FearGameApp::Config::writeRoot`: relative
-configuration exports, recordings, and other output paths therefore resolve
-from the working directory. Embedded hosts can set `writeRoot` for the game
-plugins that use it; this is not a global filesystem redirect. In particular,
-console logging and built-in exports use their own filesystem paths.
+Selecting an installation anchors physical file commands, exports, recordings,
+and console logging to that installation without changing the process working
+directory. Embedded hosts may set `FearGameApp::Config::writeRoot` to redirect
+those outputs. Corresponding selected directories under that write root overlay
+the installation directories, allowing saved configuration and temporary scripts
+to be read after the next search-path refresh. Without an installation, relative
+paths retain their normal working-directory behavior.
+
+`isFile` opens one or more physical files at the filesystem anchor, independently
+of world focus. Archive entries count only as resources. Resource enumeration
+preserves source spelling, backslashes and duplicate virtual names; it follows
+resource creation order rather than sorting names. Repeated mounts of the same
+archive share one reference-counted entry set.
 
 ## Command-line options
 

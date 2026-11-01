@@ -157,6 +157,15 @@ struct ResourceManager::Impl {
     };
 
     std::map<std::string, File, std::less<>> files;
+
+    struct Match {
+        std::string source, name;
+        bool disk{};
+        UInt64 cursor{};
+    };
+
+    std::vector<Match> matches;
+    UInt64 nextCursor{1};
     std::vector<std::unique_ptr<Volume>> volumes;
     std::map<UInt32, Factory> loaders;
     std::set<std::string, std::less<>> loading;
@@ -183,6 +192,7 @@ ResourceManager::~ResourceManager() = default;
 
 bool ResourceManager::setSearchPaths(std::span<const std::filesystem::path> roots) {
     decltype(impl_->files) files;
+    std::vector<Impl::Match> names;
     try {
         bool ok = true;
         std::ranges::for_each(roots, [&](const auto& root) {
@@ -202,7 +212,8 @@ bool ResourceManager::setSearchPaths(std::span<const std::filesystem::path> root
                 } else if (it->is_regular_file()) {
                     const auto size = it->file_size();
                     const auto relative = it->path().lexically_relative(root).generic_u8string();
-                    const auto key = keyOf(std::string(relative.begin(), relative.end()));
+                    std::string spelling(relative.begin(), relative.end());
+                    const auto key = keyOf(spelling);
                     if (!key || size > UInt32(std::numeric_limits<Int32>::max())) {
                         ok = false;
                         return;
@@ -214,6 +225,9 @@ bool ResourceManager::setSearchPaths(std::span<const std::filesystem::path> root
                         rootFiles.insert_or_assign(*key,
                                                    Impl::File{path, static_cast<UInt32>(size)});
                     }
+                    std::ranges::replace(spelling, '/', '\\');
+                    names.push_back(
+                        {path.generic_string() + '\n' + *key, std::move(spelling), true});
                 }
                 ++it;
             }
@@ -226,6 +240,26 @@ bool ResourceManager::setSearchPaths(std::span<const std::filesystem::path> root
         return false;
     }
     impl_->files.swap(files);
+    // Retain existing resource-list positions across a rescan. Only newly
+    // discovered sources are inserted at the head, just as createResource did.
+    std::set<std::string> active, existing;
+    for (const auto& entry : names) {
+        active.insert(entry.source);
+    }
+    std::erase_if(impl_->matches, [&](const auto& entry) {
+        return entry.disk && !active.contains(entry.source);
+    });
+    for (const auto& entry : impl_->matches) {
+        if (entry.disk) {
+            existing.insert(entry.source);
+        }
+    }
+    for (auto& entry : names) {
+        if (existing.insert(entry.source).second) {
+            entry.cursor = impl_->nextCursor++;
+            impl_->matches.insert(impl_->matches.begin(), std::move(entry));
+        }
+    }
     impl_->cache.clear();
     return true;
 }
@@ -261,6 +295,12 @@ bool ResourceManager::addVolume(std::string_view name) {
             }
         }
     });
+    for (const auto& item : entries) {
+        if (item.name && keyOf(*item.name)) {
+            impl_->matches.insert(impl_->matches.begin(),
+                                  {*key, *item.name, false, impl_->nextCursor++});
+        }
+    }
     impl_->volumes.insert(impl_->volumes.begin(), std::move(volume));
     impl_->cache.clear();
     return true;
@@ -278,6 +318,9 @@ bool ResourceManager::removeVolume(std::string_view name) {
         return false;
     }
     if (--(*it)->refs == 0) {
+        std::erase_if(impl_->matches, [&](const auto& entry) {
+            return !entry.disk && entry.source == *key;
+        });
         impl_->volumes.erase(it);
         impl_->cache.clear();
     }
@@ -288,6 +331,14 @@ bool ResourceManager::contains(std::string_view name) const {
     const auto key = keyOf(name);
     return key && (impl_->files.contains(*key) || impl_->volumeFor(*key) != impl_->volumes.end() ||
                    impl_->added.contains(*key));
+}
+
+std::vector<std::string> ResourceManager::mountedVolumes() const {
+    std::vector<std::string> names;
+    for (const auto& volume : impl_->volumes) {
+        names.push_back(volume->name);
+    }
+    return names;
 }
 
 std::optional<UInt32> ResourceManager::getSize(std::string_view name) const {
@@ -318,23 +369,41 @@ std::optional<std::filesystem::path> ResourceManager::getFullPath(std::string_vi
 }
 
 std::vector<std::string> ResourceManager::findMatches(std::string_view expression) const {
-    std::set<std::string> names;
-    auto collect = [&](const auto& entries) {
-        std::ranges::for_each(entries, [&](const auto& entry) {
-            names.insert(entry.first);
-        });
-    };
-    collect(impl_->files);
-    collect(impl_->added);
-    std::ranges::for_each(impl_->volumes, [&](const auto& v) {
-        collect(v->entries);
-    });
     const auto pattern = fold(expression);
     std::vector<std::string> result;
-    std::ranges::copy_if(names, std::back_inserter(result), [&](const auto& name) {
-        return matches(pattern, name);
-    });
+    const auto append = [&](std::string name) {
+        if (matches(pattern, fold(name))) {
+            std::ranges::replace(name, '/', '\\');
+            result.push_back(std::move(name));
+        }
+    };
+    // Legacy walks resource objects, including shadowed sources, rather than
+    // sorting canonical dictionary keys. New resources are linked at the head.
+    for (const auto& entry : impl_->matches) {
+        append(entry.name);
+    }
     return result;
+}
+
+std::optional<ResourceMatch> ResourceManager::findMatch(std::string_view expression,
+                                                        UInt64 after) const {
+    auto next = impl_->matches.begin();
+    if (after) {
+        next = std::ranges::find(impl_->matches, after, &Impl::Match::cursor);
+        if (next == impl_->matches.end()) {
+            return {};
+        }
+        ++next;
+    }
+    const auto pattern = fold(expression);
+    for (; next != impl_->matches.end(); ++next) {
+        if (matches(pattern, fold(next->name))) {
+            auto name = next->name;
+            std::ranges::replace(name, '/', '\\');
+            return ResourceMatch{next->cursor, std::move(name)};
+        }
+    }
+    return {};
 }
 
 bool ResourceManager::read(std::string_view name, std::vector<std::byte>& bytes, UInt32 maxBytes) {
@@ -379,7 +448,30 @@ std::unique_ptr<StreamIO> ResourceManager::openStream(std::string_view name, UIn
 }
 
 bool ResourceManager::getCrc(std::string_view name, UInt32& crc, UInt32 initial) {
+    const auto key = keyOf(name);
+    if (!key) {
+        return false;
+    }
     std::vector<std::byte> bytes;
+    if (!impl_->files.contains(*key)) {
+        const auto volume = impl_->volumeFor(*key);
+        if (volume != impl_->volumes.end()) {
+            const auto& item = (*volume)->stream.getVolumeItems()[(*volume)->entries.at(*key)];
+            if (item.size > 64U * 1024U * 1024U) {
+                return false;
+            }
+            FileRStream stream((*volume)->path);
+            bytes.resize(item.size);
+            // Vanilla hashes fileSize bytes at the archive payload offset,
+            // even for compressed entries (not the decoded resource).
+            if (!stream.setPosition(static_cast<Int32>(item.blockOffset + 8U)) ||
+                !stream.readBytes(bytes)) {
+                return false;
+            }
+            crc = CRC::calculate(bytes, initial);
+            return true;
+        }
+    }
     if (!read(name, bytes)) {
         return false;
     }
@@ -411,6 +503,8 @@ bool ResourceManager::addErased(std::string_view name,
     state->payload = std::move(payload);
     state->timeout = timeout;
     impl_->added.emplace(*key, std::move(state));
+    impl_->matches.insert(impl_->matches.begin(),
+                          {"object:" + *key, std::string(name), false, impl_->nextCursor++});
     return true;
 }
 
@@ -485,6 +579,10 @@ std::size_t ResourceManager::purge(bool force) {
                    (force || now - item.second->released >= item.second->timeout);
         };
         count = std::erase_if(impl_->cache, remove) + std::erase_if(impl_->added, remove);
+        std::erase_if(impl_->matches, [&](const auto& entry) {
+            return entry.source.starts_with("object:") &&
+                   !impl_->added.contains(entry.source.substr(7));
+        });
         total += count;
     } while (force && count != 0);
     return total;

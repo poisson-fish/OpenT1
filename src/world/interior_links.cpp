@@ -70,16 +70,20 @@ InteriorLinkGraph::prepare(std::span<const InteriorLinkInstance> instances) {
     InteriorLinkGraph graph;
     graph.instances_.assign(instances.begin(), instances.end());
     graph.links_.resize(instances.size());
-    for (const auto& instance : instances) {
+    for (auto& instance : graph.instances_) {
         if (!instance.geometry || !valid(instance.geometry->bounds) ||
             (instance.detailGeometry && !valid(instance.detailGeometry->bounds)) ||
-            !rigid(instance.placement) || (instance.linkableFaces & ~252U)) {
+            !rigid(instance.placement) || (instance.linkableFaces & ~255U)) {
             return {};
         }
+        // Legacy DIS files can set the two unused low bits in this byte mask.
+        // Only the six face bits participate in linking and visibility.
+        instance.linkableFaces &= UInt32(InteriorFace::All);
         auto inverse = instance.placement;
         inverse.inverse();
         graph.inverses_.push_back(inverse);
     }
+    instances = graph.instances_;
     std::size_t count{};
     for (std::size_t i = 0; i < instances.size(); ++i) {
         for (std::size_t j = i + 1; j < instances.size(); ++j) {

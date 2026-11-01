@@ -6,6 +6,7 @@
 #include <opent1/game/fear_mission_editor.hpp>
 #include <opent1/game/fear_plugin.hpp>
 #include <opent1/game/file_plugin.hpp>
+#include <opent1/game/legacy_sound.hpp>
 #include <opent1/game/script_plugin.hpp>
 #include <opent1/game/version.hpp>
 #include <opent1/gfx/bitmap_palette_font.hpp>
@@ -34,6 +35,7 @@ class FearGameApp {
 public:
     std::function<void(SmackerCtrl&)> bindMovieAudio;
     std::function<void(std::string_view)> playShellSound;
+    LegacySound legacySound;
 
     struct RenderStats {
         double captureMs{}, worldMs{}, guiMs{}, totalMs{};
@@ -169,11 +171,12 @@ public:
         return mountedAssetRoot_;
     }
 
-    [[nodiscard]] std::size_t mountedVolumeCount() const noexcept {
-        return mountedVolumes_.size();
+    [[nodiscard]] std::size_t mountedVolumeCount() const {
+        return resources_->mountedVolumes().size();
     }
 
-    [[nodiscard]] std::span<const std::string> mountedVolumes() const noexcept {
+    [[nodiscard]] std::span<const std::string> mountedVolumes() const {
+        mountedVolumes_ = resources_->mountedVolumes();
         return mountedVolumes_;
     }
 
@@ -231,6 +234,7 @@ public:
 
 private:
     void registerGameClassesAndFactories();
+    bool applySearchPath(std::string_view path);
     void ensureFallbackRenderAssets();
     void setActivePalette(std::shared_ptr<gfx::Palette> pal);
     void updateGameplayPalette();
@@ -255,7 +259,8 @@ private:
     world::InputMaps inputMaps_;
     CpuMetrics cpuMetrics_{};
     std::filesystem::path mountedAssetRoot_{};
-    std::vector<std::string> mountedVolumes_{};
+    std::string searchPath_;
+    mutable std::vector<std::string> mountedVolumes_{};
     std::shared_ptr<gfx::Palette> defaultPalette_{};
     std::shared_ptr<gfx::Palette> gameplayPalette_{};
     std::shared_ptr<gfx::BitmapFont> defaultFont_{};

@@ -2,6 +2,7 @@
 #include "software_corpus.hpp"
 #include <opent1/gfx/software_rasterizer.hpp>
 #include <opent1/core/file_stream.hpp>
+#include <cmath>
 using namespace gfx_test;
 
 namespace {
@@ -160,11 +161,106 @@ void transferFramebuffer() {
     }));
 }
 
+void wrappingTextures() {
+    for (const Point2I size : {Point2I{6, 3}, Point2I{3, 4}, Point2I{8, 3}}) {
+        auto texture = Bitmap::create(size.x, size.y);
+        auto surface = SoftwareSurface::create(8, 6);
+        CHECK(texture && surface);
+        std::ranges::fill(texture->pixels, std::byte{255}); // Padding must never be sampled.
+        for (Int32 y = 0; y < size.y; ++y) {
+            for (Int32 x = 0; x < size.x; ++x) {
+                texture->row(y)[x] = std::byte(1 + y * size.x + x);
+            }
+        }
+        // Keep samples inside texels, away from fixed-point boundary rounding.
+        const auto du = .125f / size.x, dv = .125f / size.y;
+        const std::array<PolygonVertex, 4> vertices{{
+            {{0, 0}, {-.5f + du, -1 + dv}},
+            {{8, 0}, {1.5f + du, -1 + dv}},
+            {{8, 6}, {1.5f + du, 2 + dv}},
+            {{0, 6}, {-.5f + du, 2 + dv}},
+        }};
+        PolygonMaterial material;
+        material.texture = texture.get();
+        material.perspective = material.wrap = true;
+        const std::array<SortedPolygon, 1> polygons{{{vertices, material}}};
+        const auto check = [&](bool clipped) {
+            for (Int32 y = 0; y < 6; ++y) {
+                for (Int32 x = 0; x < 8; ++x) {
+                    const auto u = Int32(std::floor(size.x * (-.5 + x * .25) + .125));
+                    const auto v = Int32(std::floor(size.y * (-1. + y * .5) + .125));
+                    const auto tx = (u % size.x + size.x) % size.x;
+                    const auto ty = (v % size.y + size.y) % size.y;
+                    const auto expected = clipped && (x < 1 || x > 6 || y < 1 || y > 4)
+                                              ? std::byte{0}
+                                              : texture->row(ty)[tx];
+                    CHECK(surface->bitmap().row(y)[x] == expected);
+                }
+            }
+        };
+        surface->clear(0);
+        CHECK(surface->polygon(vertices, material));
+        check(false);
+        surface->clear(0);
+        CHECK(surface->sortedPolygons(polygons));
+        check(false);
+        surface->clear(0);
+        surface->setClip({1, 1, 6, 4});
+        CHECK(surface->sortedPolygons(polygons));
+        check(true);
+    }
+}
+
+void clampedTextureCoordinates() {
+    auto texture = Bitmap::create(3, 2);
+    auto surface = SoftwareSurface::create(8, 6);
+    CHECK(texture && surface);
+    std::ranges::fill(texture->pixels, std::byte{255});
+    for (Int32 y = 0; y < 2; ++y) {
+        for (Int32 x = 0; x < 3; ++x) {
+            texture->row(y)[x] = std::byte(1 + y * 3 + x);
+        }
+    }
+    const std::array<PolygonVertex, 4> vertices{{
+        {{0, 0}, {-.5f + .125f / 3, -1 + .125f / 2}},
+        {{8, 0}, {1.5f + .125f / 3, -1 + .125f / 2}},
+        {{8, 6}, {1.5f + .125f / 3, 2 + .125f / 2}},
+        {{0, 6}, {-.5f + .125f / 3, 2 + .125f / 2}},
+    }};
+    for (const bool perspective : {false, true}) {
+        PolygonMaterial material;
+        material.texture = texture.get();
+        material.perspective = perspective;
+        material.clampTexture = true;
+        const std::array<SortedPolygon, 1> polygons{{{vertices, material}}};
+        for (const bool sorted : {false, true}) {
+            surface->clear(0);
+            CHECK(sorted ? surface->sortedPolygons(polygons) : surface->polygon(vertices, material));
+            for (Int32 y = 0; y < 6; ++y) {
+                for (Int32 x = 0; x < 8; ++x) {
+                    const auto tx = std::clamp(Int32(std::floor(3 * (-.5 + x * .25) + .125)), 0, 2);
+                    const auto ty = std::clamp(Int32(std::floor(2 * (-1. + y * .5) + .125)), 0, 1);
+                    CHECK(surface->bitmap().row(y)[x] == texture->row(ty)[tx]);
+                }
+            }
+        }
+        auto invalid = vertices;
+        invalid[0].texture.x = std::numeric_limits<Flt32>::infinity();
+        CHECK(!surface->polygon(invalid, material));
+        invalid[0].texture.x = Bitmap::MaxDimension + 1.f;
+        CHECK(!surface->polygon(invalid, material));
+        material.clampTexture = false;
+        CHECK(!surface->polygon(vertices, material));
+    }
+}
+
 int opent1_test_software_rasterizer() {
     return opent1::test::run([] {
         parity();
         drawing();
         transferFramebuffer();
+        wrappingTextures();
+        clampedTextureCoordinates();
         auto surface = SoftwareSurface::create(4, 4);
         auto original = palette(0);
         original.palettes[0].colors[1].red = 12;

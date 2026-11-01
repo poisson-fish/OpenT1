@@ -170,8 +170,12 @@ void FearPlugin::installNetworkCommands(Console& console) {
                            auto* client = args.size() == 2 && sg_.playerManager
                                               ? sg_.playerManager->findClient(integer(args[1]))
                                               : nullptr;
-                           return client && client->packetStream
-                                      ? client->packetStream->transportAddress()
+                           if (client && client->packetStream) {
+                               return client->packetStream->transportAddress();
+                           }
+                           return client && client->id == 2049 &&
+                                          connectAddress_ == "LOOPBACK:28001"
+                                      ? connectAddress_
                                       : std::string{};
                        });
     console.addCommand(

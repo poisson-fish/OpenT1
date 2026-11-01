@@ -28,6 +28,59 @@ bool sendCommand(sim::network::PacketStream& stream, std::vector<std::string> ar
 }
 }
 
+void FearPlugin::bindClientControlCallbacks() {
+    if (!cg_.playerPSC) {
+        return;
+    }
+    cg_.playerPSC->onGuiState =
+        [this, lastMode = UInt32(PlayerPSC::InitialGuiMode)](UInt32 mode, bool scores) mutable {
+            game_.console().setVariable("scoresVisible", scores ? "true" : "false");
+            if (mode != lastMode && mode != PlayerPSC::InitialGuiMode && onGuiMode) {
+                onGuiMode(mode);
+            }
+            lastMode = mode;
+            if (cg_.playerPSC->getControlObject() && onScoresVisible) {
+                onScoresVisible(scores);
+            }
+        };
+    cg_.playerPSC->onControlObject = [this](GameBase* controlled) {
+        if (controlled) {
+            if (onPlayerControl) {
+                onPlayerControl();
+            }
+            if (onScoresVisible) {
+                onScoresVisible(cg_.playerPSC->scoresVisible());
+            }
+        }
+    };
+}
+
+void FearPlugin::processPendingLocalDisconnect() {
+    if (!pendingLocalKick_) {
+        return;
+    }
+    const auto reason = std::move(*pendingLocalKick_);
+    pendingLocalKick_.reset();
+    if (connectAddress_ != "LOOPBACK:28001") {
+        return;
+    }
+    game_.withWorld(sim::WorldType::Server, [&] {
+        if (game_.console().isFunction("Server::onClientDisconnect")) {
+            const std::array<std::string, 1> args{"2049"};
+            (void)game_.console().execute("Server::onClientDisconnect", args);
+        }
+    });
+    (void)game_.console().execute("disconnect");
+    game_.console().setVariable("ConnectedToServer", "false");
+    game_.console().setVariable("errorString", reason);
+    game_.withWorld(sim::WorldType::Client, [&] {
+        if (game_.console().isFunction("onConnection")) {
+            const std::array<std::string, 1> args{"Dropped"};
+            (void)game_.console().execute("onConnection", args);
+        }
+    });
+}
+
 bool FearPlugin::configureRemoteStream(sim::network::PacketStream& stream) {
     auto* manager = stream.getManager();
     if (!manager || !stream.ghostManager()) {
@@ -155,29 +208,7 @@ bool FearPlugin::configureRemoteStream(sim::network::PacketStream& stream) {
         }
         cg_.ghostManager = stream.ghostManager();
         cg_.playerPSC->bindConsole(&game_.console());
-        cg_.playerPSC->onGuiState =
-            [this, lastMode = UInt32(PlayerPSC::InitialGuiMode)](UInt32 mode, bool scores) mutable {
-                game_.console().setVariable("scoresVisible", scores ? "true" : "false");
-                if (mode != lastMode && mode != PlayerPSC::InitialGuiMode && onGuiMode) {
-                    onGuiMode(mode);
-                }
-                lastMode = mode;
-                // Vanilla servers send menu visibility in the PSC header. A score
-                // toggle must update the dialog without reloading the play GUI.
-                if (cg_.playerPSC->getControlObject() && onScoresVisible) {
-                    onScoresVisible(scores);
-                }
-            };
-        cg_.playerPSC->onControlObject = [this](GameBase* controlled) {
-            if (controlled) {
-                if (onPlayerControl) {
-                    onPlayerControl();
-                }
-                if (onScoresVisible) {
-                    onScoresVisible(cg_.playerPSC->scoresVisible());
-                }
-            }
-        };
+        bindClientControlCallbacks();
         stream.onGhostAlwaysDone = [this, address = stream.address()] {
             if (!cg_.manager) {
                 return;

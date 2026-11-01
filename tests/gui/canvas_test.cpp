@@ -501,6 +501,52 @@ void taggedCursors() {
     CHECK(!c.dispatch(e));
     CHECK(runtime.clear());
 }
+
+void retiredActionSenders() {
+    for (const bool named : {false, true}) {
+        for (const bool fail : {false, true}) {
+            Console console;
+            Persistent::ClassRegistry registry;
+            Runtime runtime(console, registry);
+            auto button = std::make_unique<Active>();
+            auto* sender = button.get();
+            const auto life = sender->lifetime();
+            sender->assignName("RetiredActionSender");
+            auto fields = sender->fields();
+            fields.variable = "ActionTest::LongVariableOwnedByTheRetiredControl";
+            fields.command = named ? "" : "ReplaceActionScreen(); $ActionScriptFinished = true;";
+            const auto variable = fields.variable;
+            CHECK(sender->configure(fields));
+            sender->message = 123;
+            CHECK(runtime.show(Graph::create(std::move(button))));
+            console.setVariable(variable, "previous value");
+            console.addCommand(
+                0, "ReplaceActionScreen",
+                [&](Console&, Int32, std::span<const std::string>) -> std::string {
+                    CHECK(runtime.show(Graph::create(std::make_unique<Control>())));
+                    CHECK(life.expired());
+                    if (fail) {
+                        throw std::runtime_error("screen transition failure");
+                    }
+                    return "True";
+                });
+            CHECK(console.evaluate(named
+                                       ? "function RetiredActionSender::onAction() { "
+                                         "ReplaceActionScreen(); $NamedActionFinished = true; }"
+                                       : "function RetiredActionSender::onAction() { "
+                                         "$StaleActionWasCalled = true; }").ok());
+            // Intro movie completion invokes actions after Canvas dispatch has
+            // ended, so replacement retires the sender immediately.
+            CHECK(!runtime.canvas.dispatching());
+            const bool result = runtime.canvas.onAction(*sender, sender->message,
+                                                       sender->fields().command);
+            CHECK(result == !fail && life.expired());
+            CHECK(!console.hasVariable("StaleActionWasCalled"));
+            CHECK(console.getVariable(variable) == (fail ? "previous value" : ""));
+            CHECK(runtime.canvas.top() && runtime.graphCount() == 1);
+        }
+    }
+}
 }
 
 namespace {
@@ -578,6 +624,7 @@ int opent1_test_gui_canvas(int argc, char** argv) {
         rollback();
         viewportSizing();
         taggedCursors();
+        retiredActionSenders();
         retainedRendering();
         std::puts("64 original Canvas histories: repeat/cursor/update/help/render failures and "
                   "retained rollback");

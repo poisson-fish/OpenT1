@@ -197,6 +197,7 @@ add_library(
     opent1_sim STATIC
     src/sim/sim_base.cpp
     src/sim/sim_resource_volume.cpp
+    src/sim/sim_interior_grouping.cpp
     src/sim/bayes_ai.cpp
     src/sim/sim_input_action.cpp
     src/sim/sim_world_game.cpp
@@ -373,6 +374,7 @@ add_library(
     src/game/cpuSpeed.cpp
     src/game/BanList.cpp
     src/game/filePlugin.cpp
+    src/game/legacy_sound.cpp
     src/game/scriptPlugin.cpp
     src/game/dataBlockManager.cpp
     src/game/FearDynamicDataPlugin.cpp

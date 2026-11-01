@@ -3,6 +3,29 @@
 #include <algorithm>
 
 namespace opent1 {
+std::filesystem::path resolveFilePath(const std::filesystem::path& root, std::string_view name) {
+    std::string normalized(name);
+    std::ranges::replace(normalized, '\\', '/');
+    const std::filesystem::path relative(normalized);
+    auto result = relative.is_absolute() ? relative.root_path() : root;
+    for (const auto& component : relative.relative_path()) {
+        auto candidate = result / component;
+        std::error_code ec;
+        if (!std::filesystem::exists(candidate, ec) && component != "." && component != "..") {
+            const auto spelling = component.string();
+            for (const auto& entry :
+                 std::filesystem::directory_iterator(result.empty() ? "." : result, ec)) {
+                if (FileName(entry.path().filename().string()) == spelling) {
+                    candidate = entry.path();
+                    break;
+                }
+            }
+        }
+        result = std::move(candidate);
+    }
+    return result;
+}
+
 bool FileName::operator==(std::string_view text) const noexcept {
     const auto fold = [](unsigned char c) {
         return c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c;

@@ -1,6 +1,7 @@
 #include <opent1/game/player.hpp>
 #include <opent1/game/player_manager.hpp>
 #include <opent1/game/sensor_manager.hpp>
+#include <opent1/game/sound.hpp>
 #include <algorithm>
 #include <cmath>
 #include <format>
@@ -43,6 +44,8 @@ bool Player::onAdd() {
     if (!isGhost()) {
         addToSet(PlayerSetId);
         addToSet(TargetableSetId);
+    } else {
+        addToSet(SensorVisibleSetId);
     }
     return true;
 }
@@ -785,6 +788,12 @@ void Player::updateAnimation(Flt32 seconds) {
     const auto start =
         data.direction < 0 || (!isGhost() && serverAnimation_ < 0 && anim == ANIM_CROUCH) ? 1.f
                                                                                           : 0.f;
+    const bool changing =
+        animationPending_ || currentAnimation_ != anim ||
+        (animationThread_ && shapeInstance_->threads()[*animationThread_].sequence != seq);
+    if (isGhost() && getManager() && animationThread_ && changing && data.soundTag >= 0) {
+        TSFX::PlayAt(UInt32(data.soundTag), getTransform(), {}, getManager());
+    }
     if (!animationThread_) {
         animationThread_ = shapeInstance_->addThread(seq, start);
     } else if (animationPending_ || shapeInstance_->threads()[*animationThread_].sequence != seq ||

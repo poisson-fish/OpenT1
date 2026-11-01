@@ -1,6 +1,7 @@
 #include <opent1/game/game_base.hpp>
 #include <opent1/game/team_group.hpp>
 #include <opent1/game/player_manager.hpp>
+#include <opent1/game/sensor_manager.hpp>
 #include <opent1/game/observer_camera.hpp>
 #include <opent1/world/scene_objects.hpp>
 #include <algorithm>
@@ -270,9 +271,6 @@ bool GameBase::initResources(GameBaseData* ptr) {
     if (!isGhost()) {
         if (ptr && ptr->visibleToSensor) {
             setName(mapName_);
-            if (sensorKey == -1) {
-                sensorKey = 0;
-            }
         }
     } else if (sensorKey != -1 && getManager()) {
         addToSet(SensorVisibleSetId);
@@ -341,6 +339,12 @@ bool GameBase::onAdd() {
 }
 
 void GameBase::onRemove() {
+    if (!isGhost() && sensorKey != -1 && getManager()) {
+        if (auto* sensors =
+                dynamic_cast<SensorManager*>(getManager()->findObject(SensorManagerId))) {
+            sensors->removeTarget(sensorKey);
+        }
+    }
     if (data_ && !isGhost()) {
         scriptOnRemove();
     }
@@ -833,6 +837,12 @@ void GameBase::setName(std::string_view name, Console* explicitConsole) {
         ++idx;
     }
     mapName_ = std::move(expanded);
+    if (!isGhost() && data_ && data_->visibleToSensor && getManager()) {
+        if (auto* sensors =
+                dynamic_cast<SensorManager*>(getManager()->findObject(SensorManagerId))) {
+            sensorKey = sensors->addTarget(this, mapName_);
+        }
+    }
 }
 
 Persistent::Error GameBase::readLegacy(StreamIO& sio, Int32 version, Int32 user) {

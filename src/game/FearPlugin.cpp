@@ -1085,6 +1085,7 @@ std::size_t FearPlugin::syncLoopbackState(bool deliverMoves) {
     if (!sg_.world || !cg_.world || connectAddress_ != "LOOPBACK:28001") {
         return 0;
     }
+    const auto* previousControl = cg_.playerPSC ? cg_.playerPSC->getControlObject() : nullptr;
 
     // 1. Replicate server datablocks to client DataBlockManager via BitStream
     if (sg_.dbm && cg_.dbm) {
@@ -1132,6 +1133,18 @@ std::size_t FearPlugin::syncLoopbackState(bool deliverMoves) {
             dataFinishedFlag_ = true;
             if (console_) {
                 console_->setVariable("DataBlock::Finished", "true");
+            }
+        }
+    }
+
+    if (sg_.sensorManager && cg_.sensorManager) {
+        for (Int32 key = 0; key < SensorManager::MaxTargets; ++key) {
+            const auto& name = sg_.sensorManager->target(key).name;
+            if (cg_.sensorManager->target(key).name != name) {
+                TargetNameEvent event;
+                event.targId = key;
+                event.name = name;
+                cg_.sensorManager->processEvent(event);
             }
         }
     }
@@ -1395,6 +1408,10 @@ std::size_t FearPlugin::syncLoopbackState(bool deliverMoves) {
                                             "Loopback player control packet rejected");
             }
         }
+    }
+    if (cg_.playerPSC && cg_.playerPSC->getControlObject() &&
+        cg_.playerPSC->getControlObject() != previousControl && onPlayerControl) {
+        onPlayerControl();
     }
     return syncedGhosts;
 }

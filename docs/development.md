@@ -111,11 +111,11 @@ exercise the affected GPU backends before distributing a shader change.
 
 ## Test suite
 
-The full build registers 34 C++ cases in one executable and 12 subsystem suites:
+The full build registers 36 standard C++ cases in one executable and 12 subsystem suites:
 core, math, console, network, simulation, graphics, world, GUI, game, video,
 and optional audio/platform.
 CTest also runs an application smoke check, for 13 CTest checks in total.
-Headless builds register 32 C++ cases in 10 subsystem suites plus the smoke
+Headless builds register 34 standard C++ cases in 10 subsystem suites plus the smoke
 check, for 11 CTest checks. They omit the audio and platform cases. Default
 checks use the bundled fixtures and do not need a game installation, Python,
 or an external reference executable.
@@ -145,6 +145,20 @@ and `opent1::test::run` helpers for new cases. Tests that need temporary files
 should use their working directory or a uniquely named temporary directory.
 CTest gives each subsystem a separate working directory so suites can run
 concurrently.
+
+Gameplay regressions include target filtering, impact delivery, player animation
+audio, looping weapon audio, target names and health fractions, mission clock
+resets, and projectile velocity inheritance. An optional acceptance case uses an
+external game installation to check chaingun damage and renderable impacts on
+all five antenna models and a Scout, then cycles a hosted mission through the
+summary screen and back to player control:
+
+```powershell
+$env:OPENT1_TEST_ASSETS = 'C:\Games\Tribes'
+.\build\x64-debug\tests\opent1_tests.exe --suite fixpack
+```
+
+The optional case does not bundle game assets or run unless this variable is set.
 
 ## Continuous integration and validation limits
 

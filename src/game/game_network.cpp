@@ -6,6 +6,7 @@
 #include <opent1/game/player.hpp>
 #include <opent1/game/player_manager.hpp>
 #include <opent1/game/script_plugin.hpp>
+#include <opent1/game/sensor_manager.hpp>
 #include <opent1/game/observer_camera.hpp>
 #include <charconv>
 #include <algorithm>
@@ -213,19 +214,35 @@ bool FearPlugin::configureRemoteStream(sim::network::PacketStream& stream) {
 }
 
 void FearPlugin::installRemoteCommands(Console& console) {
-    console.addCommand(0,
-                       "startGhosting",
-                       [this](Console&, Int32, std::span<const std::string> args) -> std::string {
-                           auto* stream = args.size() == 2 && manager_
-                                              ? dynamic_cast<sim::network::PacketStream*>(
-                                                    manager_->findObject(integer(args[1])))
-                                              : nullptr;
-                           if (!stream || !stream->ghostManager()) {
-                               return "False";
-                           }
-                           stream->ghostManager()->activate();
-                           return "True";
-                       });
+    console.addCommand(
+        0,
+        "startGhosting",
+        [this](Console&, Int32, std::span<const std::string> args) -> std::string {
+            if (args.size() == 2 && integer(args[1]) == 2049 &&
+                connectAddress_ == "LOOPBACK:28001" && sg_.manager) {
+                // The hosted client has no PacketStream to send CGADone.
+                // Complete the same mission-drop handshake after the script
+                // finishes publishing the new mission.
+                if (auto* scheduler = sg_.manager->findObject(sim::ConsoleSchedulerId)) {
+                    return sim::SimConsoleEvent::schedule(*scheduler, "remoteCGADone(2049);", 0.f)
+                               ? "True"
+                               : "False";
+                }
+                return "False";
+            }
+            auto* stream = args.size() == 2 && manager_
+                               ? dynamic_cast<sim::network::PacketStream*>(
+                                     manager_->findObject(integer(args[1])))
+                               : nullptr;
+            if (!stream || !stream->ghostManager()) {
+                return "False";
+            }
+            if (sg_.sensorManager) {
+                sg_.sensorManager->newClient(integer(args[1]));
+            }
+            stream->ghostManager()->activate();
+            return "True";
+        });
     console.addCommand(0,
                        "Client::setDataFinished",
                        [this](Console&, Int32, std::span<const std::string> args) -> std::string {

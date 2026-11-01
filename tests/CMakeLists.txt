@@ -33,6 +33,7 @@ add_executable(
     game/network_parity_test.cpp
     game/mission_editor_test.cpp
     game/e2e_integration_test.cpp
+    game/gameplay_fix_pack_test.cpp
     video/video_test.cpp
 )
 target_link_libraries(opent1_tests PRIVATE opent1_game)

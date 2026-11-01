@@ -167,13 +167,6 @@ void Projectile::spawnImpactEffect(sim::SimCollisionInfo& io_rCollision) {
     if (isGhost()) {
         return;
     }
-    sim::SimObject* hitObj = nullptr;
-    if (getManager()) {
-        hitObj = io_rCollision.object.resolve(*getManager());
-    }
-    if (isProjStatic(hitObj)) {
-        return;
-    }
     if (!io_rCollision.surfaces.surfaces.empty()) {
         m_explosionPosition_ = io_rCollision.surfaces.surfaces[0].position;
         m_explosionAxis_ = io_rCollision.surfaces.surfaces[0].normal;
@@ -183,6 +176,8 @@ void Projectile::spawnImpactEffect(sim::SimCollisionInfo& io_rCollision) {
     }
     m_explosionId_ = getExplosionTag(io_rCollision);
     m_hasExploded_ = true;
+    // Prediction may not include the struck shape yet. Publish the contact
+    // for every target; the client suppresses an already predicted effect.
     setMaskBits(FPExplosionMask);
 }
 
@@ -403,6 +398,7 @@ bool Projectile::onAdd() {
     m_ownerGraceMS_ = static_cast<Int32>(m_projectileData_->ownerGraceMS);
     m_totalTime_ = static_cast<UInt32>(m_projectileData_->totalTime * 1000.0f) + nowMs;
     m_liveTime_ = static_cast<UInt32>(m_projectileData_->liveTime * 1000.0f) + nowMs;
+    commitImpactEffect(false);
     return true;
 }
 
@@ -746,6 +742,9 @@ void Projectile::commitImpactEffect(bool clearSmoke) {
     if (!m_pendingImpactEffect_) {
         return;
     }
+    if (!getManager()) {
+        return;
+    }
     m_pendingImpactEffect_ = false;
     if (m_hasExploded_) {
         return;
@@ -753,9 +752,6 @@ void Projectile::commitImpactEffect(bool clearSmoke) {
     m_hasExploded_ = true;
     m_overrideRender_ = true;
     stopProjectileSound();
-    if (!getManager()) {
-        return;
-    }
     if (clearSmoke) {
         if (auto* smoke = SmokeManager::get(getManager())) {
             smoke->removeAllInRadius(m_explosionPosition_,

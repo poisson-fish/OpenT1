@@ -1038,6 +1038,8 @@ bool Player::unpackPlayerUpdate(BitStream& stream, sim::network::GhostManager* g
             blowUpPending_ = blownFlag;
             if (!blownFlag) {
                 currentAnimation_ = dAnim;
+                serverAnimation_ = dAnim;
+                animationPending_ = !savedDead || savedAnim != dAnim;
             }
         }
     }

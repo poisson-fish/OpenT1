@@ -503,12 +503,82 @@ void taggedCursors() {
 }
 }
 
+namespace {
+void retainedRendering() {
+    struct Paint : Control {
+        mutable int draws{};
+        UInt8 ink{3};
+        bool fail{};
+
+        bool draw(gfx::SoftwareSurface& s, Point2I at, RectI) const override {
+            ++draws;
+            s.fill({at.x, at.y, at.x + fields().extent.x - 1, at.y + fields().extent.y - 1}, ink);
+            return !fail;
+        }
+    } root;
+
+    struct Layout : Control {
+        mutable int calls{};
+
+        void
+        layoutInParent(Point2I oldExtent, Point2I next, Point2I& p, Point2I& e) const override {
+            ++calls;
+            Control::layoutInParent(oldExtent, next, p, e);
+        }
+    } child;
+
+    CHECK(root.addObject(child));
+    Canvas canvas;
+    CHECK(canvas.content(&root));
+    auto palette = std::make_shared<const gfx::Palette>();
+    CHECK(canvas.fitContent({32, 24}, true));
+    const auto layouts = child.calls;
+    CHECK(canvas.fitContent({32, 24}, true) && child.calls == layouts);
+    auto fields = child.fields();
+    fields.horizontal = 3;
+    CHECK(child.configure(fields));
+    CHECK(canvas.fitContent({32, 24}, true) && child.calls == layouts + 1);
+    CHECK(child.fields().position.x == (32 - child.fields().extent.x) / 2);
+    const auto snapshot = canvas.render(32, 24, palette.get());
+    CHECK(snapshot && snapshot->palette);
+    for (int i = 0; i < 5; ++i) {
+        CHECK(canvas.renderRetained(32, 24, palette));
+    }
+    CHECK(!canvas.updateRegion());
+    const auto draws = root.draws;
+    CHECK(canvas.renderRetained(32, 24, palette) && root.draws == draws);
+    root.ink = 9;
+    CHECK(canvas.addUpdateRegion({2, 3}, {4, 5}));
+    const auto* changed = canvas.renderRetained(32, 24, palette);
+    CHECK(changed && changed->row(3)[2] == std::byte{9} && changed->row(0)[0] == std::byte{3});
+    CHECK(!changed->palette && snapshot->row(3)[2] == std::byte{3});
+    const auto region = canvas.updateRegion();
+    root.fail = true;
+    root.ink = 7;
+    CHECK(canvas.addUpdateRegion({2, 3}, {4, 5}));
+    CHECK(!canvas.renderRetained(32, 24, palette) && canvas.updateRegion() == region);
+    root.fail = false;
+    const auto* recovered = canvas.renderRetained(32, 24, palette);
+    CHECK(recovered && recovered->row(3)[2] == std::byte{7} &&
+          recovered->row(0)[0] == std::byte{3});
+    root.fail = true;
+    CHECK(!canvas.renderRetained(64, 48, palette, nullptr, {}, true));
+    CHECK(root.fields().extent == Point2I(32, 24));
+    root.fail = false;
+    CHECK(canvas.renderRetained(64, 48, palette, nullptr, {}, true));
+    CHECK(root.fields().extent == Point2I(64, 48));
+    CHECK(canvas.content(nullptr));
+    CHECK(root.removeObject(child));
+}
+}
+
 int opent1_test_gui_canvas(int argc, char** argv) {
     return test::run([&] {
         histories(argc > 1 ? argv[1] : "");
         rollback();
         viewportSizing();
         taggedCursors();
+        retainedRendering();
         std::puts("64 original Canvas histories: repeat/cursor/update/help/render failures and "
                   "retained rollback");
     });

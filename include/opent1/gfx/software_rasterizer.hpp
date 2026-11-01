@@ -82,14 +82,17 @@ public:
     }
 
     bool setPalette(const Palette&); // owns a snapshot, including remap/blend tables
+    // Internal retained rendering may share an immutable palette snapshot.
+    bool setSharedPalette(std::shared_ptr<const Palette>);
 
     // Borrowed until setPalette/clearPalette or surface destruction.
     [[nodiscard]] const Palette* palette() const noexcept {
-        return palette_ ? &*palette_ : nullptr;
+        return palette_.get();
     }
 
     void clearPalette() noexcept {
         palette_.reset();
+        ownedPalette_.reset();
     }
 
     void clear(UInt8); // whole framebuffer, including padding, independent of clip
@@ -158,7 +161,8 @@ private:
 
     Bitmap bitmap_;
     RectI clip_;
-    std::optional<Palette> palette_;
+    std::shared_ptr<const Palette> palette_;
+    std::shared_ptr<Palette> ownedPalette_; // reusable private snapshot when no copies share it
     BlendRenderer blendRenderer_;
     bool polygonSpans(std::span<const PolygonVertex>,
                       const PolygonMaterial&,

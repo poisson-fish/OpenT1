@@ -435,6 +435,11 @@ void sharedTexturesAcrossFrames() {
     CHECK(&first->textures()[1] == &next->textures()[1]);
     CHECK(first->textures()[1].rgba.data() == next->textures()[1].rgba.data());
     CHECK(first->textureHashes()[1] == next->textureHashes()[1]);
+    material.dynamicTexture = true;
+    const auto dynamic = prepare(vertices, material, &p);
+    CHECK(dynamic && dynamic->textures()[1].dynamic && !first->textures()[1].dynamic);
+    CHECK(dynamic->textures()[1].rgba == first->textures()[1].rgba);
+    material.dynamicTexture = false;
     auto combined = HardwareBatch::compose(std::array<const HardwareBatch*, 2>{&*first, &*next});
     CHECK(combined);
     CHECK(&combined->textures()[1] == &first->textures()[1] &&

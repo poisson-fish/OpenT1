@@ -24,6 +24,7 @@ struct GpuFrameConfig {
 struct GpuTextureCacheStats {
     std::size_t textures{}, bytes{};
     UInt64 hits{}, uploads{}, evictions{};
+    UInt64 reuses{}; // uploads into recycled dynamic texture allocations
 };
 
 struct GpuResourceStats {
@@ -75,7 +76,7 @@ public:
     // each material/haze layer, preserving primitive and transparency order.
     // Waits for this surface's preceding hardware submission to bound memory.
     bool render(const HardwareBatch&, const GpuFrameConfig& = {});
-    // Per-device content cache: 257 entries, expanded up to 4353 when needed by
+    // Per-device content cache: 1024 entries, expanded when needed by
     // the current frame's native lightmaps; 64 MiB of GPU RGBA with shared
     // immutable CPU snapshots for collision-safe comparison. Hits/uploads count
     // successful frames; evictions include explicit clears and failed frames.

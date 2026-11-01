@@ -10,7 +10,7 @@ inline bool translucent(const Bitmap& bitmap) {
     return flags == BitmapTranslucent || flags == (BitmapTranslucent | BitmapTransparent);
 }
 
-inline bool blendAvailable(const Bitmap& bitmap, const std::optional<Palette>& palette) {
+inline bool blendAvailable(const Bitmap& bitmap, const std::shared_ptr<const Palette>& palette) {
     return !translucent(bitmap) ||
            (palette && palette->find(bitmap.paletteIndex).remap.size() == 65536 &&
             palette->find(bitmap.paletteIndex).type == PaletteType::Translucent);
@@ -20,7 +20,7 @@ struct BitmapInk {
     const SubPalette* palette{};
     bool transparent{}, blend{}, remap{};
 
-    BitmapInk(const Bitmap& bitmap, const std::optional<Palette>& colors)
+    BitmapInk(const Bitmap& bitmap, const std::shared_ptr<const Palette>& colors)
         : palette(colors ? &colors->find(bitmap.paletteIndex) : nullptr),
           transparent((bitmap.attributes & drawMask) == BitmapTransparent),
           blend(translucent(bitmap)), remap(palette && bitmap.paletteIndex != 0xffffffffU) {}

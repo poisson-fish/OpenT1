@@ -141,3 +141,11 @@ for checking a host API's return value.
 sizes, timing, terrain/lighting work, and hardware submission counters where
 available. Console file logging is controlled separately by
 `$Console::logMode`; see [script output](script-runtime.md#output-and-filesystem-access).
+
+Hardware records also expose cumulative `gpuUploads`, `gpuReuses`, and
+`gpuEvictions`, plus current `gpuTextures` and `gpuTextureBytes`. Uploads include
+updates into recycled dynamic-overlay allocations; subtract `gpuReuses` from
+`gpuUploads` to count successful uploads that required new texture allocations.
+Compare counter differences across a warmed-up capture rather than cumulative
+startup totals. The `total` timing covers rendering, GPU submission, and
+presentation; simulation and audio updates occur outside that interval.

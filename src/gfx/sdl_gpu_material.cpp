@@ -26,8 +26,8 @@ bool unit(Point3F v) {
 }
 
 bool equal(const HardwareTexture& a, const HardwareTexture& b) {
-    return a.width == b.width && a.height == b.height && a.rgba == b.rgba &&
-           std::ranges::equal(a.mips, b.mips, [](const auto& x, const auto& y) {
+    return a.dynamic == b.dynamic && a.width == b.width && a.height == b.height &&
+           a.rgba == b.rgba && std::ranges::equal(a.mips, b.mips, [](const auto& x, const auto& y) {
                return x.width == y.width && x.height == y.height && x.rgba == y.rgba;
            });
 }
@@ -522,13 +522,53 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
             }
         }
     }
+    Resources r{device_, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, {}};
+    UInt64 reuses{};
+    const auto eraseCached = [&](auto entry) {
+        const auto [first, last] = textureIndex_.equal_range(entry->hash);
+        for (auto it = first; it != last; ++it) {
+            if (it->second == entry) {
+                textureIndex_.erase(it);
+                break;
+            }
+        }
+        stats_.bytes -= entry->bytes;
+        --stats_.textures;
+        textures_.erase(entry);
+    };
+    // All current-frame hits have been pinned before choosing recyclable slots.
+    // A failed submission discards the detached allocation, keeping cache keys
+    // honest even if upload preparation changed its contents.
+    for (auto& next : pending) {
+        if (!next.source->dynamic) {
+            continue;
+        }
+        const auto victim =
+            std::ranges::find_if(textures_.rbegin(), textures_.rend(), [&](const auto& old) {
+                return !old.pinned && old.source->dynamic &&
+                       old.source->width == next.source->width &&
+                       old.source->height == next.source->height &&
+                       old.source->mips.size() == next.source->mips.size() &&
+                       std::ranges::equal(
+                           old.source->mips, next.source->mips, [](const auto& a, const auto& b) {
+                               return a.width == b.width && a.height == b.height;
+                           });
+            });
+        if (victim != textures_.rend()) {
+            const auto entry = std::prev(victim.base());
+            next.gpu = entry->gpu;
+            r.textures.push_back(next.gpu);
+            eraseCached(entry);
+            ++reuses;
+        }
+    }
     // Protect every entry referenced by this frame while evicting older data.
     // Batch limits guarantee that the protected and pending set fits together.
     const auto frameEntries =
         pending.size() + std::size_t(std::ranges::count_if(textures_, [](const auto& t) {
             return t.pinned;
         }));
-    const auto entryLimit = std::max(std::size_t{257}, frameEntries);
+    const auto entryLimit = std::max(std::size_t{1024}, frameEntries);
     while (textures_.size() + pending.size() > entryLimit ||
            stats_.bytes + pendingBytes > Bitmap::MaxFileBytes) {
         const auto victim =
@@ -540,17 +580,8 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
             return nullptr;
         }
         const auto oldest = std::prev(victim.base());
-        const auto [first, last] = textureIndex_.equal_range(oldest->hash);
-        for (auto it = first; it != last; ++it) {
-            if (it->second == oldest) {
-                textureIndex_.erase(it);
-                break;
-            }
-        }
         SDL_ReleaseGPUTexture(device_, oldest->gpu);
-        stats_.bytes -= oldest->bytes;
-        textures_.erase(oldest);
-        --stats_.textures;
+        eraseCached(oldest);
         ++stats_.evictions;
     }
     transferBytes = vertexBytes;
@@ -561,7 +592,6 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
         t.offset = UInt32(align(transferBytes, 512));
         transferBytes = t.offset + UInt64(t.pitch) * t.height;
     }
-    Resources r{device_, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, {}};
     if (!prepareResources(width, height, vertexBytes, UInt32(transferBytes), gamma != 1)) {
         return nullptr;
     }
@@ -571,6 +601,9 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
     r.vertices = vertices_;
     r.transfer = transfer_;
     for (auto& t : pending) {
+        if (t.gpu) {
+            continue;
+        }
         t.gpu = texture(device_,
                         t.source->width,
                         t.source->height,
@@ -742,6 +775,7 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
     }
     submission_ = submission;
     stats_.uploads += pending.size();
+    stats_.reuses += reuses;
     stats_.hits += hits;
     stats_.bytes += pendingBytes;
     textures_.splice(textures_.begin(), pending);

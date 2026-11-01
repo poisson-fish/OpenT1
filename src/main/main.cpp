@@ -925,7 +925,7 @@ protected:
                 guiInput_->presentation(app_.guiPresentation(
                     {targetSurface->bitmap().width, targetSurface->bitmap().height}));
             }
-            if (firstFrameNonZeroPixels_ == 0) {
+            if (opts_.smoke && !hardware && firstFrameNonZeroPixels_ == 0) {
                 firstFrameNonZeroPixels_ = countNonZeroSurfaceBytes(*targetSurface);
             }
             if (gpuSurface_) {
@@ -948,7 +948,17 @@ protected:
                         std::vector<std::byte> readbackBuf(
                             static_cast<std::size_t>(targetSurface->bitmap().width) *
                             static_cast<std::size_t>(targetSurface->bitmap().height) * 4u);
-                        (void)gpuSurface_->readback(readbackBuf);
+                        if (gpuSurface_->readback(readbackBuf) && hardware) {
+                            // Hardware HUDs can bypass the indexed framebuffer.
+                            // Inspect actual presented RGB rather than alpha or
+                            // an intentionally empty software staging surface.
+                            firstFrameNonZeroPixels_ = 0;
+                            for (std::size_t i = 0; i < readbackBuf.size(); i += 4) {
+                                firstFrameNonZeroPixels_ += readbackBuf[i] != std::byte{} ||
+                                                            readbackBuf[i + 1] != std::byte{} ||
+                                                            readbackBuf[i + 2] != std::byte{};
+                            }
+                        }
                     }
                 }
             } else if (window) {
@@ -1032,12 +1042,17 @@ protected:
                       << " hardwareSkyPolygons=" << work.hardwareSkyPolygons;
             if (hardware) {
                 const auto submitted = gpuSurface_->submissionStats();
+                const auto textures = gpuSurface_->textureCacheStats();
                 std::cout << " inputDraws=" << submitted.inputDraws << " draws=" << submitted.draws
                           << " pipelines=" << submitted.pipelineBinds
                           << " samplers=" << submitted.samplerBinds
                           << " vertexUniforms=" << submitted.vertexUniformPushes
                           << " fragmentUniforms=" << submitted.fragmentUniformPushes
-                          << " fenceWait=" << submitted.fenceWaitMs;
+                          << " fenceWait=" << submitted.fenceWaitMs
+                          << " gpuUploads=" << textures.uploads << " gpuReuses=" << textures.reuses
+                          << " gpuEvictions=" << textures.evictions
+                          << " gpuTextures=" << textures.textures
+                          << " gpuTextureBytes=" << textures.bytes;
             }
             std::cout << '\n';
         }

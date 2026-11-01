@@ -1,7 +1,9 @@
 #include <opent1/gfx/bitmap_palette_font.hpp>
+#include <opent1/gfx/bitmap_content.hpp>
 #include <opent1/core/mem_stream.hpp>
 #include <algorithm>
 #include <bit>
+#include <cstring>
 #include <limits>
 #include <ranges>
 
@@ -670,6 +672,49 @@ std::span<std::byte> Bitmap::row(Int32 y, Int32 detail) {
     return part.empty()
                ? std::span<std::byte>{}
                : std::span(pixels).subspan(std::size_t(part.data() - pixels.data()), part.size());
+}
+
+std::optional<RectI> indexedContentBounds(const Bitmap& bitmap) {
+    if (bitmap.bitDepth != 8 || !bitmap.valid()) {
+        return {};
+    }
+    RectI result{bitmap.width, bitmap.height, -1, -1};
+    for (Int32 y = 0; y < bitmap.height; ++y) {
+        const auto row = bitmap.row(y);
+        std::size_t first = 0, last = row.size();
+        // Word loads skip sparse zero spans without alignment assumptions or
+        // reading padding/beyond the row. Boundary bytes keep this endian-neutral.
+        while (row.size() - first >= sizeof(UInt64)) {
+            UInt64 word{};
+            std::memcpy(&word, row.data() + first, sizeof(word));
+            if (word) {
+                break;
+            }
+            first += sizeof(word);
+        }
+        while (first < row.size() && row[first] == std::byte{}) {
+            ++first;
+        }
+        if (first == row.size()) {
+            continue;
+        }
+        while (last - first >= sizeof(UInt64)) {
+            UInt64 word{};
+            std::memcpy(&word, row.data() + last - sizeof(word), sizeof(word));
+            if (word) {
+                break;
+            }
+            last -= sizeof(word);
+        }
+        while (last > first && row[last - 1] == std::byte{}) {
+            --last;
+        }
+        result.left = std::min(result.left, Int32(first));
+        result.right = std::max(result.right, Int32(last - 1));
+        result.top = std::min(result.top, y);
+        result.bottom = y;
+    }
+    return result;
 }
 
 std::unique_ptr<Bitmap> Bitmap::crop(RectI region) const {

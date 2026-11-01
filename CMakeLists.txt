@@ -173,9 +173,12 @@ if(OPENT1_BUILD_PLATFORM)
         )
         fetchcontent_declare(
             SDL3
-            URL https://libsdl.org/release/SDL3-3.4.2.tar.gz
+            URL https://github.com/libsdl-org/SDL/releases/download/release-3.4.2/SDL3-3.4.2.tar.gz
             URL_HASH SHA256=ef39a2e3f9a8a78296c40da701967dd1b0d0d6e267e483863ce70f8a03b4050c
+            DOWNLOAD_DIR "${CMAKE_BINARY_DIR}/downloads"
             DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+            TIMEOUT 120
+            INACTIVITY_TIMEOUT 30
         )
         fetchcontent_makeavailable(SDL3)
         include(cmake/SDL3EventWatch.cmake)

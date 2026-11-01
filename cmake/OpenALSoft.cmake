@@ -25,7 +25,10 @@ fetchcontent_declare(
     openal_soft
     URL https://openal-soft.org/openal-releases/openal-soft-1.25.2.tar.bz2
     URL_HASH SHA256=1dbaac44e7579d5bc8847ca8db4b2e8b9fd3961041f35ee20def4958301e1089
+    DOWNLOAD_DIR "${CMAKE_BINARY_DIR}/downloads"
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    TIMEOUT 120
+    INACTIVITY_TIMEOUT 30
 )
 fetchcontent_makeavailable(openal_soft)
 add_library(

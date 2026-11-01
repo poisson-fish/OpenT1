@@ -21,8 +21,15 @@ ctest --preset x64-debug
 ```
 
 The first desktop configuration needs internet access to fetch dependencies.
-SDL3 3.4.2 is fetched if no suitable installed SDL3 package is found. OpenAL
-Soft 1.25.2 is built as a shared library. Both downloads have SHA-256 checks.
+SDL3 3.4.2 is fetched from its official GitHub release if no suitable installed
+SDL3 package is found. OpenAL Soft 1.25.2 is built as a shared library. Both
+downloads have SHA-256 checks, a 120-second timeout per attempt, and a 30-second
+inactivity timeout. CMake may retry failed downloads. The desktop presets and
+CI show download progress so a stalled connection is visible.
+Archives are kept in `<binary directory>/downloads`. CI restores these archives
+before configuration and saves them after successful configuration, even if a
+later build or test fails. Restored archives are checked against their pinned
+SHA-256 hashes before use.
 The presets keep build output, fetched dependencies and embedded shader headers
 under `build/`. Custom configurations use their chosen binary directory. The
 downloaded SDL source receives a build-local event-watch dispatch correction;

@@ -37,6 +37,15 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v6
+      - name: Restore dependency downloads
+        if: matrix.configuration == 'desktop'
+        id: dependency-downloads
+        uses: actions/cache/restore@v6
+        with:
+          path: build/ci/downloads
+          key: dependency-downloads-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('CMakeLists.txt', 'cmake/OpenALSoft.cmake') }}
+          restore-keys: |
+            dependency-downloads-v1-${{ runner.os }}-${{ runner.arch }}-
       - name: Install macOS toolchain
         if: runner.os == 'macOS'
         run: |
@@ -78,8 +87,14 @@ jobs:
           # All platform arguments are fixed values from the matrix above.
           read -r -a platform_options <<< "$PLATFORM_CMAKE_ARGS"
           cmake -S . -B build/ci -G Ninja -DCMAKE_BUILD_TYPE=Debug \
-            -DBUILD_TESTING=ON -DOPENT1_BUILD_TERRAIN2=ON \
+            -DBUILD_TESTING=ON -DOPENT1_BUILD_TERRAIN2=ON -DFETCHCONTENT_QUIET=OFF \
             "${platform_options[@]}" "${options[@]}"
+      - name: Save dependency downloads
+        if: matrix.configuration == 'desktop' && steps.dependency-downloads.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: build/ci/downloads
+          key: ${{ steps.dependency-downloads.outputs.cache-primary-key }}
       - name: Build all targets
         run: cmake --build build/ci --parallel 3
       - name: Test

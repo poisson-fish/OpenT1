@@ -624,6 +624,9 @@ UInt32 Vehicle::packUpdate(sim::network::GhostManager& g, UInt32 mask, BitStream
     if (stream.writeFlag((mask & SoundMask) != 0)) {
         stream.writeInt(soundState_, 2);
     }
+    if (getGhostTag() == VehiclePersTag && sensorKey != -1) {
+        stream.writeInt(sensorKey + 1, 8);
+    }
 
     return retMask;
 }
@@ -633,6 +636,7 @@ bool Vehicle::unpackUpdate(sim::network::GhostManager& g, BitStream& stream) {
 
     const auto savedDatId = datFileId_;
     const auto savedInitVeh = hasUnpackedInitialVehicle_;
+    const auto savedSensorKey = sensorKey;
     const auto savedRot = getRot();
     const auto savedDesRot = desiredRot_;
     const auto savedPos = getPos();
@@ -651,6 +655,7 @@ bool Vehicle::unpackUpdate(sim::network::GhostManager& g, BitStream& stream) {
     const auto rollback = [&]() noexcept {
         datFileId_ = savedDatId;
         hasUnpackedInitialVehicle_ = savedInitVeh;
+        sensorKey = savedSensorKey;
         setRot(savedRot);
         desiredRot_ = savedDesRot;
         setPos(savedPos);
@@ -742,6 +747,9 @@ bool Vehicle::unpackUpdate(sim::network::GhostManager& g, BitStream& stream) {
 
     if (stream.readFlag()) {
         soundState_ = stream.readInt(2);
+    }
+    if (getGhostTag() == VehiclePersTag && stream.remainingReadBits() != 0) {
+        sensorKey = stream.readInt(8) - 1;
     }
 
     if (!stream.isValid()) {

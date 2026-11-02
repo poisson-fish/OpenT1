@@ -4858,6 +4858,8 @@ gui::Presentation FearGameApp::guiPresentation(Point2I pixels) const {
 void FearGameApp::trimRenderCaches() {
     softwareTextureCache_.clear();
     gfx::clearHardwareTextureConversions();
+    if (resources_)
+        resources_->purge(true);
 }
 
 bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,

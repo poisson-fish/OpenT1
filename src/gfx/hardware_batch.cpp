@@ -460,9 +460,10 @@ std::optional<HardwareBatch> HardwareBatch::prepare(std::span<const HardwarePoly
     if (!std::ranges::all_of(polygons, [&](const auto& p) {
             const auto& m = p.material;
             if (p.mesh &&
-                (m.blend != HardwareBlend::Opaque || m.deferredHaze ||
+                (m.blend != HardwareBlend::Opaque || m.deferredHaze || m.twoSided ||
                  m.shadeSource != PolygonSource::None || m.hazeSource != PolygonSource::None ||
-                 p.indexCount == 0 || p.indexCount % 3 || p.firstIndex > p.mesh->indices().size() ||
+                 p.indexCount == 0 || p.indexCount % 3 || p.firstIndex % 3 ||
+                 p.firstIndex > p.mesh->indices().size() ||
                  p.indexCount > p.mesh->indices().size() - p.firstIndex ||
                  !std::ranges::all_of(p.transform.camera,
                                       [](const auto& row) {
@@ -475,8 +476,9 @@ std::optional<HardwareBatch> HardwareBatch::prepare(std::span<const HardwarePoly
                                           return std::isfinite(value);
                                       }) ||
                  !std::isfinite(p.transform.clip[0]) || !std::isfinite(p.transform.clip[1]) ||
-                 p.transform.clip[0] <= 0 || p.transform.clip[1] <= p.transform.clip[0] ||
-                 p.transform.clip[2] != 1))
+                 p.transform.optics[0] <= 0 || p.transform.optics[1] <= 0 ||
+                 p.transform.clip[0] < 1.f / 65536 || p.transform.clip[1] > 65536 ||
+                 p.transform.clip[1] <= p.transform.clip[0] || p.transform.clip[2] != 1))
                 return false;
             if (p.vertices.size() < 3 || p.vertices.size() > 100 ||
                 p.vertices.size() > renderLimits().vertices - inputVertices || !valid(m)) {
@@ -742,8 +744,8 @@ std::shared_ptr<const HardwareMesh> HardwareMesh::create(std::vector<HardwareVer
                                  return i < vertices.size();
                              }) ||
         !std::ranges::all_of(vertices, [](const auto& v) {
-            return std::isfinite(v.position.x) && std::isfinite(v.position.y) &&
-                   std::isfinite(v.inverseDepth) && bounded(v.texture.x, 65536) &&
+            return bounded(v.position.x, 1e12f) && bounded(v.position.y, 1e12f) &&
+                   bounded(v.inverseDepth, 1e12f) && bounded(v.texture.x, 65536) &&
                    bounded(v.texture.y, 65536) && bounded(v.lightMap.x, 65536) &&
                    bounded(v.lightMap.y, 65536) && unit(v.color) && unit(v.haze) && unit(v.opacity);
         }))

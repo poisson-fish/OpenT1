@@ -75,6 +75,9 @@ void retainedMesh(platform::SdlWindow& window) {
     vertices[2].inverseDepth = -1;
     const auto mesh = gfx::HardwareMesh::create(vertices, {0, 1, 2});
     CHECK(mesh && !gfx::HardwareMesh::create(vertices, {0, 1, 9}));
+    auto invalid = vertices;
+    invalid[0].position.x = 1e13f;
+    CHECK(!gfx::HardwareMesh::create(std::move(invalid), {0, 1, 2}));
     const std::array<gfx::PolygonVertex, 3> placeholder{{{{0, 0}}, {{1, 0}}, {{0, 1}}}};
     gfx::HardwareMaterial material;
     material.color = {1, 0, 0};

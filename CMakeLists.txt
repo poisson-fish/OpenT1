@@ -645,6 +645,10 @@ endif()
 add_executable(opent1 src/main/main.cpp)
 target_compile_definitions(opent1 PRIVATE OPENT1_STANDALONE_EXECUTABLE=1)
 target_link_libraries(opent1 PRIVATE opent1_game)
+if(OPENT1_BUILD_PLATFORM)
+    add_executable(opent1_render_benchmark EXCLUDE_FROM_ALL tools/render_benchmark.cpp)
+    target_link_libraries(opent1_render_benchmark PRIVATE opent1_game opent1_gfx_sdl)
+endif()
 if(OPENT1_BUILD_AUDIO)
     add_custom_command(
         TARGET opent1

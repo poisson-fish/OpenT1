@@ -1,0 +1,753 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-02",
+  "host": "Windows x64 Release, D3D12, RTX 5090; local server/client, 800x600, 120 warmup + 240 measured frames",
+  "notes": [
+    "Ordinary executable without allocation tracking. No audio or presentation. Camera paths repeat deterministically. Final readback comparisons only at this stage.",
+    "Early lighting runs overlapped brief regression testing; use later serial comparisons for performance conclusions."
+  ],
+  "stages": {
+    "before": {
+      "base-Raindance-rotate": {
+        "mission": "Raindance",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 170.406,
+        "frame_ms": {
+          "mean": 3.47367,
+          "p95": 6.5984,
+          "p99": 7.7828
+        },
+        "prepare_ms": {
+          "mean": 2.26963,
+          "p95": 3.5149,
+          "p99": 4.0803
+        },
+        "capture_ms": {
+          "mean": 1.13679,
+          "p95": 1.9921,
+          "p99": 2.2121
+        },
+        "submit_ms": {
+          "mean": 0.721463,
+          "p95": 2.5748,
+          "p99": 3.5813
+        },
+        "simulation_ms": {
+          "mean": 0.482469,
+          "p95": 0.6712,
+          "p99": 0.7979
+        },
+        "mean_polygons": 1626.54,
+        "mean_draws": 430.387,
+        "mean_binds": 420.296,
+        "textures": 1769,
+        "texture_bytes": 11381776,
+        "texture_uploads": 2128,
+        "texture_evictions": 0,
+        "vertex_capacity": 524288,
+        "staging_capacity": 8388608
+      },
+      "base-Raindance-stationary": {
+        "mission": "Raindance",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 199.672,
+        "frame_ms": {
+          "mean": 2.3314,
+          "p95": 2.4909,
+          "p99": 2.6281
+        },
+        "prepare_ms": {
+          "mean": 1.71133,
+          "p95": 1.8219,
+          "p99": 1.876
+        },
+        "capture_ms": {
+          "mean": 0.879922,
+          "p95": 0.9089,
+          "p99": 0.9384
+        },
+        "submit_ms": {
+          "mean": 0.212328,
+          "p95": 0.2466,
+          "p99": 0.2701
+        },
+        "simulation_ms": {
+          "mean": 0.407664,
+          "p95": 0.4325,
+          "p99": 0.491
+        },
+        "mean_polygons": 1594,
+        "mean_draws": 393,
+        "mean_binds": 385,
+        "textures": 368,
+        "texture_bytes": 4956292,
+        "texture_uploads": 483,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608
+      },
+      "base-Raindance-travel": {
+        "mission": "Raindance",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 172.798,
+        "frame_ms": {
+          "mean": 5.03985,
+          "p95": 8.6806,
+          "p99": 10.3236
+        },
+        "prepare_ms": {
+          "mean": 2.80861,
+          "p95": 4.1726,
+          "p99": 4.6613
+        },
+        "capture_ms": {
+          "mean": 1.41382,
+          "p95": 2.3606,
+          "p99": 2.494
+        },
+        "submit_ms": {
+          "mean": 1.70043,
+          "p95": 4.0792,
+          "p99": 5.2988
+        },
+        "simulation_ms": {
+          "mean": 0.530682,
+          "p95": 0.6765,
+          "p99": 0.7052
+        },
+        "mean_polygons": 1797.4,
+        "mean_draws": 494.196,
+        "mean_binds": 483.946,
+        "textures": 3340,
+        "texture_bytes": 23354336,
+        "texture_uploads": 3699,
+        "texture_evictions": 0,
+        "vertex_capacity": 524288,
+        "staging_capacity": 8388608
+      },
+      "rpg-rpgmap1-rotate": {
+        "mission": "rpgmap1",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 477.413,
+        "frame_ms": {
+          "mean": 13.4532,
+          "p95": 21.439,
+          "p99": 23.4009
+        },
+        "prepare_ms": {
+          "mean": 4.80694,
+          "p95": 8.7345,
+          "p99": 9.2787
+        },
+        "capture_ms": {
+          "mean": 2.86339,
+          "p95": 5.4699,
+          "p99": 5.8269
+        },
+        "submit_ms": {
+          "mean": 1.27802,
+          "p95": 4.5902,
+          "p99": 6.0426
+        },
+        "simulation_ms": {
+          "mean": 7.3681,
+          "p95": 9.4235,
+          "p99": 11.543
+        },
+        "mean_polygons": 3073.15,
+        "mean_draws": 951.471,
+        "mean_binds": 930.204,
+        "textures": 3048,
+        "texture_bytes": 11288420,
+        "texture_uploads": 3049,
+        "texture_evictions": 0,
+        "vertex_capacity": 1048576,
+        "staging_capacity": 16777216
+      },
+      "rpg-rpgmap1-stationary": {
+        "mission": "rpgmap1",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 499.971,
+        "frame_ms": {
+          "mean": 15.0648,
+          "p95": 18.3687,
+          "p99": 23.1498
+        },
+        "prepare_ms": {
+          "mean": 6.22228,
+          "p95": 7.7072,
+          "p99": 8.7996
+        },
+        "capture_ms": {
+          "mean": 3.83979,
+          "p95": 4.8536,
+          "p99": 5.5084
+        },
+        "submit_ms": {
+          "mean": 1.89378,
+          "p95": 3.8895,
+          "p99": 4.0752
+        },
+        "simulation_ms": {
+          "mean": 6.94853,
+          "p95": 8.4169,
+          "p99": 10.7879
+        },
+        "mean_polygons": 5646.98,
+        "mean_draws": 1597,
+        "mean_binds": 1575,
+        "textures": 2766,
+        "texture_bytes": 9469688,
+        "texture_uploads": 2767,
+        "texture_evictions": 0,
+        "vertex_capacity": 1048576,
+        "staging_capacity": 16777216
+      },
+      "rpg-rpgmap1-travel": {
+        "mission": "rpgmap1",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 488.908,
+        "frame_ms": {
+          "mean": 13.1683,
+          "p95": 19.6401,
+          "p99": 20.8929
+        },
+        "prepare_ms": {
+          "mean": 4.4112,
+          "p95": 8.0691,
+          "p99": 8.3739
+        },
+        "capture_ms": {
+          "mean": 2.63202,
+          "p95": 4.9348,
+          "p99": 5.1944
+        },
+        "submit_ms": {
+          "mean": 2.0226,
+          "p95": 4.4694,
+          "p99": 5.2461
+        },
+        "simulation_ms": {
+          "mean": 6.73441,
+          "p95": 7.5678,
+          "p99": 9.0771
+        },
+        "mean_polygons": 3043.28,
+        "mean_draws": 923.975,
+        "mean_binds": 903.05,
+        "textures": 4591,
+        "texture_bytes": 14939508,
+        "texture_uploads": 4592,
+        "texture_evictions": 0,
+        "vertex_capacity": 1048576,
+        "staging_capacity": 16777216
+      },
+      "rpg-rpgmap5-rotate": {
+        "mission": "rpgmap5",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 497.093,
+        "frame_ms": {
+          "mean": 12.6589,
+          "p95": 19.7569,
+          "p99": 23.4239
+        },
+        "prepare_ms": {
+          "mean": 6.44582,
+          "p95": 8.6299,
+          "p99": 9.158
+        },
+        "capture_ms": {
+          "mean": 4.14,
+          "p95": 5.9529,
+          "p99": 6.4437
+        },
+        "submit_ms": {
+          "mean": 2.05953,
+          "p95": 6.9784,
+          "p99": 10.8442
+        },
+        "simulation_ms": {
+          "mean": 4.15346,
+          "p95": 4.4862,
+          "p99": 5.0606
+        },
+        "mean_polygons": 4622.19,
+        "mean_draws": 1204.05,
+        "mean_binds": 1192.61,
+        "textures": 4785,
+        "texture_bytes": 16238212,
+        "texture_uploads": 4786,
+        "texture_evictions": 0,
+        "vertex_capacity": 1048576,
+        "staging_capacity": 16777216
+      },
+      "rpg-rpgmap5-stationary": {
+        "mission": "rpgmap5",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 536.43,
+        "frame_ms": {
+          "mean": 12.8853,
+          "p95": 16.5397,
+          "p99": 19.7806
+        },
+        "prepare_ms": {
+          "mean": 6.64001,
+          "p95": 7.8446,
+          "p99": 9.8351
+        },
+        "capture_ms": {
+          "mean": 4.20126,
+          "p95": 5.0217,
+          "p99": 6.4107
+        },
+        "submit_ms": {
+          "mean": 2.07749,
+          "p95": 5.0132,
+          "p99": 5.4781
+        },
+        "simulation_ms": {
+          "mean": 4.16765,
+          "p95": 5.3482,
+          "p99": 6.2624
+        },
+        "mean_polygons": 5923.02,
+        "mean_draws": 1641.13,
+        "mean_binds": 1626.13,
+        "textures": 3737,
+        "texture_bytes": 12326148,
+        "texture_uploads": 3738,
+        "texture_evictions": 0,
+        "vertex_capacity": 1048576,
+        "staging_capacity": 16777216
+      },
+      "rpg-rpgmap5-travel": {
+        "mission": "rpgmap5",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 534.316,
+        "frame_ms": {
+          "mean": 13.6135,
+          "p95": 19.1304,
+          "p99": 20.6694
+        },
+        "prepare_ms": {
+          "mean": 6.62439,
+          "p95": 9.3397,
+          "p99": 10.7099
+        },
+        "capture_ms": {
+          "mean": 4.28842,
+          "p95": 6.6024,
+          "p99": 7.5948
+        },
+        "submit_ms": {
+          "mean": 2.74013,
+          "p95": 6.9262,
+          "p99": 8.6352
+        },
+        "simulation_ms": {
+          "mean": 4.24881,
+          "p95": 4.7074,
+          "p99": 5.3797
+        },
+        "mean_polygons": 4583.77,
+        "mean_draws": 1125.48,
+        "mean_binds": 1116.83,
+        "textures": 6168,
+        "texture_bytes": 19841872,
+        "texture_uploads": 6169,
+        "texture_evictions": 0,
+        "vertex_capacity": 1048576,
+        "staging_capacity": 16777216
+      }
+    },
+    "independent_lighting": {
+      "base-Raindance-rotate": {
+        "mission": "Raindance",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 166.373,
+        "frame_ms": {
+          "mean": 3.38689,
+          "p95": 6.3756,
+          "p99": 7.1381
+        },
+        "prepare_ms": {
+          "mean": 2.25226,
+          "p95": 3.4729,
+          "p99": 3.6717
+        },
+        "capture_ms": {
+          "mean": 1.15676,
+          "p95": 2.0167,
+          "p99": 2.1481
+        },
+        "submit_ms": {
+          "mean": 0.678457,
+          "p95": 2.3136,
+          "p99": 3.2098
+        },
+        "simulation_ms": {
+          "mean": 0.456086,
+          "p95": 0.5413,
+          "p99": 0.5648
+        },
+        "mean_polygons": 1626.54,
+        "mean_draws": 430.387,
+        "mean_binds": 420.296,
+        "textures": 1769,
+        "texture_bytes": 11381776,
+        "texture_uploads": 2128,
+        "texture_evictions": 0,
+        "vertex_capacity": 524288,
+        "staging_capacity": 8388608
+      },
+      "base-Raindance-stationary": {
+        "mission": "Raindance",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 168.978,
+        "frame_ms": {
+          "mean": 2.6301,
+          "p95": 2.9339,
+          "p99": 3.1981
+        },
+        "prepare_ms": {
+          "mean": 1.95216,
+          "p95": 2.1579,
+          "p99": 2.2851
+        },
+        "capture_ms": {
+          "mean": 1.02656,
+          "p95": 1.1262,
+          "p99": 1.1698
+        },
+        "submit_ms": {
+          "mean": 0.23601,
+          "p95": 0.3036,
+          "p99": 0.3372
+        },
+        "simulation_ms": {
+          "mean": 0.441847,
+          "p95": 0.5208,
+          "p99": 0.5379
+        },
+        "mean_polygons": 1594,
+        "mean_draws": 393,
+        "mean_binds": 385,
+        "textures": 368,
+        "texture_bytes": 4956292,
+        "texture_uploads": 483,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608
+      },
+      "base-Raindance-travel": {
+        "mission": "Raindance",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 170.422,
+        "frame_ms": {
+          "mean": 4.83118,
+          "p95": 8.142,
+          "p99": 9.5829
+        },
+        "prepare_ms": {
+          "mean": 2.78615,
+          "p95": 4.1772,
+          "p99": 4.6141
+        },
+        "capture_ms": {
+          "mean": 1.43513,
+          "p95": 2.3529,
+          "p99": 2.6068
+        },
+        "submit_ms": {
+          "mean": 1.53621,
+          "p95": 3.624,
+          "p99": 4.6488
+        },
+        "simulation_ms": {
+          "mean": 0.508711,
+          "p95": 0.6041,
+          "p99": 0.6478
+        },
+        "mean_polygons": 1797.4,
+        "mean_draws": 494.196,
+        "mean_binds": 483.946,
+        "textures": 3340,
+        "texture_bytes": 23354336,
+        "texture_uploads": 3699,
+        "texture_evictions": 0,
+        "vertex_capacity": 524288,
+        "staging_capacity": 8388608
+      },
+      "rpg-rpgmap1-rotate": {
+        "mission": "rpgmap1",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 476.008,
+        "frame_ms": {
+          "mean": 12.2647,
+          "p95": 19.0685,
+          "p99": 20.7358
+        },
+        "prepare_ms": {
+          "mean": 4.26048,
+          "p95": 7.6391,
+          "p99": 7.8388
+        },
+        "capture_ms": {
+          "mean": 2.69842,
+          "p95": 5.0289,
+          "p99": 5.1505
+        },
+        "submit_ms": {
+          "mean": 0.889214,
+          "p95": 3.996,
+          "p99": 4.8515
+        },
+        "simulation_ms": {
+          "mean": 7.11485,
+          "p95": 9.0621,
+          "p99": 10.7494
+        },
+        "mean_polygons": 3073.15,
+        "mean_draws": 951.471,
+        "mean_binds": 930.204,
+        "textures": 3048,
+        "texture_bytes": 11288420,
+        "texture_uploads": 3049,
+        "texture_evictions": 0,
+        "vertex_capacity": 1048576,
+        "staging_capacity": 16777216
+      },
+      "rpg-rpgmap1-stationary": {
+        "mission": "rpgmap1",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 481.022,
+        "frame_ms": {
+          "mean": 13.9307,
+          "p95": 16.8161,
+          "p99": 19.7295
+        },
+        "prepare_ms": {
+          "mean": 5.70517,
+          "p95": 6.5637,
+          "p99": 7.8228
+        },
+        "capture_ms": {
+          "mean": 3.76836,
+          "p95": 4.4573,
+          "p99": 5.6782
+        },
+        "submit_ms": {
+          "mean": 1.56188,
+          "p95": 3.388,
+          "p99": 3.6693
+        },
+        "simulation_ms": {
+          "mean": 6.66349,
+          "p95": 7.7508,
+          "p99": 9.8725
+        },
+        "mean_polygons": 5646.98,
+        "mean_draws": 1597,
+        "mean_binds": 1575,
+        "textures": 2766,
+        "texture_bytes": 9469688,
+        "texture_uploads": 2767,
+        "texture_evictions": 0,
+        "vertex_capacity": 1048576,
+        "staging_capacity": 16777216
+      },
+      "rpg-rpgmap1-travel": {
+        "mission": "rpgmap1",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 471.322,
+        "frame_ms": {
+          "mean": 13.2697,
+          "p95": 20.2494,
+          "p99": 22.2748
+        },
+        "prepare_ms": {
+          "mean": 4.30988,
+          "p95": 7.8408,
+          "p99": 8.2733
+        },
+        "capture_ms": {
+          "mean": 2.72181,
+          "p95": 5.1177,
+          "p99": 5.2824
+        },
+        "submit_ms": {
+          "mean": 1.76618,
+          "p95": 4.6954,
+          "p99": 5.5265
+        },
+        "simulation_ms": {
+          "mean": 7.19351,
+          "p95": 9.7242,
+          "p99": 10.4725
+        },
+        "mean_polygons": 3043.28,
+        "mean_draws": 923.975,
+        "mean_binds": 903.05,
+        "textures": 4591,
+        "texture_bytes": 14939508,
+        "texture_uploads": 4592,
+        "texture_evictions": 0,
+        "vertex_capacity": 1048576,
+        "staging_capacity": 16777216
+      },
+      "rpg-rpgmap5-rotate": {
+        "mission": "rpgmap5",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 511.689,
+        "frame_ms": {
+          "mean": 11.1835,
+          "p95": 17.4698,
+          "p99": 20.7865
+        },
+        "prepare_ms": {
+          "mean": 5.80737,
+          "p95": 7.6288,
+          "p99": 7.908
+        },
+        "capture_ms": {
+          "mean": 3.99007,
+          "p95": 5.6463,
+          "p99": 5.8208
+        },
+        "submit_ms": {
+          "mean": 1.49873,
+          "p95": 6.2851,
+          "p99": 9.4425
+        },
+        "simulation_ms": {
+          "mean": 3.87727,
+          "p95": 4.0213,
+          "p99": 4.1694
+        },
+        "mean_polygons": 4622.19,
+        "mean_draws": 1204.05,
+        "mean_binds": 1192.61,
+        "textures": 4785,
+        "texture_bytes": 16238212,
+        "texture_uploads": 4786,
+        "texture_evictions": 0,
+        "vertex_capacity": 1048576,
+        "staging_capacity": 16777216
+      },
+      "rpg-rpgmap5-stationary": {
+        "mission": "rpgmap5",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 494.698,
+        "frame_ms": {
+          "mean": 12.0682,
+          "p95": 15.8282,
+          "p99": 18.5287
+        },
+        "prepare_ms": {
+          "mean": 6.38393,
+          "p95": 8.0044,
+          "p99": 9.5503
+        },
+        "capture_ms": {
+          "mean": 4.40271,
+          "p95": 5.4583,
+          "p99": 6.5677
+        },
+        "submit_ms": {
+          "mean": 1.73282,
+          "p95": 4.4132,
+          "p99": 5.1901
+        },
+        "simulation_ms": {
+          "mean": 3.9513,
+          "p95": 4.3854,
+          "p99": 6.0807
+        },
+        "mean_polygons": 5923.02,
+        "mean_draws": 1641.13,
+        "mean_binds": 1626.13,
+        "textures": 3737,
+        "texture_bytes": 12326148,
+        "texture_uploads": 3738,
+        "texture_evictions": 0,
+        "vertex_capacity": 1048576,
+        "staging_capacity": 16777216
+      },
+      "rpg-rpgmap5-travel": {
+        "mission": "rpgmap5",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 503.048,
+        "frame_ms": {
+          "mean": 11.9058,
+          "p95": 16.8413,
+          "p99": 17.984
+        },
+        "prepare_ms": {
+          "mean": 5.91057,
+          "p95": 7.8227,
+          "p99": 9.0452
+        },
+        "capture_ms": {
+          "mean": 4.09182,
+          "p95": 5.9198,
+          "p99": 7.0181
+        },
+        "submit_ms": {
+          "mean": 2.06367,
+          "p95": 5.8494,
+          "p99": 8.1733
+        },
+        "simulation_ms": {
+          "mean": 3.93145,
+          "p95": 4.1295,
+          "p99": 4.4735
+        },
+        "mean_polygons": 4583.77,
+        "mean_draws": 1125.48,
+        "mean_binds": 1116.83,
+        "textures": 6168,
+        "texture_bytes": 19841872,
+        "texture_uploads": 6169,
+        "texture_evictions": 0,
+        "vertex_capacity": 1048576,
+        "staging_capacity": 16777216
+      }
+    }
+  }
+}

@@ -140,6 +140,11 @@ struct ResourceMatch {
 // Loaders may load dependencies; cycles fail. Loaders must not mutate paths/mounts.
 class ResourceManager {
 public:
+    struct ArchiveMemoryStats {
+        UInt64 mappedBytes{}, ownedBufferBytes{}, decodeStagingBytes{};
+    };
+
+    [[nodiscard]] ArchiveMemoryStats archiveMemoryStats() const;
     ResourceManager();
     ~ResourceManager();
     ResourceManager(const ResourceManager&) = delete;

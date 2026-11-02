@@ -66,6 +66,7 @@ add_library(
     src/core/rle_stream.cpp
     src/core/lzh_stream.cpp
     src/core/vol_stream.cpp
+    src/core/mapped_file.cpp
     src/core/file_stream.cpp
     src/core/string_table.cpp
     src/core/timer.cpp

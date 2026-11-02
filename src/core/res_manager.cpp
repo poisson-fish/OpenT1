@@ -358,6 +358,16 @@ std::vector<std::string> ResourceManager::mountedVolumes() const {
     return names;
 }
 
+ResourceManager::ArchiveMemoryStats ResourceManager::archiveMemoryStats() const {
+    ArchiveMemoryStats result;
+    for (const auto& volume : impl_->volumes) {
+        result.mappedBytes += volume->stream.mappedBytes();
+        result.ownedBufferBytes += volume->stream.ownedBackingBytes();
+        result.decodeStagingBytes += volume->stream.decodeStagingBytes();
+    }
+    return result;
+}
+
 std::optional<UInt32> ResourceManager::getSize(std::string_view name) const {
     const auto key = keyOf(name);
     if (!key) {

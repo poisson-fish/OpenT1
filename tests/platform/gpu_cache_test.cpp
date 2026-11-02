@@ -428,7 +428,8 @@ void terrainReadbacks(platform::SdlWindow& window) {
         view.focal = {32, 32};
         view.center = {32, 32};
         view.nearDistance = .1f;
-        view.farDistance = 8;
+        view.farDistance =
+            key & 1U ? 7.f : 8.f; // draw clipping can differ from the terrain haze limit
         view.shapeToCamera.p.z = -1;
         const auto projectedFrame = mesh.prepare(view);
         CHECK(projectedFrame);
@@ -494,6 +495,10 @@ void shapeReadbacks(platform::SdlWindow& window) {
                     view.nearDistance = .1f;
                     view.farDistance = 20;
                     view.shapeToCamera.p.y = depth;
+                    if (pointMode == 3 && alpha == 0x1000U) {
+                        view.shapeToCamera.m[0][0] = -1;
+                        view.shapeToCamera.flags |= RMat3F::Matrix_HasRotation;
+                    }
                     view.haze = .35f;
                     view.opacity = alpha == 0x2000U ? .6f : 1.f;
                     view.lighting.emplace();

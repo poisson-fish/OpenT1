@@ -505,14 +505,53 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
             }
             std::shared_ptr<const ts_detail::RetainedMesh> sourceMesh;
             std::shared_ptr<const RetainedPart> part;
+            std::optional<Point3F> localEye;
+            Flt64 determinant{};
             gfx::HardwareTransform transform;
             if (retain) {
                 sourceMesh = ts_detail::retainedMesh(
                     resources.shape, object.mesh, state, resources.materials, pose);
                 if (!sourceMesh)
                     return false;
+                if (!sourceMesh->hardware)
+                    return true;
                 auto localToCamera = toCamera;
                 localToCamera.preTranslate(object.offset);
+                std::array<bool, 6> outside;
+                outside.fill(true);
+                for (UInt32 corner = 0; corner < 8; ++corner) {
+                    const Point3F local{
+                        corner & 1U ? sourceMesh->bounds.fMax.x : sourceMesh->bounds.fMin.x,
+                        corner & 2U ? sourceMesh->bounds.fMax.y : sourceMesh->bounds.fMin.y,
+                        corner & 4U ? sourceMesh->bounds.fMax.z : sourceMesh->bounds.fMin.z};
+                    Point3F p;
+                    m_mul(local, localToCamera, p);
+                    if (!finite(p))
+                        return false;
+                    const std::array<Flt64, 6> planes{
+                        Flt64(p.y) - view.nearDistance,
+                        Flt64(view.farDistance) - p.y,
+                        Flt64(p.x) * view.focal.x + Flt64(p.y) * view.center.x,
+                        -Flt64(p.x) * view.focal.x +
+                            Flt64(p.y) * (Flt64(view.width) - view.center.x),
+                        -Flt64(p.z) * view.focal.y + Flt64(p.y) * view.center.y,
+                        Flt64(p.z) * view.focal.y +
+                            Flt64(p.y) * (Flt64(view.height) - view.center.y)};
+                    const auto margin = 1e-5 * (std::abs(Flt64(p.x) * view.focal.x) +
+                                                std::abs(Flt64(p.y)) * (view.width + view.height) +
+                                                std::abs(Flt64(p.z) * view.focal.y) + 1);
+                    for (std::size_t j = 0; j < outside.size(); ++j)
+                        outside[j] = outside[j] && planes[j] < -margin;
+                }
+                if (std::ranges::any_of(outside, std::identity{}))
+                    return true;
+                determinant = localToCamera.determinant();
+                if (std::isfinite(determinant) && std::abs(determinant) > 1e-8) {
+                    auto inverse = localToCamera;
+                    inverse.inverse();
+                    if (finite(inverse.p))
+                        localEye = inverse.p;
+                }
                 for (std::size_t i = 0; i < 3; ++i)
                     transform.camera[i] = {localToCamera.m[0][i],
                                            localToCamera.m[1][i],
@@ -581,6 +620,18 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
                 const bool lit = view.lighting && (shading == 0x200U || shading == 0x400U) &&
                                  !(material.type() == 3 && (material.flags & 0x3000U));
                 if (retain) {
+                    const auto faceIndex = std::size_t(&face - mesh.faces.data());
+                    if (localEye) {
+                        const auto& plane = sourceMesh->facePlanes[faceIndex];
+                        Flt64 distance = plane[3], magnitude = std::abs(plane[3]) + 1;
+                        for (std::size_t i = 0; i < 3; ++i) {
+                            const auto value = plane[i] * (*localEye)[i];
+                            distance += value;
+                            magnitude += std::abs(value);
+                        }
+                        if (distance * determinant > 1e-4 * magnitude * std::abs(determinant))
+                            return true;
+                    }
                     Polygon polygon;
                     polygon.material = std::size_t(materialIndex);
                     polygon.vertices = {{{{0, 0}}, {{1, 0}}, {{0, 1}}}};
@@ -589,8 +640,7 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
                     for (auto& v : polygon.vertices)
                         v.haze = haze;
                     polygon.retained = part;
-                    polygon.firstIndex =
-                        sourceMesh->firstIndices[std::size_t(&face - mesh.faces.data())];
+                    polygon.firstIndex = sourceMesh->firstIndices[faceIndex];
                     if (!part->mesh || polygon.firstIndex == UINT32_MAX ||
                         result.polygons_.size() >= gfx::renderLimits().polygons)
                         return false;

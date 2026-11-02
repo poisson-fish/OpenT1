@@ -719,9 +719,8 @@ std::optional<std::vector<gfx::HardwarePolygon>> WorldSurfaceMesh::hardwareInter
             for (std::size_t i = 0; i < 3; ++i)
                 instance.camera[i][3] = local.p[i];
             instance.parameters = patch.heights;
-            instance.ambient[3] = terrainPatches->hazeDistance;
-            instance.geometry = {
-                patch.extent, terrainPatches->farDistance, 1, Flt32(patch.topologyKey)};
+            instance.ambient = {terrainPatches->farDistance, 0, 0, terrainPatches->hazeDistance};
+            instance.geometry = {patch.extent, view.farDistance, 1, Flt32(patch.topologyKey)};
             instance.mapping = {
                 patch.mapOrigin.x, patch.mapOrigin.y, patch.mapScale.x, patch.mapScale.y};
             gfx::HardwareMaterial material;

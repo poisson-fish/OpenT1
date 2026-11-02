@@ -9,6 +9,8 @@ struct RetainedMesh {
     std::vector<UInt8> modes;
     std::shared_ptr<const gfx::HardwareMesh> hardware;
     std::vector<UInt32> firstIndices; // one triangle per active face, UINT32_MAX for sentinels
+    std::vector<std::array<Flt64, 4>> facePlanes;
+    Box3F bounds;
     std::size_t bytes{};
 };
 
@@ -57,7 +59,7 @@ inline std::shared_ptr<const RetainedMesh> retainedMesh(const Resource<TsShape>&
         return mode != 255;
     }));
     const auto plannedBytes = sizeof(RetainedMesh) + sizeof(gfx::HardwareMesh) + modes.capacity() +
-                              mesh.faces.size() * sizeof(UInt32) +
+                              mesh.faces.size() * (sizeof(UInt32) + sizeof(std::array<Flt64, 4>)) +
                               active * 3 * (sizeof(gfx::HardwareVertex) + sizeof(UInt32));
     if (plannedBytes > cache.budget)
         return {}; // avoid expanding an oversized source before falling back
@@ -78,6 +80,7 @@ inline std::shared_ptr<const RetainedMesh> retainedMesh(const Resource<TsShape>&
     result->textureFrame = state.textureFrame;
     result->modes = std::move(modes);
     result->firstIndices.resize(mesh.faces.size(), UINT32_MAX);
+    result->facePlanes.resize(mesh.faces.size());
     std::vector<gfx::HardwareVertex> vertices;
     std::vector<UInt32> indices;
     vertices.reserve(active * 3);
@@ -108,7 +111,21 @@ inline std::shared_ptr<const RetainedMesh> retainedMesh(const Resource<TsShape>&
             v.opacity = Flt32(result->modes[i]);
             indices.push_back(UInt32(vertices.size()));
             vertices.push_back(v);
+            if (vertices.size() == 1)
+                result->bounds = {*p, *p};
+            else {
+                result->bounds.fMin.setMin(*p);
+                result->bounds.fMax.setMax(*p);
+            }
         }
+        const auto point = [&](std::size_t j) {
+            const auto& v = vertices[vertices.size() - 3 + j];
+            return Point3D{Flt64(v.position.x), Flt64(v.position.y), Flt64(v.inverseDepth)};
+        };
+        const auto a = point(0), b = point(1), c = point(2);
+        Point3D normal;
+        m_cross(b - a, c - a, normal);
+        result->facePlanes[i] = {normal.x, normal.y, normal.z, -m_dot(normal, a)};
     }
     if (!indices.empty()) {
         result->hardware = gfx::HardwareMesh::create(
@@ -117,7 +134,8 @@ inline std::shared_ptr<const RetainedMesh> retainedMesh(const Resource<TsShape>&
             return {};
     }
     result->bytes = sizeof(RetainedMesh) + result->modes.capacity() +
-                    result->firstIndices.capacity() * sizeof(UInt32);
+                    result->firstIndices.capacity() * sizeof(UInt32) +
+                    result->facePlanes.capacity() * sizeof(result->facePlanes[0]);
     if (result->hardware)
         result->bytes += result->hardware->residentBytes();
     ++cache.builds;

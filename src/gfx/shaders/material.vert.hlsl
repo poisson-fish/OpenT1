@@ -156,8 +156,8 @@ Output main(Input v, uint instanceId : SV_InstanceID) {
                 o.uv = uv;
                 o.lightMap = t.mapping.xy + uv * t.mapping.zw;
                 o.sphereDistance = h.w / t.geometry.y;
-                o.haze = t.ambient.w < t.geometry.y
-                             ? saturate((h.w - t.ambient.w) / (t.geometry.y - t.ambient.w))
+                o.haze = t.ambient.w < t.ambient.x
+                             ? saturate((h.w - t.ambient.w) / (t.ambient.x - t.ambient.w))
                              : 0;
             } else {
                 o.color = shapeLight(t, local.xyz, v.color, v.opacity);

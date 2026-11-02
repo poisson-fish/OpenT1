@@ -258,6 +258,8 @@ expand(const Bitmap& bitmap, const HardwareMaterial& material, const Palette* fa
 HardwareTexture expand(const LightMap& map, HardwareLightMapMode mode) {
     HardwareTexture result{
         map.size.x, map.size.y, std::vector<std::byte>(map.samples.size() * 4), {}};
+    result.lightMap = true;
+    result.dynamic = map.dynamic;
     for (std::size_t i = 0; i < map.samples.size(); ++i) {
         if (map.format == LightMap::Format::Rgb565) {
             const auto v = map.samples[i];
@@ -325,7 +327,7 @@ ConversionKey conversionKey(const HardwareMaterial& m) {
 }
 
 ConversionKey lightMapKey(const HardwareMaterial& m) {
-    return {m.lightMap, 256U + UInt32(m.lightMapMode)};
+    return {m.lightMap, 256U + UInt32(m.lightMapMode) + (m.lightMap->dynamic ? 512U : 0U)};
 }
 
 struct SourceLayout {

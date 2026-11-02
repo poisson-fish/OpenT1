@@ -50,6 +50,7 @@ struct SdlGpuSurface::Impl {
     std::string driver;
     GpuPresentMode presentMode{GpuPresentMode::VSync};
     std::size_t textureCacheEntries{};
+    std::size_t meshCacheBytes{}, textureCacheBytes{}, lightMapPageBytes{};
 
     ~Impl() {
         cleanup.reset();
@@ -155,6 +156,9 @@ std::unique_ptr<SdlGpuSurface> SdlGpuSurface::create(platform::SdlWindow& window
     }
     auto impl = std::make_unique<Impl>();
     impl->textureCacheEntries = config.textureCacheEntries;
+    impl->meshCacheBytes = config.meshCacheBytes;
+    impl->textureCacheBytes = config.textureCacheBytes;
+    impl->lightMapPageBytes = config.lightMapPageBytes;
     constexpr auto formats = SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXBC |
                              SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL;
     impl->device = SDL_CreateGPUDevice(
@@ -405,7 +409,11 @@ bool SdlGpuSurface::render(const HardwareBatch& batch, const GpuFrameConfig& con
         return SDL_SetError("GPU material window is closed");
     }
     if (!s.materials) {
-        s.materials = detail::GpuMaterialRenderer::create(s.device, s.textureCacheEntries);
+        s.materials = detail::GpuMaterialRenderer::create(s.device,
+                                                          s.textureCacheEntries,
+                                                          s.meshCacheBytes,
+                                                          s.textureCacheBytes,
+                                                          s.lightMapPageBytes);
         if (!s.materials) {
             return false;
         }

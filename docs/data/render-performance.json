@@ -2405,6 +2405,644 @@
         "geometry_builds": 0,
         "map_builds": 7125
       }
+    },
+    "lightmap_pages": {
+      "base-Broadside-rotate": {
+        "mission": "Broadside",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 175.582,
+        "frame_ms": {
+          "mean": 5.80818,
+          "p95": 10.0602,
+          "p99": 10.3707
+        },
+        "prepare_ms": {
+          "mean": 4.99227,
+          "p95": 9.2207,
+          "p99": 9.4134
+        },
+        "capture_ms": {
+          "mean": 3.91986,
+          "p95": 7.8912,
+          "p99": 8.0899
+        },
+        "submit_ms": {
+          "mean": 0.30638,
+          "p95": 0.5017,
+          "p99": 0.5686
+        },
+        "simulation_ms": {
+          "mean": 0.50944,
+          "p95": 0.6651,
+          "p99": 0.7625
+        },
+        "mean_polygons": 1854.66,
+        "mean_draws": 448.083,
+        "mean_binds": 303.846,
+        "textures": 1144,
+        "texture_bytes": 9664112,
+        "physical_textures": 869,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 2344,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 3,
+        "retained_mesh_bytes": 730788,
+        "peak_retained_mesh_bytes": 730788,
+        "mesh_uploads": 3,
+        "mean_vertex_upload_bytes": 107312,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 244324,
+        "geometry_builds": 0,
+        "map_builds": 2499
+      },
+      "base-Broadside-stationary": {
+        "mission": "Broadside",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 174.746,
+        "frame_ms": {
+          "mean": 7.08755,
+          "p95": 7.8399,
+          "p99": 8.2012
+        },
+        "prepare_ms": {
+          "mean": 6.23367,
+          "p95": 6.7308,
+          "p99": 6.9937
+        },
+        "capture_ms": {
+          "mean": 5.08557,
+          "p95": 5.333,
+          "p99": 5.5096
+        },
+        "submit_ms": {
+          "mean": 0.307837,
+          "p95": 0.4359,
+          "p99": 0.5098
+        },
+        "simulation_ms": {
+          "mean": 0.545933,
+          "p95": 0.7094,
+          "p99": 0.8464
+        },
+        "mean_polygons": 2337,
+        "mean_draws": 568.375,
+        "mean_binds": 344.375,
+        "textures": 498,
+        "texture_bytes": 6017684,
+        "physical_textures": 299,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 1527,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 2,
+        "retained_mesh_bytes": 714900,
+        "peak_retained_mesh_bytes": 714900,
+        "mesh_uploads": 2,
+        "mean_vertex_upload_bytes": 139392,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 78601.1,
+        "geometry_builds": 0,
+        "map_builds": 3672
+      },
+      "base-Broadside-travel": {
+        "mission": "Broadside",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 171.927,
+        "frame_ms": {
+          "mean": 6.60139,
+          "p95": 11.1859,
+          "p99": 11.987
+        },
+        "prepare_ms": {
+          "mean": 5.01115,
+          "p95": 9.8187,
+          "p99": 10.0854
+        },
+        "capture_ms": {
+          "mean": 3.81842,
+          "p95": 8.304,
+          "p99": 8.3965
+        },
+        "submit_ms": {
+          "mean": 1.02099,
+          "p95": 2.6071,
+          "p99": 2.9414
+        },
+        "simulation_ms": {
+          "mean": 0.569152,
+          "p95": 0.7276,
+          "p99": 0.7644
+        },
+        "mean_polygons": 1885.55,
+        "mean_draws": 454.025,
+        "mean_binds": 319.571,
+        "textures": 2108,
+        "texture_bytes": 18076940,
+        "physical_textures": 1818,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 3002,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 3,
+        "retained_mesh_bytes": 730788,
+        "peak_retained_mesh_bytes": 730788,
+        "mesh_uploads": 3,
+        "mean_vertex_upload_bytes": 112373,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 265348,
+        "geometry_builds": 0,
+        "map_builds": 2380
+      },
+      "base-Raindance-rotate": {
+        "mission": "Raindance",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 164.813,
+        "frame_ms": {
+          "mean": 2.67207,
+          "p95": 3.4311,
+          "p99": 3.5755
+        },
+        "prepare_ms": {
+          "mean": 1.94658,
+          "p95": 2.5313,
+          "p99": 2.6003
+        },
+        "capture_ms": {
+          "mean": 0.89057,
+          "p95": 1.1591,
+          "p99": 1.2093
+        },
+        "submit_ms": {
+          "mean": 0.322915,
+          "p95": 0.4443,
+          "p99": 0.4841
+        },
+        "simulation_ms": {
+          "mean": 0.402487,
+          "p95": 0.4706,
+          "p99": 0.5298
+        },
+        "mean_polygons": 1626.54,
+        "mean_draws": 481.083,
+        "mean_binds": 248.158,
+        "textures": 1240,
+        "texture_bytes": 11307308,
+        "physical_textures": 701,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 2279,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 16,
+        "retained_mesh_bytes": 484908,
+        "peak_retained_mesh_bytes": 484908,
+        "mesh_uploads": 16,
+        "mean_vertex_upload_bytes": 103692,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 244637,
+        "geometry_builds": 0,
+        "map_builds": 1300
+      },
+      "base-Raindance-stationary": {
+        "mission": "Raindance",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 166.881,
+        "frame_ms": {
+          "mean": 2.12295,
+          "p95": 2.2791,
+          "p99": 2.3461
+        },
+        "prepare_ms": {
+          "mean": 1.57906,
+          "p95": 1.6998,
+          "p99": 1.7551
+        },
+        "capture_ms": {
+          "mean": 0.771244,
+          "p95": 0.8182,
+          "p99": 0.8596
+        },
+        "submit_ms": {
+          "mean": 0.192325,
+          "p95": 0.2275,
+          "p99": 0.2488
+        },
+        "simulation_ms": {
+          "mean": 0.351472,
+          "p95": 0.3864,
+          "p99": 0.4305
+        },
+        "mean_polygons": 1594,
+        "mean_draws": 447,
+        "mean_binds": 216,
+        "textures": 408,
+        "texture_bytes": 5005364,
+        "physical_textures": 205,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 523,
+        "texture_evictions": 0,
+        "vertex_capacity": 131072,
+        "staging_capacity": 8388608,
+        "retained_meshes": 6,
+        "retained_mesh_bytes": 311244,
+        "peak_retained_mesh_bytes": 311244,
+        "mesh_uploads": 6,
+        "mean_vertex_upload_bytes": 80739.6,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 78262.8,
+        "geometry_builds": 0,
+        "map_builds": 0
+      },
+      "base-Raindance-travel": {
+        "mission": "Raindance",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 166.973,
+        "frame_ms": {
+          "mean": 3.66317,
+          "p95": 5.0682,
+          "p99": 5.6468
+        },
+        "prepare_ms": {
+          "mean": 2.20722,
+          "p95": 2.8192,
+          "p99": 3.1663
+        },
+        "capture_ms": {
+          "mean": 1.01271,
+          "p95": 1.3164,
+          "p99": 1.461
+        },
+        "submit_ms": {
+          "mean": 1.03827,
+          "p95": 2.2343,
+          "p99": 2.813
+        },
+        "simulation_ms": {
+          "mean": 0.417586,
+          "p95": 0.4889,
+          "p99": 0.5285
+        },
+        "mean_polygons": 1797.4,
+        "mean_draws": 542.558,
+        "mean_binds": 284.358,
+        "textures": 2497,
+        "texture_bytes": 23237288,
+        "physical_textures": 1843,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 4016,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 16,
+        "retained_mesh_bytes": 484908,
+        "peak_retained_mesh_bytes": 484908,
+        "mesh_uploads": 16,
+        "mean_vertex_upload_bytes": 111431,
+        "mean_mesh_upload_bytes": 29.6,
+        "mean_texture_upload_bytes": 268772,
+        "geometry_builds": 1,
+        "map_builds": 2016
+      },
+      "rpg-rpgmap1-rotate": {
+        "mission": "rpgmap1",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 472.057,
+        "frame_ms": {
+          "mean": 9.234,
+          "p95": 10.9391,
+          "p99": 11.735
+        },
+        "prepare_ms": {
+          "mean": 3.38784,
+          "p95": 4.4212,
+          "p99": 4.6016
+        },
+        "capture_ms": {
+          "mean": 2.04005,
+          "p95": 2.5506,
+          "p99": 2.7015
+        },
+        "submit_ms": {
+          "mean": 0.495133,
+          "p95": 0.6926,
+          "p99": 0.8167
+        },
+        "simulation_ms": {
+          "mean": 5.35093,
+          "p95": 5.8879,
+          "p99": 7.2189
+        },
+        "mean_polygons": 3073.15,
+        "mean_draws": 999.254,
+        "mean_binds": 726.538,
+        "textures": 2482,
+        "texture_bytes": 10766448,
+        "physical_textures": 1896,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 3222,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 16777216,
+        "retained_meshes": 13,
+        "retained_mesh_bytes": 677016,
+        "peak_retained_mesh_bytes": 677016,
+        "mesh_uploads": 13,
+        "mean_vertex_upload_bytes": 210590,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 2316.93,
+        "geometry_builds": 0,
+        "map_builds": 1384
+      },
+      "rpg-rpgmap1-stationary": {
+        "mission": "rpgmap1",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 470.868,
+        "frame_ms": {
+          "mean": 10.1794,
+          "p95": 11.3725,
+          "p99": 13.1027
+        },
+        "prepare_ms": {
+          "mean": 4.21081,
+          "p95": 5.0039,
+          "p99": 5.2495
+        },
+        "capture_ms": {
+          "mean": 2.39788,
+          "p95": 2.6451,
+          "p99": 2.7922
+        },
+        "submit_ms": {
+          "mean": 0.55776,
+          "p95": 0.7799,
+          "p99": 0.8218
+        },
+        "simulation_ms": {
+          "mean": 5.41076,
+          "p95": 5.945,
+          "p99": 7.4825
+        },
+        "mean_polygons": 5646.98,
+        "mean_draws": 1754,
+        "mean_binds": 920,
+        "textures": 1109,
+        "texture_bytes": 8098808,
+        "physical_textures": 580,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 3622,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 16777216,
+        "retained_meshes": 12,
+        "retained_mesh_bytes": 675720,
+        "peak_retained_mesh_bytes": 675720,
+        "mesh_uploads": 12,
+        "mean_vertex_upload_bytes": 251278,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 8085.67,
+        "geometry_builds": 0,
+        "map_builds": 4310
+      },
+      "rpg-rpgmap1-travel": {
+        "mission": "rpgmap1",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 476.137,
+        "frame_ms": {
+          "mean": 10.3287,
+          "p95": 12.1127,
+          "p99": 13.9458
+        },
+        "prepare_ms": {
+          "mean": 3.43075,
+          "p95": 4.5093,
+          "p99": 4.5604
+        },
+        "capture_ms": {
+          "mean": 2.07252,
+          "p95": 2.6198,
+          "p99": 2.685
+        },
+        "submit_ms": {
+          "mean": 1.39299,
+          "p95": 3.1351,
+          "p99": 3.8508
+        },
+        "simulation_ms": {
+          "mean": 5.50481,
+          "p95": 6.1103,
+          "p99": 7.9032
+        },
+        "mean_polygons": 3043.28,
+        "mean_draws": 979.992,
+        "mean_binds": 710.746,
+        "textures": 4122,
+        "texture_bytes": 14511188,
+        "physical_textures": 3527,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 4839,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 16777216,
+        "retained_meshes": 13,
+        "retained_mesh_bytes": 677016,
+        "peak_retained_mesh_bytes": 677016,
+        "mesh_uploads": 13,
+        "mean_vertex_upload_bytes": 205613,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 11755.1,
+        "geometry_builds": 0,
+        "map_builds": 1384
+      },
+      "rpg-rpgmap5-rotate": {
+        "mission": "rpgmap5",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 497.454,
+        "frame_ms": {
+          "mean": 9.3201,
+          "p95": 11.1557,
+          "p99": 12.5005
+        },
+        "prepare_ms": {
+          "mean": 4.77995,
+          "p95": 5.9365,
+          "p99": 6.8568
+        },
+        "capture_ms": {
+          "mean": 3.02954,
+          "p95": 3.7297,
+          "p99": 4.3403
+        },
+        "submit_ms": {
+          "mean": 0.701825,
+          "p95": 1.0724,
+          "p99": 1.4128
+        },
+        "simulation_ms": {
+          "mean": 3.83822,
+          "p95": 4.4815,
+          "p99": 5.3319
+        },
+        "mean_polygons": 4622.19,
+        "mean_draws": 1372.45,
+        "mean_binds": 777.117,
+        "textures": 2905,
+        "texture_bytes": 15890956,
+        "physical_textures": 1799,
+        "lightmap_pages": 3,
+        "lightmap_page_bytes": 3145728,
+        "texture_uploads": 6648,
+        "texture_evictions": 0,
+        "vertex_capacity": 524288,
+        "staging_capacity": 16777216,
+        "retained_meshes": 9,
+        "retained_mesh_bytes": 1523388,
+        "peak_retained_mesh_bytes": 1523388,
+        "mesh_uploads": 9,
+        "mean_vertex_upload_bytes": 202666,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 2784.6,
+        "geometry_builds": 0,
+        "map_builds": 7594
+      },
+      "rpg-rpgmap5-stationary": {
+        "mission": "rpgmap5",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 491.991,
+        "frame_ms": {
+          "mean": 9.16683,
+          "p95": 10.6173,
+          "p99": 10.9832
+        },
+        "prepare_ms": {
+          "mean": 4.97166,
+          "p95": 5.9548,
+          "p99": 6.1807
+        },
+        "capture_ms": {
+          "mean": 3.07858,
+          "p95": 3.4216,
+          "p99": 3.6016
+        },
+        "submit_ms": {
+          "mean": 0.554097,
+          "p95": 0.7753,
+          "p99": 0.8587
+        },
+        "simulation_ms": {
+          "mean": 3.64097,
+          "p95": 3.9666,
+          "p99": 4.0657
+        },
+        "mean_polygons": 5923.02,
+        "mean_draws": 1898.13,
+        "mean_binds": 793.858,
+        "textures": 1372,
+        "texture_bytes": 12050636,
+        "physical_textures": 607,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 8772,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 16777216,
+        "retained_meshes": 5,
+        "retained_mesh_bytes": 805044,
+        "peak_retained_mesh_bytes": 805044,
+        "mesh_uploads": 5,
+        "mean_vertex_upload_bytes": 249699,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 5842.58,
+        "geometry_builds": 0,
+        "map_builds": 9576
+      },
+      "rpg-rpgmap5-travel": {
+        "mission": "rpgmap5",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 495.711,
+        "frame_ms": {
+          "mean": 9.61711,
+          "p95": 11.2424,
+          "p99": 12.0892
+        },
+        "prepare_ms": {
+          "mean": 4.70951,
+          "p95": 5.8328,
+          "p99": 6.034
+        },
+        "capture_ms": {
+          "mean": 3.0228,
+          "p95": 3.5911,
+          "p99": 3.6846
+        },
+        "submit_ms": {
+          "mean": 1.24398,
+          "p95": 2.3527,
+          "p99": 2.9574
+        },
+        "simulation_ms": {
+          "mean": 3.66351,
+          "p95": 3.8429,
+          "p99": 4.3145
+        },
+        "mean_polygons": 4583.77,
+        "mean_draws": 1318.73,
+        "mean_binds": 746.567,
+        "textures": 4225,
+        "texture_bytes": 19480684,
+        "physical_textures": 2868,
+        "lightmap_pages": 3,
+        "lightmap_page_bytes": 3145728,
+        "texture_uploads": 7898,
+        "texture_evictions": 0,
+        "vertex_capacity": 524288,
+        "staging_capacity": 16777216,
+        "retained_meshes": 9,
+        "retained_mesh_bytes": 1523388,
+        "peak_retained_mesh_bytes": 1523388,
+        "mesh_uploads": 9,
+        "mean_vertex_upload_bytes": 187438,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 11535.1,
+        "geometry_builds": 0,
+        "map_builds": 7125
+      }
     }
   },
   "readbacks": {
@@ -2536,6 +3174,80 @@
         "pixels_over_2": 0,
         "max_channel_error": 0,
         "mean_channel_error": 0.0
+      }
+    },
+    "lightmap_pages": {
+      "base-Broadside-rotate.json.ppm": {
+        "changed_pixels": 2,
+        "pixels_over_2": 0,
+        "max_channel_error": 1,
+        "mean_channel_error": 2.0833333333333334e-06
+      },
+      "base-Broadside-stationary.json.ppm": {
+        "changed_pixels": 2,
+        "pixels_over_2": 0,
+        "max_channel_error": 1,
+        "mean_channel_error": 1.388888888888889e-06
+      },
+      "base-Broadside-travel.json.ppm": {
+        "changed_pixels": 5,
+        "pixels_over_2": 0,
+        "max_channel_error": 1,
+        "mean_channel_error": 3.4722222222222224e-06
+      },
+      "base-Raindance-rotate.json.ppm": {
+        "changed_pixels": 1,
+        "pixels_over_2": 0,
+        "max_channel_error": 1,
+        "mean_channel_error": 6.944444444444445e-07
+      },
+      "base-Raindance-stationary.json.ppm": {
+        "changed_pixels": 3,
+        "pixels_over_2": 0,
+        "max_channel_error": 1,
+        "mean_channel_error": 2.0833333333333334e-06
+      },
+      "base-Raindance-travel.json.ppm": {
+        "changed_pixels": 1,
+        "pixels_over_2": 0,
+        "max_channel_error": 1,
+        "mean_channel_error": 1.388888888888889e-06
+      },
+      "rpg-rpgmap1-rotate.json.ppm": {
+        "changed_pixels": 1,
+        "pixels_over_2": 0,
+        "max_channel_error": 1,
+        "mean_channel_error": 6.944444444444445e-07
+      },
+      "rpg-rpgmap1-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap1-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap5-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap5-stationary.json.ppm": {
+        "changed_pixels": 2,
+        "pixels_over_2": 0,
+        "max_channel_error": 1,
+        "mean_channel_error": 2.777777777777778e-06
+      },
+      "rpg-rpgmap5-travel.json.ppm": {
+        "changed_pixels": 1,
+        "pixels_over_2": 0,
+        "max_channel_error": 1,
+        "mean_channel_error": 6.944444444444445e-07
       }
     }
   }

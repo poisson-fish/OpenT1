@@ -227,6 +227,7 @@ mergePointLights(const TerrainGridBlock& block,
     }
     const auto bits = UInt32(std::countr_zero(rate)), mask = rate - 1;
     auto result = std::make_shared<gfx::LightMap>(base);
+    result->dynamic = true;
     for (const auto& region : regions) {
         const auto& light = scene.lights[region.source];
         auto loc = light.position - origin;

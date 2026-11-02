@@ -181,6 +181,63 @@ void interiorReadbacks(platform::SdlWindow& window) {
     }
 }
 
+gfx::HardwareBatch pageContent(bool changed) {
+    std::array<std::array<gfx::PolygonVertex, 4>, 16> quads;
+    std::array<gfx::LightMap, 16> maps;
+    const std::array<Point2F, 4> uv{{{-1, -1}, {2, -1}, {2, 2}, {-1, 2}}};
+    std::vector<gfx::HardwarePolygon> polygons;
+    for (std::size_t i = 0; i < quads.size(); ++i) {
+        const auto x = Flt32((i % 4) * 8), y = Flt32((i / 4) * 8);
+        quads[i] = {{{{x, y}}, {{x + 8, y}}, {{x + 8, y + 8}}, {{x, y + 8}}}};
+        const auto side = Int32(i == 15 ? 256 : i + 2);
+        maps[i].size = {side, side};
+        maps[i].dynamic = i == 0;
+        for (Int32 p = 0; p < side * side; ++p) {
+            const auto value = UInt16((p + i * 137 + (changed && i == 0 ? 123 : 0)) & 0xfff);
+            maps[i].samples.push_back(value);
+        }
+        gfx::HardwareMaterial material;
+        material.lightMap = &maps[i];
+        material.perspective = false;
+        material.depth = gfx::HardwareDepth::Disabled;
+        polygons.push_back({quads[i], material, uv});
+    }
+    auto batch = gfx::HardwareBatch::prepare(polygons);
+    CHECK(batch);
+    return std::move(*batch);
+}
+
+void pageReadbacks(platform::SdlWindow& window) {
+    const auto first = pageContent(false), changed = pageContent(true);
+    const std::array<const gfx::HardwareBatch*, 4> frames{&first, &changed, &first, &changed};
+    gfx::GpuSurfaceConfig config;
+    config.lightMapPageBytes = 0;
+    auto surface = gfx::SdlGpuSurface::create(window, 32, 32, config);
+    CHECK(surface);
+    std::array<std::vector<std::byte>, 4> reference;
+    for (std::size_t i = 0; i < frames.size(); ++i) {
+        reference[i].resize(32 * 32 * 4);
+        CHECK(surface->render(*frames[i]) && surface->readback(reference[i]));
+    }
+    CHECK(surface->textureCacheStats().lightMapPages == 0);
+    surface.reset();
+    config.lightMapPageBytes = 1024 * 1024;
+    surface = gfx::SdlGpuSurface::create(window, 32, 32, config);
+    CHECK(surface);
+    for (std::size_t i = 0; i < frames.size(); ++i) {
+        std::vector<std::byte> actual(reference[i].size());
+        CHECK(surface->render(*frames[i]) && surface->readback(actual));
+        for (std::size_t p = 0; p < actual.size(); ++p)
+            CHECK(std::abs(int(actual[p]) - int(reference[i][p])) <= 2);
+    }
+    const auto stats = surface->textureCacheStats();
+    CHECK(stats.lightMapPages == 1 && stats.lightMapPageBytes <= config.lightMapPageBytes);
+    CHECK(stats.physicalTextures < stats.textures && stats.reuses > 0);
+    surface->clearTextureCache();
+    CHECK(surface->textureCacheStats().physicalTextures == 0);
+    CHECK(surface->render(first));
+}
+
 int gpuCache() {
     return test::run([] {
         platform::SdlApplication app;
@@ -197,6 +254,7 @@ int gpuCache() {
         retainedWorkingSet(window);
         retainedMesh(window);
         interiorReadbacks(window);
+        pageReadbacks(window);
     });
 }
 }

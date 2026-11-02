@@ -1,5 +1,6 @@
 #pragma once
 #include <opent1/gfx/sdl_gpu_surface.hpp>
+#include "lightmap_pages.hpp"
 #include <SDL3/SDL_gpu.h>
 #include <list>
 #include <unordered_map>
@@ -8,7 +9,11 @@ namespace opent1::gfx::detail {
 class GpuMaterialRenderer {
 public:
     [[nodiscard]] static std::unique_ptr<GpuMaterialRenderer>
-    create(SDL_GPUDevice*, std::size_t textureCacheEntries);
+    create(SDL_GPUDevice*,
+           std::size_t textureCacheEntries,
+           std::size_t meshBytes = 64U * 1024U * 1024U,
+           std::size_t textureBytes = 64U * 1024U * 1024U,
+           std::size_t pageBytes = 16U * 1024U * 1024U);
     ~GpuMaterialRenderer();
     [[nodiscard]] SDL_GPUTexture*
     render(const HardwareBatch&, Int32 width, Int32 height, const GpuFrameConfig&, Flt32 gamma);
@@ -28,8 +33,13 @@ public:
     void clearTextureCache() noexcept;
 
 private:
-    explicit GpuMaterialRenderer(SDL_GPUDevice* device, std::size_t textureCacheEntries)
-        : device_(device), textureCacheEntries_(textureCacheEntries) {}
+    explicit GpuMaterialRenderer(SDL_GPUDevice* device,
+                                 std::size_t textureCacheEntries,
+                                 std::size_t meshBytes,
+                                 std::size_t textureBytes,
+                                 std::size_t pageBytes)
+        : device_(device), pages_(device, pageBytes), textureCacheEntries_(textureCacheEntries),
+          meshCacheBytes_(meshBytes), textureCacheBytes_(textureBytes) {}
 
     SDL_GPUDevice* device_;
     SDL_GPUFence* frameFence_{};
@@ -66,12 +76,15 @@ private:
         std::size_t bytes{};
         SDL_GPUTexture* gpu{};
         bool pinned{};
+        std::shared_ptr<LightMapSlot> slot{};
     };
 
     std::list<CachedTexture> textures_; // most recently used first
     using TextureIndex = std::unordered_multimap<UInt64, std::list<CachedTexture>::iterator>;
     TextureIndex textureIndex_;
     GpuTextureCacheStats stats_;
+    LightMapPages pages_;
     std::size_t textureCacheEntries_;
+    std::size_t meshCacheBytes_, textureCacheBytes_;
 };
 } // namespace opent1::gfx::detail

@@ -400,6 +400,7 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::interior(const InteriorShapeRe
                     return {};
                 }
                 auto prepared = std::make_shared<gfx::LightMap>();
+                prepared->dynamic = ls.lightCount > 0 || sceneAffected;
                 prepared->offset = {ls.offsetX, ls.offsetY};
                 const auto width = std::max(1U, UInt32(ls.width)),
                            height = std::max(1U, UInt32(ls.height));

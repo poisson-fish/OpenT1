@@ -12,7 +12,7 @@ struct Input {
 };
 
 struct Material {
-    float4 tint, hazeColor, options, alphaControls, geometryClip;
+    float4 tint, hazeColor, options, alphaControls, geometryClip, lightRect;
 };
 
 fragment float4 main0(Input v [[stage_in]],
@@ -25,7 +25,7 @@ fragment float4 main0(Input v [[stage_in]],
     if (m.alphaControls.z == 2)
         return float4(m.hazeColor.rgb, saturate(v.haze));
     float4 texel = image.sample(imageSampler, v.uv, bias(m.options.z));
-    float3 light = lightMap.sample(lightMapSampler, v.lightMap).rgb;
+    float3 light = lightMap.sample(lightMapSampler, saturate(v.lightMap) * m.lightRect.xy + m.lightRect.zw).rgb;
     float alpha = m.options.w == 0   ? texel.a * m.tint.a
                   : m.options.w == 1 ? m.tint.a
                   : m.options.w == 2 ? saturate(v.opacity) * m.tint.a

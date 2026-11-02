@@ -111,6 +111,7 @@ struct HardwareTexture {
     std::vector<HardwareMip> mips; // remaining supplied levels, never generated
     UInt64 hash{};                 // computed once when immutable converted storage is created
     bool dynamic{};                // permits recycling unreferenced GPU allocation storage
+    bool lightMap{};               // single-mip clamp samples eligible for portable pages
 };
 
 struct HardwareDraw {

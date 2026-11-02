@@ -157,6 +157,9 @@ int main(int argc, char** argv) {
             << ",\"mean_draws\":" << double(draws) / count
             << ",\"mean_binds\":" << double(binds) / count << ",\"textures\":" << textures.textures
             << ",\"texture_bytes\":" << textures.bytes
+            << ",\"physical_textures\":" << textures.physicalTextures
+            << ",\"lightmap_pages\":" << textures.lightMapPages
+            << ",\"lightmap_page_bytes\":" << textures.lightMapPageBytes
             << ",\"texture_uploads\":" << textures.uploads
             << ",\"texture_evictions\":" << textures.evictions
             << ",\"vertex_capacity\":" << resources.vertexCapacity

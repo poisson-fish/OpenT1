@@ -1,30 +1,41 @@
 #include <opent1/world/ts_shape_pose.hpp>
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <ranges>
 
 namespace opent1::world {
+namespace {
+UInt64 nextPoseRevision() {
+    static std::atomic<UInt64> revision{1};
+    return revision.fetch_add(1, std::memory_order_relaxed);
+}
+}
+
 bool TsShapePose::overrideParentTransform(Int32 node, const TMat3F& parent) {
-    if (!shape_ || node < 0 || std::size_t(node) >= transforms_.size()) {
+    if (!shape_ || node < 0 || std::size_t(node) >= data_->transforms.size()) {
         return false;
     }
     const auto previousParent = shape_->nodes[node].parent;
     if (previousParent < 0) {
         return false;
     }
-    auto inverse = transforms_[previousParent];
+    data_ = std::make_shared<Data>(*data_);
+    data_->collisions.clear();
+    data_->revision = nextPoseRevision();
+    auto inverse = data_->transforms[previousParent];
     inverse.inverse();
     TMat3F delta;
     m_mul(inverse, parent, delta);
-    for (std::size_t i = std::size_t(node); i < transforms_.size(); ++i) {
+    for (std::size_t i = std::size_t(node); i < data_->transforms.size(); ++i) {
         auto ancestor = Int32(i);
         while (ancestor > node) {
             ancestor = shape_->nodes[ancestor].parent;
         }
         if (ancestor == node) {
             TMat3F transform;
-            m_mul(transforms_[i], delta, transform);
-            transforms_[i] = transform;
+            m_mul(data_->transforms[i], delta, transform);
+            data_->transforms[i] = transform;
         }
     }
     return true;
@@ -338,26 +349,28 @@ TsShapePose::sample(Resource<TsShape> resource,
                b.priority.value_or(shape.sequences[std::size_t(b.sequence)].priority);
     });
     TsShapePose result;
-    result.transforms_.resize(shape.nodes.size());
-    result.visible_.assign(shape.nodes.size(), 1);
-    result.objects_.resize(shape.objects.size());
+    result.data_ = std::make_shared<Data>();
+    result.data_->revision = nextPoseRevision();
+    result.data_->transforms.resize(shape.nodes.size());
+    result.data_->visible.assign(shape.nodes.size(), 1);
+    result.data_->objects.resize(shape.objects.size());
     if (shape.defaultMaterials < 0 || shape.defaultMaterials > 65536) {
         return {};
     }
-    result.materialRemap_.resize(std::size_t(shape.defaultMaterials));
+    result.data_->materialRemap.resize(std::size_t(shape.defaultMaterials));
     std::ranges::copy(std::views::iota(Int32{0}, shape.defaultMaterials),
-                      result.materialRemap_.begin());
+                      result.data_->materialRemap.begin());
     if (materialRemap) {
-        if (materialRemap->size() != result.materialRemap_.size() ||
+        if (materialRemap->size() != result.data_->materialRemap.size() ||
             !std::ranges::all_of(*materialRemap, [](Int32 slot) {
                 return slot >= 0 && slot <= 65535;
             })) {
             return {};
         }
-        std::ranges::copy(*materialRemap, result.materialRemap_.begin());
+        std::ranges::copy(*materialRemap, result.data_->materialRemap.begin());
     } else {
         for (const auto& s : ordered | std::views::reverse) {
-            if (!updateIfl(eval, shape, s, result.materialRemap_)) {
+            if (!updateIfl(eval, shape, s, result.data_->materialRemap)) {
                 return {};
             }
         }
@@ -381,17 +394,19 @@ TsShapePose::sample(Resource<TsShape> resource,
                 result.root_ = matrix;
             }
             if (node.parent >= 0) {
-                m_mul(matrix, result.transforms_[std::size_t(node.parent)], result.transforms_[i]);
+                m_mul(matrix,
+                      result.data_->transforms[std::size_t(node.parent)],
+                      result.data_->transforms[i]);
             }
             // Root matrices remain identity; root motion is a separate caller policy.
-            result.visible_[i] = UInt8(visible);
-            return finite(matrix) && finite(result.transforms_[i]);
+            result.data_->visible[i] = UInt8(visible);
+            return finite(matrix) && finite(result.data_->transforms[i]);
         })) {
         return {};
     }
     if (!std::ranges::all_of(std::views::iota(std::size_t{0}, shape.objects.size()), [&](auto i) {
             const auto& object = shape.objects[i];
-            auto& pose = result.objects_[i];
+            auto& pose = result.data_->objects[i];
             if (!at(object.node, shape.nodes.size()) || !at(object.mesh, shape.meshes.size())) {
                 return false;
             }
@@ -493,8 +508,8 @@ std::optional<TMat3F> TsShapePose::sampleRoot(const TsShape& shape,
 }
 
 std::optional<Box3F> TsShapePose::bounds(Int32 detail) const {
-    if (!shape_ || transforms_.size() != shape_->nodes.size() ||
-        objects_.size() != shape_->objects.size() ||
+    if (!shape_ || data_->transforms.size() != shape_->nodes.size() ||
+        data_->objects.size() != shape_->objects.size() ||
         (shape_->details.empty() ? detail != 0 : !at(detail, shape_->details.size()))) {
         return {};
     }
@@ -518,13 +533,13 @@ std::optional<Box3F> TsShapePose::bounds(Int32 detail) const {
     }
     std::optional<Box3F> result;
     std::size_t remaining = 4'194'304;
-    if (!std::ranges::all_of(std::views::iota(std::size_t{0}, objects_.size()), [&](auto i) {
+    if (!std::ranges::all_of(std::views::iota(std::size_t{0}, data_->objects.size()), [&](auto i) {
             const auto& object = shape.objects[i];
-            const auto& state = objects_[i];
+            const auto& state = data_->objects[i];
             if (!at(object.node, selected.size()) || !at(object.mesh, shape.meshes.size())) {
                 return false;
             }
-            if (!selected[std::size_t(object.node)] || !visible_[std::size_t(object.node)] ||
+            if (!selected[std::size_t(object.node)] || !data_->visible[std::size_t(object.node)] ||
                 !state.visible) {
                 return true;
             }
@@ -540,7 +555,7 @@ std::optional<Box3F> TsShapePose::bounds(Int32 detail) const {
                         return false;
                     }
                     *p += object.offset;
-                    m_mul(*p, transforms_[std::size_t(object.node)], *p);
+                    m_mul(*p, data_->transforms[std::size_t(object.node)], *p);
                     if (!finite(*p)) {
                         return false;
                     }

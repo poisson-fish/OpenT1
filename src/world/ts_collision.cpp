@@ -124,6 +124,25 @@ bool edgeInTube(Point3F r1,
 }
 }
 
+std::shared_ptr<const TsShapeCollision> TsShapeCollision::shared(const TsShapePose& pose,
+                                                                 Int32 detail) {
+    if (!pose.data_)
+        return {};
+    auto& cache = pose.data_->collisions;
+    for (const auto& [cachedDetail, collision] : cache) {
+        if (cachedDetail == detail)
+            return collision;
+    }
+    auto built = prepare(pose, detail);
+    if (!built)
+        return {};
+    auto result = std::make_shared<const TsShapeCollision>(std::move(*built));
+    if (cache.size() == 2)
+        cache.erase(cache.begin());
+    cache.emplace_back(detail, result);
+    return result;
+}
+
 std::optional<TsShapeCollision> TsShapeCollision::prepare(const TsShapePose& pose, Int32 detail) {
     const auto resource = pose.shape();
     if (!resource) {

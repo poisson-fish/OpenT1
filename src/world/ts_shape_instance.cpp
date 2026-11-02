@@ -291,6 +291,7 @@ std::optional<UInt32> TsShapeInstance::addThread(Int32 seq, Flt32 p) {
     t.position = p;
     t.priority = shape_->sequences[std::size_t(seq)].priority;
     threads_.push_back(t);
+    invalidatePose();
     return UInt32(threads_.size() - 1);
 }
 
@@ -305,6 +306,7 @@ bool TsShapeInstance::setSequence(UInt32 thread, Int32 seq, Flt32 p) {
     t.timeScale = scale;
     t.priority = shape_->sequences[std::size_t(seq)].priority;
     threads_[thread] = t;
+    invalidatePose();
     return true;
 }
 
@@ -321,6 +323,7 @@ bool TsShapeInstance::setPriority(UInt32 thread, Int32 priority) {
         return false;
     }
     threads_[thread].priority = priority;
+    invalidatePose();
     return true;
 }
 
@@ -334,6 +337,7 @@ bool TsShapeInstance::cancelTransition(UInt32 thread) {
     t.runtimeTransition.reset();
     t.forwardRuntimeTransition.reset();
     t.backwardRuntimeTransition.reset();
+    invalidatePose();
     return true;
 }
 
@@ -367,6 +371,7 @@ bool TsShapeInstance::setTransition(UInt32 thread, Int32 index) {
         t.backwardRuntimeTransition.reset();
     }
     t.state = TsThreadState::Pending;
+    invalidatePose();
     return true;
 }
 
@@ -400,6 +405,7 @@ bool TsShapeInstance::setTransition(UInt32 thread, const TsTransition& edge) {
         next.backwardTransition = -1;
     }
     next.state = TsThreadState::Pending;
+    invalidatePose();
     return true;
 }
 
@@ -460,16 +466,20 @@ bool TsShapeInstance::transitionToSequence(UInt32 thread, Int32 seq) {
     t.forwardTransition = forward;
     t.backwardTransition = backward;
     t.state = TsThreadState::Pending;
+    invalidatePose();
     return true;
 }
 
 std::optional<TsShapePose> TsShapeInstance::pose() const {
+    if (evaluatedPose_)
+        return evaluatedPose_;
     std::vector<TsAnimationSample> samples;
     samples.reserve(threads_.size());
     for (const auto& thread : threads_) {
         samples.push_back(thread.sample());
     }
-    return TsShapePose::sample(shape_, samples, std::span<const Int32>(materialRemap_));
+    evaluatedPose_ = TsShapePose::sample(shape_, samples, std::span<const Int32>(materialRemap_));
+    return evaluatedPose_;
 }
 
 bool TsShapeInstance::advance(Flt64 seconds, bool bidirectional) {
@@ -527,9 +537,18 @@ bool TsShapeInstance::advanceSelected(std::optional<UInt32> selected,
     for (const auto& t : next) {
         samples.push_back(t.sample());
     }
-    if (!TsShapePose::sample(shape_, samples, std::span<const Int32>(remap))) {
+    const bool samePose =
+        remap == materialRemap_ && samples.size() == threads_.size() &&
+        std::ranges::equal(samples, threads_, [](const auto& sample, const auto& thread) {
+            return sample == thread.sample();
+        });
+    auto evaluated = samePose && evaluatedPose_
+                         ? evaluatedPose_
+                         : TsShapePose::sample(shape_, samples, std::span<const Int32>(remap));
+    if (!evaluated) {
         return false;
     }
+    evaluatedPose_ = std::move(evaluated);
     materialRemap_ = std::move(remap);
     threads_ = std::move(next);
     triggers_ = std::move(events);

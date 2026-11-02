@@ -855,8 +855,10 @@ bool WorldSceneFrame::draw(gfx::SoftwareSurface& surface,
         return false;
     }
     std::vector<gfx::SortedPolygon> polygons;
+    // Lazy software projections must outlive the borrowed polygon spans submitted below.
+    std::vector<std::optional<TsStaticShapeFrame>> softwareFrames(surfaceFrames_.size());
     for (std::size_t i = 0; i < surfaceFrames_.size(); ++i) {
-        std::optional<TsStaticShapeFrame> software;
+        auto& software = softwareFrames[i];
         if (retainedHardware_ && surfaces_[i].mesh->retainedHardwareCompatible()) {
             TsStaticView view;
             m_mul(surfaces_[i].placement, camera_.worldToCamera, view.shapeToCamera);

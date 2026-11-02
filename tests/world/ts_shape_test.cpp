@@ -452,6 +452,31 @@ void assets(const std::filesystem::path& directory) {
             auto resource = manager.load<TsShape>("sample.dts");
             const auto defaultPose = TsShapePose::sample(resource);
             CHECK(defaultPose);
+            TsShapeInstance evaluated(resource);
+            const auto cached = evaluated.pose(), repeated = evaluated.pose();
+            CHECK(cached && repeated && cached->revision() == repeated->revision());
+            CHECK(cached->nodeTransforms().data() == repeated->nodeTransforms().data());
+            CHECK(evaluated.advance(0) && evaluated.pose()->revision() == cached->revision());
+            CHECK(!evaluated.addThread(-1) && evaluated.pose()->revision() == cached->revision());
+            if (!resource->details.empty()) {
+                const auto collision = TsShapeCollision::shared(*cached, 0);
+                CHECK(collision && collision == TsShapeCollision::shared(*repeated, 0));
+                CHECK(!TsShapeCollision::shared(*cached, -1));
+                CHECK(collision == TsShapeCollision::shared(*cached, 0));
+            }
+            const auto child = std::ranges::find_if(resource->nodes, [](const auto& node) {
+                return node.parent >= 0;
+            });
+            if (child != resource->nodes.end()) {
+                auto overridden = *cached;
+                auto parent = cached->nodeTransforms()[child->parent];
+                parent.p.x += 1;
+                CHECK(overridden.overrideParentTransform(Int32(child - resource->nodes.begin()),
+                                                         parent));
+                CHECK(overridden.revision() != cached->revision());
+                CHECK(overridden.nodeTransforms().data() != cached->nodeTransforms().data());
+                CHECK(evaluated.pose()->revision() == cached->revision());
+            }
             for (std::size_t detail = 0; detail < resource->details.size(); ++detail) {
                 if (!TsShapeCollision::prepare(*defaultPose, Int32(detail))) {
                     std::fprintf(stderr,

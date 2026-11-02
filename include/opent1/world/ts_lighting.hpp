@@ -66,6 +66,10 @@ public:
         return states_;
     }
 
+    [[nodiscard]] const TsLighting& lighting() const {
+        return lighting_;
+    }
+
 private:
     TsLighting lighting_;
     std::vector<State> states_;

@@ -1,6 +1,8 @@
 #include "test_support.hpp"
+#include "ts_test_support.hpp"
 #include <opent1/gfx/sdl_gpu_surface.hpp>
 #include <opent1/world/world_surfaces.hpp>
+#include <opent1/sim/sim_hardware_environment.hpp>
 #include <array>
 #include <string_view>
 
@@ -89,6 +91,9 @@ void retainedMesh(platform::SdlWindow& window) {
     polygon.transform.clip = {.1f, 100, 1, 0};
     auto batch = gfx::HardwareBatch::prepare(std::span(&polygon, 1));
     CHECK(batch && batch->vertices().empty() && batch->meshes().size() == 1);
+    const auto memory = batch->memoryStats();
+    CHECK(memory.batchBytes > 0 &&
+          memory.meshBytes >= mesh->vertices().size_bytes() + mesh->indices().size_bytes());
     CHECK(surface->render(*batch));
     std::vector<std::byte> pixels(16 * 16 * 4);
     CHECK(surface->readback(pixels));
@@ -103,7 +108,8 @@ void retainedMesh(platform::SdlWindow& window) {
     CHECK(surface->readback(pixels));
     const auto published = pixels;
     CHECK(surface->trimCaches());
-    CHECK(surface->resourceStats().meshes == 0 && surface->resourceStats().uploadCapacity == 0);
+    CHECK(surface->resourceStats().meshes == 0 && surface->resourceStats().uploadCapacity == 0 &&
+          surface->resourceStats().instanceCapacity == 0);
     CHECK(surface->readback(pixels));
     CHECK(pixels == published);
     CHECK(surface->render(*batch) && surface->resourceStats().meshUploads == warm.meshUploads + 1);
@@ -347,6 +353,222 @@ void arrayReadbacks(platform::SdlWindow& window) {
     CHECK(stats.physicalTextures < stats.textures);
 }
 
+void terrainReadbacks(platform::SdlWindow& window) {
+    ResourceManager manager;
+    auto bitmap = gfx::Bitmap::create(4, 4);
+    CHECK(bitmap);
+    std::ranges::fill(bitmap->pixels, std::byte{1});
+    CHECK(manager.add("terrain.bmp", std::move(bitmap)));
+    auto lightMap = std::make_shared<gfx::LightMap>();
+    lightMap->size = {2, 2};
+    lightMap->samples = {0xffff, 0xf88f, 0xff88, 0xf8f8};
+    gfx::Palette palette;
+    palette.palettes[0].colors[1] = {180, 110, 60, 255};
+    auto surface = gfx::SdlGpuSurface::create(window, 64, 64);
+    CHECK(surface);
+    for (UInt32 key = 0; key < 32; ++key) {
+        const std::array<Point2F, 8> ring{
+            {{0, 0}, {0, .5f}, {0, 1}, {.5f, 1}, {1, 1}, {1, .5f}, {1, 0}, {.5f, 0}}};
+        std::vector<gfx::HardwareVertex> vertices(8);
+        std::vector<UInt32> indices;
+        const auto emit = [&](UInt32 a, UInt32 b, UInt32 c) {
+            indices.insert(indices.end(), {a & 7U, b & 7U, c & 7U});
+        };
+        for (const auto start : key & 16U ? std::array{6U, 2U} : std::array{0U, 4U}) {
+            const bool a = key & (1U << (((start + 1) & 7U) / 2)),
+                       b = key & (1U << (((start + 3) & 7U) / 2));
+            if (a && b) {
+                emit(start, start + 3, start + 4);
+                emit(start, start + 1, start + 3);
+                emit(start + 1, start + 2, start + 3);
+            } else if (a) {
+                emit(start, start + 1, start + 4);
+                emit(start + 1, start + 2, start + 4);
+            } else if (b) {
+                emit(start, start + 2, start + 3);
+                emit(start, start + 3, start + 4);
+            } else
+                emit(start, start + 2, start + 4);
+        }
+        for (std::size_t i = 0; i < 8; ++i) {
+            vertices[i].position = ring[i];
+            vertices[i].texture = {ring[i].x, 1 - ring[i].y};
+        }
+        world::WorldSurfaceMesh mesh;
+        mesh.materials.list.materials.resize(1);
+        mesh.materials.list.materials[0].flags = 0x103;
+        mesh.materials.list.materialsPerDetail = 1;
+        mesh.materials.textures = {manager.load<gfx::Bitmap>("terrain.bmp")};
+        auto patches = std::make_shared<world::WorldSurfaceMesh::TerrainPatches>();
+        patches->farDistance = 8;
+        patches->hazeDistance = 3;
+        world::WorldSurfaceMesh::TerrainPatch patch;
+        patch.topology = gfx::HardwareMesh::create(std::move(vertices), indices);
+        patch.topologyKey = key;
+        patch.extent = 2;
+        patch.origin = {-2, 4, -1};
+        patch.lightMap = lightMap;
+        patch.mapOrigin = {.1f, .9f};
+        patch.mapScale = {.8f, -.8f};
+        for (std::size_t i = 0; i < 8; ++i)
+            patch.heights[i] = {
+                Flt32(i % 3) * .1f, Flt32(i % 2) * .2f, Flt32(i % 3) * .6f, Flt32(i) * .7f + 3.5f};
+        patches->patches.push_back(patch);
+        patch.firstTriangle = indices.size() / 3;
+        patch.origin.x = .5f;
+        for (auto& h : patch.heights) {
+            h[0] += .2f;
+            h[3] -= 1.5f;
+        }
+        patches->patches.push_back(patch);
+        patches->triangles = indices.size() / 3 * 2;
+        mesh.terrainPatches = patches;
+        world::TsStaticView view;
+        view.width = view.height = 64;
+        view.focal = {32, 32};
+        view.center = {32, 32};
+        view.nearDistance = .1f;
+        view.farDistance = 8;
+        view.shapeToCamera.p.z = -1;
+        const auto projectedFrame = mesh.prepare(view);
+        CHECK(projectedFrame);
+        const auto reference = projectedFrame->hardware(&palette);
+        const auto polygons = mesh.hardwareInterior(view, palette);
+        CHECK(reference && polygons);
+        const auto retained = gfx::HardwareBatch::prepare(*polygons, &palette);
+        CHECK(retained);
+        gfx::GpuFrameConfig frame;
+        frame.hazeColor = {.2f, .3f, .4f};
+        std::vector<std::byte> a(64 * 64 * 4), b(a.size());
+        CHECK(surface->render(*reference, frame) && surface->readback(a));
+        CHECK(surface->render(*retained, frame) && surface->readback(b));
+        unsigned errors{};
+        for (std::size_t i = 0; i < a.size(); i += 4)
+            if (std::abs(int(a[i]) - int(b[i])) > 2 ||
+                std::abs(int(a[i + 1]) - int(b[i + 1])) > 2 ||
+                std::abs(int(a[i + 2]) - int(b[i + 2])) > 2)
+                ++errors;
+        CHECK(errors <= 8);
+        CHECK(surface->resourceStats().meshUploads == 1);
+    }
+}
+
+void shapeReadbacks(platform::SdlWindow& window) {
+    ResourceManager manager;
+    CHECK(manager.add("retained.dts", test::ts::load(test::ts::shape())));
+    auto bitmap = gfx::Bitmap::create(4, 4);
+    CHECK(bitmap);
+    for (std::size_t i = 0; i < bitmap->pixels.size(); ++i)
+        bitmap->pixels[i] = std::byte(i % 4);
+    CHECK(manager.add("test.bmp", std::move(bitmap)));
+    auto resources = world::TsShapeResources::load(manager, "retained.dts");
+    CHECK(resources);
+    const auto pose = world::TsShapePose::sample(resources->shape);
+    CHECK(pose);
+    gfx::Palette palette;
+    palette.palettes[0].colors[1] = {230, 80, 30, 128};
+    palette.palettes[0].colors[2] = {30, 210, 70, 160};
+    palette.palettes[0].colors[3] = {40, 60, 240, 200};
+    auto surface = gfx::SdlGpuSurface::create(window, 64, 64);
+    CHECK(surface);
+    gfx::GpuFrameConfig frame;
+    frame.hazeColor = {.2f, .3f, .4f};
+    std::optional<gfx::HardwareBatch> earlier;
+    std::vector<std::byte> earlierPixels;
+    for (const UInt32 shading : {0x100U, 0x200U, 0x400U})
+        for (const UInt32 alpha : {0U, 0x1000U, 0x2000U})
+            for (const auto [type, pointMode] :
+                 std::array{std::pair{world::TsLight::Type::Directional, 0},
+                            std::pair{world::TsLight::Type::DirectionalNonlinear, 0},
+                            std::pair{world::TsLight::Type::DirectionalWrap, 0},
+                            std::pair{world::TsLight::Type::Point, 0},
+                            std::pair{world::TsLight::Type::Point, 1},
+                            std::pair{world::TsLight::Type::Point, 2},
+                            std::pair{world::TsLight::Type::Point, 3}})
+                for (Flt32 depth : {.08f, 1.f, 5.f, 19.8f, 21.f}) {
+                    resources->materials.list.materials[0].flags = shading | alpha | 3;
+                    world::TsStaticView view;
+                    view.width = view.height = 64;
+                    view.focal = {32, 32};
+                    view.center = {32, 32};
+                    view.nearDistance = .1f;
+                    view.farDistance = 20;
+                    view.shapeToCamera.p.y = depth;
+                    view.haze = .35f;
+                    view.opacity = alpha == 0x2000U ? .6f : 1.f;
+                    view.lighting.emplace();
+                    view.lighting->ambient = {.1f, .2f, .15f};
+                    world::TsLight light;
+                    light.type = type;
+                    light.direction = {0, -1, 0};
+                    light.position = {0, -4, 1};
+                    light.range = 20;
+                    light.attenuation = {1, .01f, .001f};
+                    light.intensity = {.6f, .5f, .7f};
+                    if (pointMode) {
+                        light.position = {0, -100, 0};
+                        light.range = pointMode == 1   ? 200.f
+                                      : pointMode == 2 ? light.position.lenf()
+                                                       : 1.f;
+                    }
+                    view.lighting->lights = {light};
+                    if (pointMode == 1) {
+                        auto second = light;
+                        second.type = world::TsLight::Type::DirectionalWrap;
+                        second.shadowAttenuation = .5f;
+                        view.lighting->lights.push_back(second);
+                    }
+                    auto evaluated = *pose;
+                    if (pointMode && shading == 0x400U)
+                        CHECK(evaluated.overrideParentTransform(1, TMat3F(EulerF{0, 0, .2f}, {})));
+                    const auto referenceFrame =
+                        world::TsStaticShapeFrame::prepare(*resources, view, evaluated);
+                    const auto retainedFrame =
+                        world::TsStaticShapeFrame::prepare(*resources, view, evaluated, true);
+                    CHECK(referenceFrame && retainedFrame);
+                    const auto reference = referenceFrame->hardware(&palette);
+                    auto inputs = retainedFrame->hardwarePolygons(&palette);
+                    CHECK(reference && inputs);
+                    sim::EnvironmentCamera camera;
+                    camera.viewport = {0, 0, 63, 63};
+                    camera.center = {32, 32};
+                    camera.focal = {32, 32};
+                    camera.nearDistance = .1f;
+                    camera.farDistance = 20;
+                    for (auto& input : *inputs)
+                        input.imageSortValue = .5f;
+                    const auto retained =
+                        sim::prepareHardwareEnvironment(camera, {}, {}, palette, {}, *inputs);
+                    CHECK(retained && surface->render(*reference, frame));
+                    std::vector<std::byte> a(64 * 64 * 4), b(a.size());
+                    CHECK(surface->readback(a) && surface->render(*retained, frame) &&
+                          surface->readback(b));
+                    unsigned largeErrors{};
+                    for (std::size_t i = 0; i < a.size(); i += 4)
+                        if (std::abs(int(a[i]) - int(b[i])) > 2 ||
+                            std::abs(int(a[i + 1]) - int(b[i + 1])) > 2 ||
+                            std::abs(int(a[i + 2]) - int(b[i + 2])) > 2)
+                            ++largeErrors;
+                    CHECK(largeErrors <= 8);
+                    if (shading == 0x400U && alpha == 0 &&
+                        type == world::TsLight::Type::Directional && depth == 5) {
+                        CHECK(!retained->meshes().empty());
+                        earlier = *retained;
+                        earlierPixels = b;
+                    }
+                }
+    CHECK(earlier && surface->trimCaches());
+    world::clearTsHardwareMeshes();
+    const auto conversionBudget = gfx::hardwareTextureConversionStats();
+    gfx::setHardwareTextureConversionBudget(0);
+    CHECK(gfx::hardwareTextureConversionStats().bytes == 0);
+    CHECK(surface->render(*earlier, frame));
+    std::vector<std::byte> actual(earlierPixels.size());
+    CHECK(surface->readback(actual) && actual == earlierPixels);
+    gfx::setHardwareTextureConversionBudget(conversionBudget.budgetBytes,
+                                            conversionBudget.budgetEntries);
+}
+
 int gpuCache() {
     return test::run([] {
         platform::SdlApplication app;
@@ -365,6 +587,8 @@ int gpuCache() {
         interiorReadbacks(window);
         pageReadbacks(window);
         arrayReadbacks(window);
+        terrainReadbacks(window);
+        shapeReadbacks(window);
     });
 }
 }

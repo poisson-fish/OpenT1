@@ -669,6 +669,8 @@ void mission(const std::filesystem::path& root,
                         << ",\"evictions\":" << c.evictions
                         << ",\"vertex_capacity_bytes\":" << b.vertexCapacity
                         << ",\"transfer_capacity_bytes\":" << b.uploadCapacity
+                        << ",\"instance_capacity_bytes\":" << b.instanceCapacity
+                        << ",\"instance_upload_bytes\":" << d.instanceUploadBytes
                         << ",\"retained_mesh_bytes\":" << b.meshBytes
                         << ",\"peak_retained_mesh_bytes\":" << b.peakMeshBytes
                         << ",\"mesh_uploads\":" << b.meshUploads

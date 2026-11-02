@@ -950,6 +950,8 @@ bool SimMissionTerrain::processQuery(sim::SimQuery& query) {
         return true;
     }
     if (auto* q = dynamic_cast<WorldSurfaceQuery*>(&query)) {
+        if (q->trimCaches)
+            return surface_ ? surface_->processQuery(query) : true;
         if (state_.suspend) {
             q->image.reset();
             return true;

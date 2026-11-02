@@ -4772,6 +4772,7 @@ bool FearGameApp::loadMission(std::string_view missionNameOrFile, bool dedicated
     }
 
     if (game_.console().isFunction("createServer")) {
+        world::clearTsHardwareMeshes();
         const std::array<std::string, 2> arguments{stem, dedicated ? "true" : "false"};
         const auto result = game_.console().execute("createServer", arguments);
         auto* manager = fearPlugin_->serverGlobals().manager;
@@ -4858,6 +4859,13 @@ gui::Presentation FearGameApp::guiPresentation(Point2I pixels) const {
 void FearGameApp::trimRenderCaches() {
     softwareTextureCache_.clear();
     gfx::clearHardwareTextureConversions();
+    world::clearTsHardwareMeshes();
+    const auto* client = fearPlugin_ ? fearPlugin_->clientGlobals().world : nullptr;
+    const auto* server = fearPlugin_ ? fearPlugin_->serverGlobals().world : nullptr;
+    if (client)
+        world::trimWorldRenderCaches(*fearPlugin_->clientGlobals().world);
+    if (server && server != client)
+        world::trimWorldRenderCaches(*fearPlugin_->serverGlobals().world);
     if (resources_)
         resources_->purge(true);
 }

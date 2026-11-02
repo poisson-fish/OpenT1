@@ -91,6 +91,8 @@ int main(int argc, char** argv) {
         std::vector<double> frames, prepares, captures, submissions, simulations, terrain, lighting;
         UInt64 polygons{}, draws{}, binds{}, vertexBytes{}, meshBytes{}, textureBytes{},
             geometryBuilds{}, mapBuilds{}, terrainCacheHits{};
+        UInt64 instanceBytes{};
+        gfx::HardwareBatch::MemoryStats batchMemory;
         // Warm the rotating working set as well as pipeline creation.
         constexpr unsigned warm = 120;
         for (unsigned f = 0; f < warm + count; ++f) {
@@ -133,7 +135,10 @@ int main(int argc, char** argv) {
                 geometryBuilds += game.renderStats().work.interiorGeometryBuilds;
                 mapBuilds += game.renderStats().work.interiorLightMapBuilds;
                 terrainCacheHits += game.renderStats().work.terrainMeshCacheHits;
+                instanceBytes += surface->submissionStats().instanceUploadBytes;
             }
+            if (f + 1 == warm + count)
+                batchMemory = batch.memoryStats();
         }
         require(polygons > 0, "no world rendered");
         std::vector<std::byte> pixels(800 * 600 * 4);
@@ -145,6 +150,9 @@ int main(int argc, char** argv) {
         const auto textures = surface->textureCacheStats();
         const auto resources = surface->resourceStats();
         const auto archives = game.resources().archiveMemoryStats();
+        const auto ts = world::tsHardwareCacheStats();
+        const auto sources = game.resources().residencyStats();
+        const auto conversions = gfx::hardwareTextureConversionStats();
         std::ofstream out(output);
         out << "{\"mission\":\"" << argv[2] << "\",\"mode\":\"" << mode << "\",\"driver\":\""
             << surface->driver() << "\",\"frames\":" << count << ",\"load_ms\":" << loadMs << ',';
@@ -175,18 +183,34 @@ int main(int argc, char** argv) {
             << ",\"texture_evictions\":" << textures.evictions
             << ",\"vertex_capacity\":" << resources.vertexCapacity
             << ",\"staging_capacity\":" << resources.uploadCapacity
+            << ",\"instance_capacity\":" << resources.instanceCapacity
+            << ",\"ts_mesh_cache_entries\":" << ts.entries
+            << ",\"ts_mesh_cache_bytes\":" << ts.bytes << ",\"ts_mesh_cache_hits\":" << ts.hits
+            << ",\"ts_mesh_cache_builds\":" << ts.builds
             << ",\"retained_meshes\":" << resources.meshes
             << ",\"retained_mesh_bytes\":" << resources.meshBytes
             << ",\"peak_retained_mesh_bytes\":" << resources.peakMeshBytes
             << ",\"mesh_uploads\":" << resources.meshUploads
             << ",\"mean_vertex_upload_bytes\":" << double(vertexBytes) / count
             << ",\"mean_mesh_upload_bytes\":" << double(meshBytes) / count
+            << ",\"mean_instance_upload_bytes\":" << double(instanceBytes) / count
             << ",\"mean_texture_upload_bytes\":" << double(textureBytes) / count
             << ",\"geometry_builds\":" << geometryBuilds << ",\"map_builds\":" << mapBuilds
             << ",\"terrain_selection_cache_hits\":" << terrainCacheHits
             << ",\"archive_mapped_bytes\":" << archives.mappedBytes
             << ",\"archive_owned_bytes\":" << archives.ownedBufferBytes
-            << ",\"archive_decode_staging_bytes\":" << archives.decodeStagingBytes << "}\n";
+            << ",\"archive_decode_staging_bytes\":" << archives.decodeStagingBytes
+            << ",\"decoded_source_bytes\":" << sources.decodedBytes
+            << ",\"live_source_bytes\":" << sources.liveBytes
+            << ",\"unused_source_bytes\":" << sources.unusedBytes
+            << ",\"source_budget_bytes\":" << sources.budgetBytes
+            << ",\"source_budget_debt_bytes\":" << sources.overBudgetBytes
+            << ",\"source_incomplete_entries\":" << sources.incompleteEntries
+            << ",\"peak_decode_staging_bytes\":" << sources.peakDecodeStagingBytes
+            << ",\"conversion_cache_bytes\":" << conversions.bytes
+            << ",\"batch_owned_bytes\":" << batchMemory.batchBytes
+            << ",\"batch_mesh_snapshot_bytes\":" << batchMemory.meshBytes
+            << ",\"batch_texture_snapshot_bytes\":" << batchMemory.textureBytes << "}\n";
         // Optional acceptance work is deliberately outside all timing samples.
         if (std::getenv("OPENT1_VALIDATE_RENDER")) {
             gfx::HardwareBatch snapshot;

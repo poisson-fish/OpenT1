@@ -205,6 +205,11 @@ bool SimInteriorSurface::processQuery(sim::SimQuery& query) {
     if (!surface) {
         return SimContainer::processQuery(query);
     }
+    if (surface->trimCaches) {
+        cache_ = {};
+        surface->image.reset();
+        return true;
+    }
     surface->linkDetail_.reset();
     surface->image = image_;
     const auto fail = [&] {

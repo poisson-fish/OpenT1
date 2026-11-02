@@ -80,6 +80,17 @@ bool SimTerrainSurface::processQuery(sim::SimQuery& query) {
     if (!surface) {
         return SimObject::processQuery(query);
     }
+    if (surface->trimCaches) {
+        textureCache_.clear();
+        lodState_.clear();
+        if (stream_)
+            stream_->trimCaches();
+        retainedMesh_.reset();
+        retainedCamera_.reset();
+        retainedLights_.reset();
+        surface->image.reset();
+        return true;
+    }
     if (!surface->camera || !collision_detail::rigid(surface->camera->worldToCamera)) {
         return false;
     }
@@ -88,6 +99,7 @@ bool SimTerrainSurface::processQuery(sim::SimQuery& query) {
     auto toLocal = placement_;
     toLocal.inverse();
     auto policy = policy_;
+    policy.retainedPatches = surface->retainedTerrain;
     if (surface->terrainTiming) {
         if (*surface->terrainTiming != TerrainTextureTiming::RetainedLru &&
             *surface->terrainTiming != TerrainTextureTiming::NativeSoftware &&
@@ -164,6 +176,7 @@ bool SimTerrainSurface::processQuery(sim::SimQuery& query) {
         !terrain2_ && policy.textureTiming == TerrainTextureTiming::RetainedLru &&
         (!surface->terrainTiming || *surface->terrainTiming == TerrainTextureTiming::RetainedLru);
     if (retain && retainedMesh_ && retainedCamera_ &&
+        retainedPatchPolicy_ == policy.retainedPatches &&
         sameCamera(*retainedCamera_, *surface->camera) && retainedLights_ == lights &&
         retainedTiming_ == surface->terrainTiming) {
         surface->image = WorldSurfaceInstance{retainedMesh_, placement_};
@@ -259,6 +272,7 @@ bool SimTerrainSurface::processQuery(sim::SimQuery& query) {
         retainedCamera_ = surface->camera;
         retainedLights_ = std::move(lights);
         retainedTiming_ = surface->terrainTiming;
+        retainedPatchPolicy_ = policy.retainedPatches;
     }
     return true;
 }

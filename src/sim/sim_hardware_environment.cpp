@@ -23,6 +23,7 @@ struct Polygon {
     double sortValue{};
     std::span<const Point2F> lightMapCoordinates;
     std::span<const Flt32> vertexOpacity;
+    std::optional<gfx::HardwarePolygon> retained{};
 };
 }
 
@@ -253,6 +254,8 @@ prepareHardwareEnvironment(const EnvironmentCamera& camera,
                             sortValue,
                             input.lightMapCoordinates,
                             input.vertexOpacity});
+        if (input.mesh)
+            polygons.back().retained = input;
     }
     std::ranges::stable_sort(polygons, [](const auto& a, const auto& b) {
         if (a.stage != b.stage) {
@@ -261,7 +264,10 @@ prepareHardwareEnvironment(const EnvironmentCamera& camera,
         return a.stage == 2 && a.sortValue < b.sortValue;
     });
     std::ranges::for_each(polygons, [&](const auto& p) {
-        batch.push_back({p.vertices, p.material, p.lightMapCoordinates, p.vertexOpacity});
+        if (p.retained)
+            batch.push_back(*p.retained);
+        else
+            batch.push_back({p.vertices, p.material, p.lightMapCoordinates, p.vertexOpacity});
     });
     return gfx::HardwareBatch::prepare(batch, &palette);
 }

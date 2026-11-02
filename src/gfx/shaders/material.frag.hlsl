@@ -39,9 +39,13 @@ float4 main(float4 position : SV_Position,
             float haze : TEXCOORD2,
             float2 lightUV : TEXCOORD3,
             float opacity : TEXCOORD4,
-            float cameraDepth : TEXCOORD5)
+            float cameraDepth : TEXCOORD5,
+            float sphereDistance : TEXCOORD6)
     : SV_Target0 {
-    if (geometryClip.z != 0 && (cameraDepth < geometryClip.x || cameraDepth > geometryClip.y)) discard;
+    if (geometryClip.z != 0 && (cameraDepth < geometryClip.x || cameraDepth > geometryClip.y))
+        discard;
+    if (sphereDistance > 1)
+        discard;
     if (alphaControls.z == 2)
         return float4(hazeColor.rgb, saturate(haze));
     float4 texel = arrayControls.y != 0

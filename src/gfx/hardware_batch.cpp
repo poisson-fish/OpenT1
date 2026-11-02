@@ -45,6 +45,55 @@ bool valid(const HardwareMaterial& m) {
              m.mipFilter == HardwareMipFilter::None && m.lodBias == 0));
 }
 
+bool validMeshPolygon(const HardwarePolygon& p) {
+    const auto& t = p.transform;
+    const auto finite = [](const auto& values) {
+        return std::ranges::all_of(values, [](auto v) {
+            return std::isfinite(v);
+        });
+    };
+    const auto integer = [](Flt32 v, Flt32 last) {
+        return v >= 0 && v <= last && std::trunc(v) == v;
+    };
+    if (p.material.twoSided || p.material.shadeSource != PolygonSource::None || !p.indexCount ||
+        p.indexCount % 3 || p.firstIndex % 3 || p.firstIndex > p.mesh->indices().size() ||
+        p.indexCount > p.mesh->indices().size() - p.firstIndex ||
+        !std::ranges::all_of(t.camera, finite) || !finite(t.optics) || !finite(t.clip) ||
+        !std::ranges::all_of(t.parameters, finite) || !finite(t.geometry) || !finite(t.ambient) ||
+        !finite(t.mapping) || t.optics[0] <= 0 || t.optics[1] <= 0 || t.clip[0] < 1.f / 65536 ||
+        t.clip[1] > 65536 || t.clip[1] <= t.clip[0] || t.clip[2] != 1)
+        return false;
+    if (t.geometry[2] == 0)
+        return p.mesh->encoding() == HardwareMesh::Encoding::Color &&
+               p.material.hazeSource != PolygonSource::Constant;
+    if (t.geometry[2] == 1) {
+        return p.mesh->encoding() == HardwareMesh::Encoding::Color && t.geometry[0] > 0 &&
+               t.geometry[1] > 0 && integer(t.geometry[3], 31) && p.mesh->vertices().size() == 18 &&
+               std::ranges::all_of(p.mesh->vertices(),
+                                   [&](const auto& v) {
+                                       return integer(v.inverseDepth, 17);
+                                   }) &&
+               std::ranges::all_of(t.parameters, [](const auto& h) {
+                   return bounded(h[0], 1e12f) && bounded(h[1], 1e12f) && h[2] >= 0 && h[3] >= 0;
+               });
+    }
+    if (t.geometry[2] != 2 || p.mesh->encoding() != HardwareMesh::Encoding::TsNormals ||
+        !unit(t.geometry[0]) || !integer(t.ambient[3], 2) || t.ambient[0] < 0 || t.ambient[1] < 0 ||
+        t.ambient[2] < 0)
+        return false;
+    for (std::size_t i = 0; i < std::size_t(t.ambient[3]); ++i) {
+        const auto& source = t.parameters[i * 4];
+        const auto& intensity = t.parameters[i * 4 + 1];
+        const auto& attenuation = t.parameters[i * 4 + 2];
+        if (!integer(source[3], 3) || intensity[0] < 0 || intensity[1] < 0 || intensity[2] < 0 ||
+            t.parameters[i * 4 + 3][3] < 0 ||
+            (source[3] == 3 && (intensity[3] <= 0 || !integer(attenuation[3], 3) ||
+                                attenuation[0] < 0 || attenuation[1] < 0 || attenuation[2] < 0)))
+            return false;
+    }
+    return true;
+}
+
 double cross(Point2F a, Point2F b, Point2F c) {
     return (double(b.x) - a.x) * (double(c.y) - a.y) - (double(b.y) - a.y) * (double(c.x) - a.x);
 }
@@ -353,6 +402,8 @@ class ConvertedTextures {
     std::list<Entry> entries_;
     std::unordered_map<ConversionKey, std::list<Entry>::iterator, ConversionHash> index_;
     std::size_t bytes_{};
+    std::size_t budgetBytes_{64U * 1024U * 1024U}, budgetEntries_{4096};
+    UInt64 hits_{}, builds_{};
 
     void erase(std::list<Entry>::iterator entry) {
         bytes_ -= entry->bytes;
@@ -361,6 +412,17 @@ class ConvertedTextures {
     }
 
 public:
+    HardwareConversionCacheStats stats() const {
+        return {entries_.size(), bytes_, budgetBytes_, budgetEntries_, hits_, builds_};
+    }
+
+    void budget(std::size_t bytes, std::size_t entries) {
+        budgetBytes_ = bytes;
+        budgetEntries_ = entries;
+        while (!entries_.empty() && (entries_.size() > entries || bytes_ > bytes))
+            erase(std::prev(entries_.end()));
+    }
+
     void clear() {
         index_.clear();
         entries_.clear();
@@ -380,6 +442,7 @@ public:
                 (!palette || (entry->type == palette->type && entry->colors == palette->colors)) &&
                 std::ranges::equal(entry->source, source)) {
                 entries_.splice(entries_.begin(), entries_, entry);
+                ++hits_;
                 return entry->texture;
             }
         }
@@ -388,6 +451,7 @@ public:
             return {};
         }
         auto texture = immutable(std::move(*expanded));
+        ++builds_;
         auto bytes = sizeof(Entry) + source.size() + texture->rgba.size();
         for (const auto& mip : texture->mips) {
             bytes += sizeof(HardwareMip) + mip.rgba.size();
@@ -395,11 +459,11 @@ public:
         if (found != index_.end()) {
             erase(found->second);
         }
-        if (bytes > Bitmap::MaxFileBytes) {
+        if (bytes > budgetBytes_ || !budgetEntries_) {
             return texture;
         }
         while (!entries_.empty() &&
-               (entries_.size() >= 4096 || bytes_ > Bitmap::MaxFileBytes - bytes)) {
+               (entries_.size() >= budgetEntries_ || bytes_ > budgetBytes_ - bytes)) {
             erase(std::prev(entries_.end()));
         }
         Entry entry{key, layout, {source.begin(), source.end()}, {}, {}, texture, bytes};
@@ -420,6 +484,14 @@ const auto whiteTexture = immutable({1, 1, std::vector<std::byte>(4, std::byte{2
 
 void clearHardwareTextureConversions() {
     convertedTextures.clear();
+}
+
+HardwareConversionCacheStats hardwareTextureConversionStats() {
+    return convertedTextures.stats();
+}
+
+void setHardwareTextureConversionBudget(std::size_t bytes, std::size_t entries) {
+    convertedTextures.budget(bytes, entries);
 }
 
 std::optional<HardwareMaterial>
@@ -456,29 +528,11 @@ std::optional<HardwareBatch> HardwareBatch::prepare(std::span<const HardwarePoly
     std::unordered_map<ConversionKey, UInt32, ConversionHash> textures;
     std::vector<const Palette*> validatedPalettes;
     std::unordered_map<ConversionKey, UInt32, ConversionHash> lightMaps;
+    std::unordered_multimap<UInt64, UInt32> meshInstances;
     std::size_t inputVertices{}, textureBytes{4};
     if (!std::ranges::all_of(polygons, [&](const auto& p) {
             const auto& m = p.material;
-            if (p.mesh &&
-                (m.blend != HardwareBlend::Opaque || m.deferredHaze || m.twoSided ||
-                 m.shadeSource != PolygonSource::None || m.hazeSource != PolygonSource::None ||
-                 p.indexCount == 0 || p.indexCount % 3 || p.firstIndex % 3 ||
-                 p.firstIndex > p.mesh->indices().size() ||
-                 p.indexCount > p.mesh->indices().size() - p.firstIndex ||
-                 !std::ranges::all_of(p.transform.camera,
-                                      [](const auto& row) {
-                                          return std::ranges::all_of(row, [](auto value) {
-                                              return std::isfinite(value);
-                                          });
-                                      }) ||
-                 !std::ranges::all_of(p.transform.optics,
-                                      [](auto value) {
-                                          return std::isfinite(value);
-                                      }) ||
-                 !std::isfinite(p.transform.clip[0]) || !std::isfinite(p.transform.clip[1]) ||
-                 p.transform.optics[0] <= 0 || p.transform.optics[1] <= 0 ||
-                 p.transform.clip[0] < 1.f / 65536 || p.transform.clip[1] > 65536 ||
-                 p.transform.clip[1] <= p.transform.clip[0] || p.transform.clip[2] != 1))
+            if (p.mesh && !validMeshPolygon(p))
                 return false;
             if (p.vertices.size() < 3 || p.vertices.size() > 100 ||
                 p.vertices.size() > renderLimits().vertices - inputVertices || !valid(m)) {
@@ -621,14 +675,29 @@ std::optional<HardwareBatch> HardwareBatch::prepare(std::span<const HardwarePoly
                               m.deferredHaze,
                               m.magnificationLinear.value_or(m.linear)};
             if (p.mesh) {
-                auto instance = std::ranges::find_if(result.meshes_, [&](const auto& value) {
-                    return value.mesh == p.mesh && value.transform == p.transform;
-                });
-                if (instance == result.meshes_.end()) {
+                if (p.transform.geometry[2] == 1) {
+                    // Selection submits each native terrain patch once, in traversal order.
                     result.meshes_.push_back({p.mesh, p.transform});
                     draw.mesh = UInt32(result.meshes_.size());
+                } else if (!result.meshes_.empty() && result.meshes_.back().mesh == p.mesh &&
+                           result.meshes_.back().transform == p.transform) {
+                    draw.mesh = UInt32(result.meshes_.size());
                 } else {
-                    draw.mesh = UInt32(instance - result.meshes_.begin() + 1);
+                    UInt64 key = p.mesh->revision();
+                    for (const auto b : std::as_bytes(std::span(&p.transform, 1)))
+                        key = (key ^ std::to_integer<UInt8>(b)) * 1099511628211ULL;
+                    const auto [begin, end] = meshInstances.equal_range(key);
+                    auto instance = std::find_if(begin, end, [&](const auto& entry) {
+                        const auto& value = result.meshes_[entry.second];
+                        return value.mesh == p.mesh && value.transform == p.transform;
+                    });
+                    if (instance == end) {
+                        result.meshes_.push_back({p.mesh, p.transform});
+                        draw.mesh = UInt32(result.meshes_.size());
+                        meshInstances.emplace(key, draw.mesh - 1);
+                    } else {
+                        draw.mesh = instance->second + 1;
+                    }
                 }
                 draw.firstVertex = p.firstIndex;
                 draw.vertexCount = p.indexCount;
@@ -736,18 +805,24 @@ std::optional<HardwareBatch> HardwareBatch::compose(std::span<const HardwareBatc
 }
 
 std::shared_ptr<const HardwareMesh> HardwareMesh::create(std::vector<HardwareVertex> vertices,
-                                                         std::vector<UInt32> indices) {
-    if (vertices.empty() || vertices.size() > 4'194'304 || indices.empty() ||
-        indices.size() > 12'582'912 || indices.size() % 3 ||
+                                                         std::vector<UInt32> indices,
+                                                         Encoding encoding) {
+    if ((encoding != Encoding::Color && encoding != Encoding::TsNormals) || vertices.empty() ||
+        vertices.size() > 4'194'304 || indices.empty() || indices.size() > 12'582'912 ||
+        indices.size() % 3 ||
         !std::ranges::all_of(indices,
                              [&](auto i) {
                                  return i < vertices.size();
                              }) ||
-        !std::ranges::all_of(vertices, [](const auto& v) {
+        !std::ranges::all_of(vertices, [encoding](const auto& v) {
             return bounded(v.position.x, 1e12f) && bounded(v.position.y, 1e12f) &&
                    bounded(v.inverseDepth, 1e12f) && bounded(v.texture.x, 65536) &&
                    bounded(v.texture.y, 65536) && bounded(v.lightMap.x, 65536) &&
-                   bounded(v.lightMap.y, 65536) && unit(v.color) && unit(v.haze) && unit(v.opacity);
+                   bounded(v.lightMap.y, 65536) && unit(v.haze) &&
+                   (encoding == Encoding::Color
+                        ? unit(v.color) && unit(v.opacity)
+                        : bounded(v.color.x, 1) && bounded(v.color.y, 1) && bounded(v.color.z, 1) &&
+                              (v.opacity == 0 || v.opacity == 1 || v.opacity == 2));
         }))
         return {};
     static std::atomic<UInt64> next{1};
@@ -755,6 +830,29 @@ std::shared_ptr<const HardwareMesh> HardwareMesh::create(std::vector<HardwareVer
     mesh->vertices_ = std::move(vertices);
     mesh->indices_ = std::move(indices);
     mesh->revision_ = next.fetch_add(1, std::memory_order_relaxed);
+    mesh->encoding_ = encoding;
     return mesh;
+}
+
+HardwareBatch::MemoryStats HardwareBatch::memoryStats() const {
+    MemoryStats result;
+    result.batchBytes =
+        sizeof(*this) + vertices_.capacity() * sizeof(HardwareVertex) +
+        textures_.capacity() * sizeof(textures_[0]) + textureHashes_.capacity() * sizeof(UInt64) +
+        draws_.capacity() * sizeof(HardwareDraw) + layerEnds_.capacity() * sizeof(UInt32) +
+        meshes_.capacity() * sizeof(HardwareMeshInstance);
+    std::unordered_map<const HardwareMesh*, bool> meshes;
+    for (const auto& instance : meshes_)
+        if (meshes.emplace(instance.mesh.get(), true).second)
+            result.meshBytes += instance.mesh->residentBytes();
+    std::unordered_map<const HardwareTexture*, bool> textures;
+    for (const auto& t : textures_)
+        if (textures.emplace(t.get(), true).second) {
+            result.textureBytes += sizeof(HardwareTexture) + t->rgba.capacity() +
+                                   t->mips.capacity() * sizeof(HardwareMip);
+            for (const auto& mip : t->mips)
+                result.textureBytes += mip.rgba.capacity();
+        }
+    return result;
 }
 } // namespace opent1::gfx

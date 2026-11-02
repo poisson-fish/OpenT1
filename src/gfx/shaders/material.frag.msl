@@ -9,6 +9,7 @@ struct Input {
     float2 lightMap [[user(locn3)]];
     float opacity [[user(locn4)]];
     float cameraDepth [[user(locn5)]];
+    float sphereDistance [[user(locn6)]];
 };
 
 struct Material {
@@ -23,7 +24,11 @@ fragment float4 main0(Input v [[stage_in]],
                       texture2d_array<float> imageArray [[texture(2)]],
                       sampler imageArraySampler [[sampler(2)]],
                       constant Material& m [[buffer(0)]]) {
-    if (m.geometryClip.z != 0 && (v.cameraDepth < m.geometryClip.x || v.cameraDepth > m.geometryClip.y)) discard_fragment();
+    if (m.geometryClip.z != 0 &&
+        (v.cameraDepth < m.geometryClip.x || v.cameraDepth > m.geometryClip.y))
+        discard_fragment();
+    if (v.sphereDistance > 1)
+        discard_fragment();
     if (m.alphaControls.z == 2)
         return float4(m.hazeColor.rgb, saturate(v.haze));
     float4 texel = m.arrayControls.y != 0

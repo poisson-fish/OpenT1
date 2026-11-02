@@ -4,6 +4,37 @@
 #include "interior_scene_lighting.hpp"
 
 namespace opent1::world {
+StaticSurfaceTriangle WorldSurfaceMesh::terrainTriangle(std::size_t index) const {
+    const auto at =
+        std::ranges::upper_bound(terrainPatches->patches, index, {}, &TerrainPatch::firstTriangle);
+    const auto& patch = *std::prev(at);
+    StaticSurfaceTriangle result;
+    result.material = patch.material;
+    result.lightMap = patch.lightMap;
+    result.lit = bool(patch.lightMap);
+    result.nativeFarSphere = true;
+    const auto first = (index - patch.firstTriangle) * 3;
+    for (std::size_t j = 0; j < 3; ++j) {
+        const auto id = patch.topology->indices()[first + j];
+        const auto& input = patch.topology->vertices()[id];
+        const auto& h = patch.heights[id];
+        auto& v = result.vertices[j];
+        v.position = patch.origin + Point3F{input.position.x * patch.extent,
+                                            input.position.y * patch.extent,
+                                            h[2] >= 1 ? h[1] : h[0] + (h[1] - h[0]) * h[2]};
+        v.texture = input.texture;
+        v.lightMap = {patch.mapOrigin.x + v.texture.x * patch.mapScale.x,
+                      patch.mapOrigin.y + v.texture.y * patch.mapScale.y};
+        v.farSphereDistance = h[3];
+        if (terrainPatches->hazeDistance < terrainPatches->farDistance)
+            v.haze = std::clamp((h[3] - terrainPatches->hazeDistance) /
+                                    (terrainPatches->farDistance - terrainPatches->hazeDistance),
+                                0.f,
+                                1.f);
+    }
+    return result;
+}
+
 std::optional<UInt16> WorldSurfaceMesh::sampleLighting(Point3F point) const {
     if (!std::isfinite(point.x) || !std::isfinite(point.y) || !std::isfinite(point.z)) {
         return {};
@@ -62,7 +93,7 @@ std::optional<UInt16> WorldSurfaceMesh::sampleLighting(Point3F point) const {
         }
         return {};
     }
-    for (const auto& triangle : triangles) {
+    for (const auto& triangle : surfaceTriangles()) {
         if (triangle.lightMap) {
             if (auto color = sample(triangle.vertices, *triangle.lightMap))
                 return color;
@@ -596,7 +627,7 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::interior(const InteriorShapeRe
 }
 
 std::optional<TsStaticShapeFrame> WorldSurfaceMesh::prepare(const TsStaticView& view) const {
-    if (!interiorMesh)
+    if (!interiorMesh && !terrainPatches)
         return TsStaticShapeFrame::prepareSurfaces(materials, triangles, view);
     std::vector<StaticSurfaceTriangle> selected;
     selected.reserve(triangleCount());
@@ -606,10 +637,10 @@ std::optional<TsStaticShapeFrame> WorldSurfaceMesh::prepare(const TsStaticView& 
 }
 
 bool WorldSurfaceMesh::retainedHardwareCompatible() const {
-    return interiorMesh && interiorMesh->hardware &&
-           std::ranges::none_of(materials.list.materials, [](const auto& m) {
-               return (m.flags & 0x2000U) != 0;
-           });
+    return terrainPatches || (interiorMesh && interiorMesh->hardware &&
+                              std::ranges::none_of(materials.list.materials, [](const auto& m) {
+                                  return (m.flags & 0x2000U) != 0;
+                              }));
 }
 
 std::optional<std::vector<gfx::HardwarePolygon>> WorldSurfaceMesh::hardwareInterior(
@@ -631,6 +662,94 @@ std::optional<std::vector<gfx::HardwarePolygon>> WorldSurfaceMesh::hardwareInter
     transform.optics = {view.focal.x, view.focal.y, view.center.x, view.center.y};
     transform.clip = {view.nearDistance, view.farDistance, 1, 0};
     std::vector<gfx::HardwarePolygon> polygons;
+    if (terrainPatches) {
+        static const auto sharedPatch = [] {
+            std::vector<gfx::HardwareVertex> vertices(18);
+            std::vector<UInt32> indices(18);
+            for (UInt32 i = 0; i < 18; ++i) {
+                vertices[i].inverseDepth = Flt32(i);
+                indices[i] = i;
+            }
+            return gfx::HardwareMesh::create(std::move(vertices), std::move(indices));
+        }();
+        polygons.reserve(terrainPatches->patches.size());
+        for (const auto& patch : terrainPatches->patches) {
+            auto local = view.shapeToCamera;
+            local.preTranslate(patch.origin);
+            std::array<Point3F, 8> cameraPoints{};
+            std::array<bool, 7> outside;
+            outside.fill(true);
+            UInt32 visited{};
+            for (const auto id : patch.topology->indices()) {
+                if (visited & (1U << id))
+                    continue;
+                visited |= 1U << id;
+                const auto xy = patch.topology->vertices()[id].position;
+                const auto& h = patch.heights[id];
+                Point3F point{xy.x * patch.extent,
+                              xy.y * patch.extent,
+                              h[2] >= 1 ? h[1] : h[0] + (h[1] - h[0]) * h[2]};
+                m_mul(point, local, cameraPoints[id]);
+                const auto p = cameraPoints[id];
+                const std::array<Flt64, 7> planes{
+                    Flt64(p.y) - view.nearDistance,
+                    Flt64(view.farDistance) - p.y,
+                    Flt64(p.x) * view.focal.x + Flt64(p.y) * view.center.x,
+                    -Flt64(p.x) * view.focal.x + Flt64(p.y) * (view.width - view.center.x),
+                    -Flt64(p.z) * view.focal.y + Flt64(p.y) * view.center.y,
+                    Flt64(p.z) * view.focal.y + Flt64(p.y) * (view.height - view.center.y),
+                    Flt64(view.farDistance) - h[3]};
+                for (std::size_t j = 0; j < planes.size(); ++j)
+                    outside[j] = outside[j] && planes[j] < -.001;
+            }
+            if (std::ranges::any_of(outside, std::identity{}))
+                continue;
+            bool facing{};
+            const auto indices = patch.topology->indices();
+            for (std::size_t j = 0; j < indices.size(); j += 3) {
+                const auto a = cameraPoints[indices[j]], b = cameraPoints[indices[j + 1]],
+                           c = cameraPoints[indices[j + 2]];
+                Point3F cross;
+                m_cross(b - a, c - a, cross);
+                facing |= m_dot(cross, a) >= -.001f;
+            }
+            if (!facing)
+                continue;
+            auto instance = transform;
+            for (std::size_t i = 0; i < 3; ++i)
+                instance.camera[i][3] = local.p[i];
+            instance.parameters = patch.heights;
+            instance.ambient[3] = terrainPatches->hazeDistance;
+            instance.geometry = {
+                patch.extent, terrainPatches->farDistance, 1, Flt32(patch.topologyKey)};
+            instance.mapping = {
+                patch.mapOrigin.x, patch.mapOrigin.y, patch.mapScale.x, patch.mapScale.y};
+            gfx::HardwareMaterial material;
+            material.texture = materials.textures[patch.material].get();
+            material.lightMap = patch.lightMap.get();
+            material.linear = true;
+            material.magnificationLinear =
+                (material.texture->attributes & gfx::BitmapTransparent) == 0;
+            material.mipFilter = material.texture->detailLevels > 1
+                                     ? gfx::HardwareMipFilter::Nearest
+                                     : gfx::HardwareMipFilter::None;
+            material.useSurfacePalette = true;
+            material.alphaSource = gfx::HardwareAlphaSource::Opaque;
+            material.paletteMode = gfx::HardwarePaletteMode::OpenGL;
+            material.paletteGamma = gamma;
+            material.hazeSource = gfx::PolygonSource::Vertex;
+            material.deferredHaze = terrainPatches->hazeDistance < terrainPatches->farDistance;
+            gfx::HardwarePolygon polygon{placeholder,
+                                         material,
+                                         material.lightMap ? std::span<const Point2F>(lightUV)
+                                                           : std::span<const Point2F>{}};
+            polygon.mesh = sharedPatch;
+            polygon.transform = instance;
+            polygon.indexCount = 18;
+            polygons.push_back(std::move(polygon));
+        }
+        return polygons;
+    }
     for (std::size_t i = 0; i < interiorMesh->ranges.size(); ++i) {
         const auto range = interiorMesh->ranges[i];
         if (!range[1] ||

@@ -191,6 +191,8 @@ struct WorldSurfaceQuery : sim::SimQuery {
     // current-size hardware tiles with OpenGL lightmaps. Absence
     // preserves the provider's explicit policy (including comparison viewers).
     std::optional<TerrainTextureTiming> terrainTiming;
+    bool retainedTerrain{};
+    bool trimCaches{};    // release disposable provider caches; no camera or image request
     bool linkRendering{}; // force automatic interior providers to their state's highest LOD
     bool failed{};        // a provider rejected preparation; capture must fail atomically
 private:
@@ -207,6 +209,8 @@ private:
     std::optional<LinkDetail> linkDetail_;
     bool deferLinkDetail_{};
 };
+
+void trimWorldRenderCaches(sim::SimWorld&);
 
 // Static RenderSet provider; pairs with the existing per-block/interior static
 // collision providers. Mesh snapshots and rigid placements survive removal.
@@ -259,6 +263,7 @@ private:
     std::optional<sim::EnvironmentCamera> retainedCamera_;
     std::optional<TsLighting> retainedLights_;
     std::optional<TerrainTextureTiming> retainedTiming_;
+    bool retainedPatchPolicy_{};
 };
 
 // Explicit simulation-clock interior playback. Render queries never advance

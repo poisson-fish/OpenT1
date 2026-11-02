@@ -10,6 +10,26 @@
 #include <cstdlib>
 
 namespace opent1::world {
+void trimWorldRenderCaches(sim::SimWorld& world) {
+    auto& manager = world.manager();
+    manager.dispatch([&] {
+        auto* set = dynamic_cast<sim::SimSet*>(manager.findObject(sim::RenderSetId));
+        if (!set)
+            return;
+        std::vector<sim::SimAddress> providers;
+        for (auto* object : set->objects())
+            if (object)
+                providers.push_back(object->address());
+        for (const auto& address : providers) {
+            if (auto* object = address.resolve(manager); object && !object->isRemoved()) {
+                WorldSurfaceQuery query;
+                query.trimCaches = true;
+                object->processQuery(query);
+            }
+        }
+    });
+}
+
 namespace {
 bool finite(Point3F p) {
     return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z) &&
@@ -666,6 +686,8 @@ WorldSceneFrame::captureImpl(sim::SimWorld& world,
                     surface.camera = camera;
                     surface.linkRendering = linked[sourceIndex];
                     surface.terrainTiming = terrainTiming;
+                    surface.retainedTerrain =
+                        frame.retainedHardware_ && !std::getenv("OPENT1_PROJECTED_TERRAIN");
                     surface.deferLinkDetail_ = true;
                     if (lighting) {
                         surface.lighting = sceneLighting;
@@ -741,7 +763,11 @@ WorldSceneFrame::captureImpl(sim::SimWorld& world,
                             return;
                         }
                     }
-                    auto prepared = TsStaticShapeFrame::prepare(image.resources, view, image.pose);
+                    auto prepared = TsStaticShapeFrame::prepare(
+                        image.resources,
+                        view,
+                        image.pose,
+                        frame.retainedHardware_ && !std::getenv("OPENT1_PROJECTED_SHAPES"));
                     stage = "shape preparation";
                     if (!prepared ||
                         prepared->polygonCount() > gfx::renderLimits().polygons - polygons) {
@@ -810,6 +836,8 @@ WorldSceneFrame::hardware(const gfx::Palette& palette,
         const auto& image = surfaces_[i];
         TsStaticView view;
         m_mul(image.placement, camera_.worldToCamera, view.shapeToCamera);
+        view.width = Int32(camera_.viewport.width());
+        view.height = Int32(camera_.viewport.height());
         view.focal = camera_.focal;
         view.center = camera_.center;
         view.nearDistance = camera_.nearDistance;

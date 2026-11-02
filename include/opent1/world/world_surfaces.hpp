@@ -55,6 +55,8 @@ struct TerrainLodView {
             RetainedLru}; // explicit historical callback policy, independent of mip selection
     Flt32 perspectiveDistance{500};
     std::optional<Flt32> hazeDistance{};
+    bool
+        retainedPatches{}; // hardware native traversal; software callbacks keep their original path
 };
 
 // Bind to immutable terrain resources, as for TerrainTextureCache. Keep one per
@@ -102,6 +104,29 @@ struct WorldSurfaceMesh {
     std::optional<TsLighting> interiorSceneLighting;
     std::vector<bool> interiorSceneAffected;
     std::optional<std::vector<UInt32>> interiorSelection;
+
+    struct TerrainPatch {
+        std::shared_ptr<const gfx::HardwareMesh> topology;
+        UInt32 topologyKey{};
+        std::array<std::array<Flt32, 4>, 8> heights{};
+        Point3F origin;
+        Flt32 extent{};
+        UInt32 material{};
+        std::size_t firstTriangle{};
+        std::shared_ptr<const gfx::LightMap> lightMap;
+        Point2F mapOrigin{}, mapScale{1, 1};
+    };
+
+    struct TerrainPatches {
+        std::vector<TerrainPatch> patches;
+        Point3F camera;
+        Flt32 farDistance{}, hazeDistance{};
+        std::size_t triangles{};
+    };
+
+    // Camera selection owns compact inputs; topology and source heightfields are shared.
+    std::shared_ptr<const TerrainPatches> terrainPatches;
+    [[nodiscard]] StaticSurfaceTriangle terrainTriangle(std::size_t) const;
     TsMaterialResources materials;
     std::vector<StaticSurfaceTriangle> triangles;
     std::vector<UInt32>
@@ -112,13 +137,17 @@ struct WorldSurfaceMesh {
     Box3F bounds;
 
     [[nodiscard]] auto surfaceTriangles(bool geometryOnly = false) const {
-        const auto count = interiorMesh ? interiorMesh->surfaceIds.size() : triangles.size();
+        const auto count = interiorMesh     ? interiorMesh->surfaceIds.size()
+                           : terrainPatches ? terrainPatches->triangles
+                                            : triangles.size();
         return std::views::iota(std::size_t{}, count) | std::views::filter([this](auto i) {
                    return !interiorMesh || !interiorSelection ||
                           std::ranges::binary_search(*interiorSelection,
                                                      interiorMesh->surfaceIds[i]);
                }) |
                std::views::transform([this, geometryOnly](auto i) {
+                   if (terrainPatches)
+                       return terrainTriangle(i);
                    if (!interiorMesh) {
                        if (!geometryOnly)
                            return triangles[i];
@@ -150,6 +179,8 @@ struct WorldSurfaceMesh {
     }
 
     [[nodiscard]] std::size_t triangleCount() const {
+        if (terrainPatches)
+            return terrainPatches->triangles;
         if (!interiorMesh)
             return triangles.size();
         if (!interiorSelection)
@@ -221,6 +252,12 @@ public:
     }
 
     [[nodiscard]] UInt32 residentBlocks() const;
+
+    void trimCaches() {
+        cache_.clear();
+        state_.clear();
+    }
+
     ~TerrainResourceStream();
     TerrainResourceStream(const TerrainResourceStream&) = delete;
     TerrainResourceStream& operator=(const TerrainResourceStream&) = delete;

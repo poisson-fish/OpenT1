@@ -1,6 +1,7 @@
 #include <opent1/gfx/render_limits.hpp>
 #include <opent1/gfx/render_stats.hpp>
 #include <opent1/world/ts_static_shape.hpp>
+#include "ts_retained_mesh.hpp"
 #include <map>
 #include <algorithm>
 #include <cmath>
@@ -388,7 +389,8 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
 
 std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources resources,
                                                               const TsStaticView& view,
-                                                              const TsShapePose& pose) {
+                                                              const TsShapePose& pose,
+                                                              bool retainedHardware) {
     if (!validView(view) || !resources.shape ||
         resources.materials.list.materials.size() != resources.materials.textures.size()) {
         return {};
@@ -456,6 +458,12 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
         return {};
     }
     std::size_t work{};
+    bool retain = retainedHardware && view.perspective && !view.twoSided &&
+                  view.minimumProjectedAltitude == 0;
+    if (retain) {
+        result.retainedPose_ = pose;
+        result.retainedView_ = view;
+    }
     std::vector<Vertex> vertices, scratch;
     vertices.reserve(10);
     scratch.reserve(10);
@@ -495,6 +503,60 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
                     return false;
                 }
             }
+            std::shared_ptr<const ts_detail::RetainedMesh> sourceMesh;
+            std::shared_ptr<const RetainedPart> part;
+            gfx::HardwareTransform transform;
+            if (retain) {
+                sourceMesh = ts_detail::retainedMesh(
+                    resources.shape, object.mesh, state, resources.materials, pose);
+                if (!sourceMesh)
+                    return false;
+                auto localToCamera = toCamera;
+                localToCamera.preTranslate(object.offset);
+                for (std::size_t i = 0; i < 3; ++i)
+                    transform.camera[i] = {localToCamera.m[0][i],
+                                           localToCamera.m[1][i],
+                                           localToCamera.m[2][i],
+                                           localToCamera.p[i]};
+                transform.optics = {view.focal.x, view.focal.y, view.center.x, view.center.y};
+                transform.clip = {view.nearDistance, view.farDistance, 1, 0};
+                transform.geometry[2] = 2;
+                transform.ambient = {1, 1, 1, 0};
+                if (preparedLights) {
+                    const auto& light = preparedLights->lighting();
+                    transform.ambient = {light.ambient.x, light.ambient.y, light.ambient.z, 0};
+                    const bool lit = std::ranges::any_of(sourceMesh->modes, [](auto mode) {
+                        return mode == 1 || mode == 2;
+                    });
+                    std::size_t active{};
+                    for (std::size_t i = 0; i < light.lights.size(); ++i) {
+                        const auto& l = light.lights[i];
+                        const auto& s = preparedLights->states()[i];
+                        if (!lit || (l.type == TsLight::Type::Point &&
+                                     s.mode == TsPreparedLighting::PointMode::OutOfRange))
+                            continue;
+                        if (active == 2 || (l.type == TsLight::Type::Point &&
+                                            std::ranges::find(sourceMesh->modes, UInt8{2}) !=
+                                                sourceMesh->modes.end()))
+                            return false; // preserve uncommon lighting on the projected path
+                        const auto p = l.type == TsLight::Type::Point ? l.position : l.direction;
+                        transform.parameters[active * 4] = {p.x, p.y, p.z, Flt32(l.type)};
+                        transform.parameters[active * 4 + 1] = {
+                            l.intensity.x, l.intensity.y, l.intensity.z, l.range};
+                        transform.parameters[active * 4 + 2] = {
+                            l.attenuation.x, l.attenuation.y, l.attenuation.z, Flt32(s.mode)};
+                        transform.parameters[active * 4 + 3] = {
+                            s.direction.x,
+                            s.direction.y,
+                            s.direction.z,
+                            l.type == TsLight::Type::Point ? s.attenuation : l.shadowAttenuation};
+                        ++active;
+                    }
+                    transform.ambient[3] = Flt32(active);
+                }
+                part = std::make_shared<const RetainedPart>(
+                    RetainedPart{sourceMesh->hardware, transform});
+            }
             return std::ranges::all_of(mesh.faces, [&](const auto& face) {
                 if (face.material == -1) {
                     return true;
@@ -518,6 +580,23 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
                 const auto shading = material.flags & 0xf00U;
                 const bool lit = view.lighting && (shading == 0x200U || shading == 0x400U) &&
                                  !(material.type() == 3 && (material.flags & 0x3000U));
+                if (retain) {
+                    Polygon polygon;
+                    polygon.material = std::size_t(materialIndex);
+                    polygon.vertices = {{{{0, 0}}, {{1, 0}}, {{0, 1}}}};
+                    const auto haze =
+                        view.haze > .0001f && !(material.flags & 0x2000U) ? view.haze : 0.f;
+                    for (auto& v : polygon.vertices)
+                        v.haze = haze;
+                    polygon.retained = part;
+                    polygon.firstIndex =
+                        sourceMesh->firstIndices[std::size_t(&face - mesh.faces.data())];
+                    if (!part->mesh || polygon.firstIndex == UINT32_MAX ||
+                        result.polygons_.size() >= gfx::renderLimits().polygons)
+                        return false;
+                    result.polygons_.push_back(std::move(polygon));
+                    return true;
+                }
                 Flt32 flatShade = 1;
                 vertices.clear();
                 if (!std::ranges::all_of(face.corners, [&](const auto& corner) {
@@ -598,6 +677,8 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
             });
         });
     if (!ok) {
+        if (retain)
+            return prepare(std::move(resources), view, pose, false);
         return {};
     }
     result.resources_ = std::move(resources);
@@ -707,6 +788,14 @@ TsStaticShapeFrame::hardwarePolygons(const gfx::Palette* palette, Flt32 paletteG
                               material,
                               p.lightMap ? std::span<const Point2F>(p.lightCoordinates)
                                          : std::span<const Point2F>{}});
+            if (p.retained) {
+                auto& input = inputs.back();
+                input.mesh = p.retained->mesh;
+                input.transform = p.retained->transform;
+                input.transform.geometry[0] = p.vertices[0].haze;
+                input.firstIndex = p.firstIndex;
+                input.indexCount = 3;
+            }
             return true;
         })) {
         return {};
@@ -828,6 +917,10 @@ NativeSoftwareTextureCache::prepare(const Resource<gfx::Bitmap>& texture,
 std::optional<std::vector<gfx::SortedPolygon>>
 TsStaticShapeFrame::softwarePolygons(const gfx::Palette* palette,
                                      NativeSoftwareTextureCache* cache) const {
+    if (retainedPose_) {
+        const auto* frame = projected();
+        return frame ? frame->softwarePolygons(palette, cache) : std::nullopt;
+    }
     if (palette && !palette->valid()) {
         return {};
     }
@@ -943,6 +1036,10 @@ bool TsStaticShapeFrame::draw(gfx::SoftwareSurface& surface) const {
 }
 
 std::unique_ptr<gfx::Bitmap> TsStaticShapeFrame::silhouette() const {
+    if (retainedPose_) {
+        const auto* frame = projected();
+        return frame ? frame->silhouette() : nullptr;
+    }
     if (viewport_.x <= 0 || viewport_.x > 256 || viewport_.y <= 0 || viewport_.y > 256) {
         return {};
     }
@@ -959,5 +1056,35 @@ std::unique_ptr<gfx::Bitmap> TsStaticShapeFrame::silhouette() const {
         return {};
     }
     return std::make_unique<gfx::Bitmap>(surface->bitmap());
+}
+
+const TsStaticShapeFrame* TsStaticShapeFrame::projected() const {
+    if (!projected_) {
+        auto frame = prepare(resources_, *retainedView_, *retainedPose_);
+        if (!frame)
+            return nullptr;
+        projected_ = std::make_shared<const TsStaticShapeFrame>(std::move(*frame));
+    }
+    return projected_.get();
+}
+
+TsHardwareCacheStats tsHardwareCacheStats() {
+    const auto& c = ts_detail::meshCache;
+    return {c.entries.size(), c.bytes, c.budget, c.hits, c.builds};
+}
+
+void trimTsHardwareMeshes(std::size_t budget) {
+    auto& c = ts_detail::meshCache;
+    c.budget = budget;
+    while (!c.entries.empty() && c.bytes > budget) {
+        c.bytes -= c.entries.back()->bytes;
+        c.entries.pop_back();
+    }
+}
+
+void clearTsHardwareMeshes() {
+    const auto budget = ts_detail::meshCache.budget;
+    trimTsHardwareMeshes(0);
+    ts_detail::meshCache.budget = budget;
 }
 } // namespace opent1::world

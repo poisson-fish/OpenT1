@@ -59,6 +59,7 @@ SDL_GPUShader* shader(SDL_GPUDevice* device, bool vertex) {
     info.stage = vertex ? SDL_GPU_SHADERSTAGE_VERTEX : SDL_GPU_SHADERSTAGE_FRAGMENT;
     info.num_uniform_buffers = 1;
     info.num_samplers = vertex ? 0 : 3;
+    info.num_storage_buffers = vertex ? 1 : 0;
     const auto formats = SDL_GetGPUShaderFormats(device);
     if (formats & SDL_GPU_SHADERFORMAT_SPIRV) {
         info.format = SDL_GPU_SHADERFORMAT_SPIRV;
@@ -121,10 +122,33 @@ struct VertexUniform {
     std::array<Flt32, 4> frame;
     std::array<std::array<Flt32, 4>, 3> camera{};
     std::array<Flt32, 4> optics{}, clip{};
+    std::array<std::array<Flt32, 4>, 8> parameters{};
+    std::array<Flt32, 4> ambient{}, geometry{}, mapping{};
     bool operator==(const VertexUniform&) const = default;
 };
 
-static_assert(sizeof(VertexUniform) == 96);
+static_assert(sizeof(VertexUniform) == 272);
+
+VertexUniform
+vertexUniform(Flt32 w, Flt32 h, const HardwareDraw& draw, const HardwareBatch& batch) {
+    VertexUniform result{{w, h, draw.perspective ? 1.f : 0.f, draw.mesh ? 1.f : 0.f}};
+    if (draw.mesh) {
+        const auto& t = batch.meshes()[draw.mesh - 1].transform;
+        if (t.geometry[2] != 0) {
+            result.frame[3] = 2;
+            result.clip = t.clip;
+            return result;
+        }
+        result.camera = t.camera;
+        result.optics = t.optics;
+        result.clip = t.clip;
+        result.parameters = t.parameters;
+        result.ambient = t.ambient;
+        result.geometry = t.geometry;
+        result.mapping = t.mapping;
+    }
+    return result;
+}
 
 struct DrawState {
     SDL_GPUGraphicsPipeline* pipeline;
@@ -157,7 +181,7 @@ class DrawEncoder {
     SDL_GPURenderPass* pass_;
     GpuSubmissionStats& stats_;
     std::optional<DrawState> bound_, pending_;
-    UInt32 first_{}, count_{};
+    UInt32 first_{}, count_{}, firstInstance_{}, instances_{1};
 
 public:
     DrawEncoder(SDL_GPUCommandBuffer* commands, SDL_GPURenderPass* pass, GpuSubmissionStats& stats)
@@ -167,7 +191,9 @@ public:
         if (!pending_) {
             return;
         }
-        const auto& state = *pending_;
+        auto state = *pending_;
+        if (state.frame.frame[3] == 2)
+            state.frame.clip[3] = Flt32(firstInstance_);
         if (!bound_ || bound_->pipeline != state.pipeline) {
             SDL_BindGPUGraphicsPipeline(pass_, state.pipeline);
             ++stats_.pipelineBinds;
@@ -194,7 +220,7 @@ public:
                 const SDL_GPUBufferBinding binding{state.indices, 0};
                 SDL_BindGPUIndexBuffer(pass_, &binding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
             }
-            SDL_DrawGPUIndexedPrimitives(pass_, count_, 1, first_, 0, 0);
+            SDL_DrawGPUIndexedPrimitives(pass_, count_, instances_, first_, 0, 0);
         } else
             SDL_DrawGPUPrimitives(pass_, count_, 1, first_, 0);
         ++stats_.draws;
@@ -202,9 +228,15 @@ public:
         pending_.reset();
     }
 
-    void draw(const DrawState& state, UInt32 first, UInt32 count) {
+    void draw(const DrawState& state, UInt32 first, UInt32 count, UInt32 instance = 0) {
         ++stats_.inputDraws;
-        if (pending_ && first == first_ + count_ && *pending_ == state) {
+        if (pending_ && state.frame.frame[3] == 2 && first == first_ && count == count_ &&
+            instance == firstInstance_ + instances_ && *pending_ == state) {
+            ++instances_;
+            return;
+        }
+        if (pending_ && instances_ == 1 && instance == firstInstance_ && first == first_ + count_ &&
+            *pending_ == state) {
             count_ += count;
             return;
         }
@@ -212,6 +244,8 @@ public:
         pending_ = state;
         first_ = first;
         count_ = count;
+        firstInstance_ = instance;
+        instances_ = 1;
     }
 };
 }
@@ -231,6 +265,8 @@ GpuMaterialRenderer::~GpuMaterialRenderer() {
     if (vertices_) {
         SDL_ReleaseGPUBuffer(device_, vertices_);
     }
+    if (instances_)
+        SDL_ReleaseGPUBuffer(device_, instances_);
     if (transfer_) {
         SDL_ReleaseGPUTransferBuffer(device_, transfer_);
     }
@@ -288,6 +324,9 @@ bool GpuMaterialRenderer::trimCaches() {
     if (transfer_)
         SDL_ReleaseGPUTransferBuffer(device_, std::exchange(transfer_, nullptr));
     resources_.vertexCapacity = resources_.uploadCapacity = 0;
+    if (instances_)
+        SDL_ReleaseGPUBuffer(device_, std::exchange(instances_, nullptr));
+    resources_.instanceCapacity = 0;
     return true;
 }
 
@@ -816,6 +855,29 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
         }
         meshUploads.push_back({&mesh, UInt32(vertexOffset), UInt32(indexOffset)});
     }
+    const auto instanceOffset = align(transferBytes, 16);
+    const auto instanceBytes =
+        std::max<std::size_t>(1, batch.meshes().size()) * sizeof(HardwareTransform);
+    transferBytes = instanceOffset + instanceBytes;
+    if (transferBytes > stagingBytes_)
+        return SDL_SetError("Hardware instance staging budget exceeded"), nullptr;
+    if (resources_.instanceCapacity < instanceBytes) {
+        SDL_GPUBufferCreateInfo info{};
+        info.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
+        UInt32 capacity = 4096;
+        while (capacity < instanceBytes)
+            capacity *= 2;
+        info.size = std::min(capacity, stagingBytes_);
+        auto* next = SDL_CreateGPUBuffer(device_, &info);
+        if (!next)
+            return nullptr;
+        if (instances_)
+            SDL_ReleaseGPUBuffer(device_, instances_);
+        instances_ = next;
+        resources_.instanceCapacity = info.size;
+        resources_.peakInstanceCapacity = std::max(resources_.peakInstanceCapacity, info.size);
+        ++resources_.instanceAllocations;
+    }
     if (!prepareResources(width, height, vertexBytes, UInt32(transferBytes), gamma != 1)) {
         return nullptr;
     }
@@ -844,6 +906,10 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
         return nullptr;
     }
     std::memset(mapped, 0, std::size_t(transferBytes));
+    for (std::size_t i = 0; i < batch.meshes().size(); ++i)
+        std::memcpy(mapped + instanceOffset + i * sizeof(HardwareTransform),
+                    &batch.meshes()[i].transform,
+                    sizeof(HardwareTransform));
     if (!batch.vertices().empty()) {
         std::memcpy(mapped, batch.vertices().data(), batch.vertices().size_bytes());
     }
@@ -892,6 +958,9 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
     }
     SDL_GPUTransferBufferLocation source{r.transfer, 0};
     SDL_GPUBufferRegion destination{r.vertices, 0, vertexBytes};
+    SDL_UploadToGPUBuffer(copy, &source, &destination, false);
+    source.offset = UInt32(instanceOffset);
+    destination = {instances_, 0, UInt32(instanceBytes)};
     SDL_UploadToGPUBuffer(copy, &source, &destination, false);
     for (const auto& uploadMesh : meshUploads) {
         SDL_GPUTransferBufferLocation from{r.transfer, uploadMesh.vertices};
@@ -951,11 +1020,13 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
     submission.fenceWaitMs = fenceWaitMs;
     submission.vertexUploadBytes = vertexBytes;
     submission.meshUploadBytes = newMeshBytes;
+    submission.instanceUploadBytes = instanceBytes;
     for (const auto& entry : layout)
         submission.textureUploadBytes += UInt64(entry.width) * entry.height * 4;
     DrawEncoder encoder(r.commands, pass, submission);
     const SDL_GPUBufferBinding binding{r.vertices, 0};
     SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
+    SDL_BindGPUVertexStorageBuffers(pass, 0, &instances_, 1);
     const auto clip = config.clip ? intersect(*config.clip, {0, 0, width - 1, height - 1})
                                   : std::optional(RectI{0, 0, width - 1, height - 1});
     if (clip) {
@@ -973,13 +1044,7 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
                     {{image->array ? bindings[0]->gpu : image->gpu, imageSampler},
                      {bindings[draw.lightMap]->gpu, samplers_[3]},
                      {image->array ? image->gpu : whiteArray_, imageSampler}}};
-                VertexUniform frame{{w, h, draw.perspective ? 1.f : 0.f, draw.mesh ? 1.f : 0.f}};
-                if (draw.mesh) {
-                    const auto& transform = batch.meshes()[draw.mesh - 1].transform;
-                    frame.camera = transform.camera;
-                    frame.optics = transform.optics;
-                    frame.clip = transform.clip;
-                }
+                const auto frame = vertexUniform(w, h, draw, batch);
                 FragmentUniform material{
                     {draw.color.x, draw.color.y, draw.color.z, draw.opacity},
                     {config.hazeColor.x, config.hazeColor.y, config.hazeColor.z, 0},
@@ -1008,7 +1073,8 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
                               mesh ? mesh->vertices : r.vertices,
                               mesh ? mesh->indices : nullptr},
                              draw.firstVertex,
-                             draw.vertexCount);
+                             draw.vertexCount,
+                             frame.frame[3] == 2 ? draw.mesh - 1 : 0);
             });
             encoder.flush();
             for (const auto& draw : layer) {
@@ -1023,21 +1089,26 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
                     {{bindings[0]->gpu, samplers_[0]},
                      {bindings[0]->gpu, samplers_[3]},
                      {whiteArray_, samplers_[0]}}};
-                const VertexUniform frame{{w, h, draw.perspective ? 1.f : 0.f, 0}};
-                const FragmentUniform material{
+                const auto frame = vertexUniform(w, h, draw, batch);
+                FragmentUniform material{
                     {1, 1, 1, 1},
                     {config.hazeColor.x, config.hazeColor.y, config.hazeColor.z, 0},
                     {1, 0, 0, 0},
                     {0, 0, 2, 0}};
+                if (draw.mesh)
+                    material.clip = frame.clip;
+                auto* mesh = draw.mesh ? meshBindings[draw.mesh - 1] : nullptr;
                 encoder.draw(
-                    {pipelines_[std::size_t(HardwareBlend::Alpha) * 4 + std::size_t(depth)],
+                    {pipelines_[(draw.mesh ? 20U : 0U) + std::size_t(HardwareBlend::Alpha) * 4 +
+                                std::size_t(depth)],
                      samplers,
                      frame,
                      material,
-                     r.vertices,
-                     nullptr},
+                     mesh ? mesh->vertices : r.vertices,
+                     mesh ? mesh->indices : nullptr},
                     draw.firstVertex,
-                    draw.vertexCount);
+                    draw.vertexCount,
+                    frame.frame[3] == 2 ? draw.mesh - 1 : 0);
             }
             encoder.flush();
             start = end;
@@ -1050,6 +1121,7 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
             return nullptr;
         }
         SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
+        SDL_BindGPUVertexStorageBuffers(pass, 0, &instances_, 1);
         const std::array<SDL_GPUTextureSamplerBinding, 3> samplers{
             {{r.color, samplers_[0]},
              {bindings[0]->gpu, samplers_[3]},

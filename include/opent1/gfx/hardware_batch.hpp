@@ -12,6 +12,13 @@ struct HardwareTransform {
     std::array<std::array<Flt32, 4>, 3> camera{};
     std::array<Flt32, 4> optics{}; // focal x/y, center x/y
     std::array<Flt32, 4> clip{};   // near, far, camera perspective, unused
+    // Mode 1: eight native first-writer height/merge/fraction/distance inputs.
+    // Mode 2: two prepared TS lights, four vectors each (position/type,
+    // intensity/range, attenuation/point mode, direction/optimized attenuation).
+    std::array<std::array<Flt32, 4>, 8> parameters{};
+    std::array<Flt32, 4> ambient{};  // TS ambient RGB/count, or terrain haze start in W
+    std::array<Flt32, 4> geometry{}; // terrain extent/far/mode/topology, TS haze/unused/2/unused
+    std::array<Flt32, 4> mapping{};  // terrain lightmap origin XY, scale XY
     bool operator==(const HardwareTransform&) const = default;
 };
 enum class HardwareBlend : UInt8 { Opaque, Alpha, Additive, Subtractive, Multiply };
@@ -74,8 +81,18 @@ struct HardwareVertex {
 // IDs never repeat within a process; replacement geometry receives a new revision.
 class HardwareMesh {
 public:
-    [[nodiscard]] static std::shared_ptr<const HardwareMesh> create(std::vector<HardwareVertex>,
-                                                                    std::vector<UInt32>);
+    enum class Encoding { Color, TsNormals }; // TS color/opacity carry native normals/shading mode
+    [[nodiscard]] static std::shared_ptr<const HardwareMesh>
+        create(std::vector<HardwareVertex>, std::vector<UInt32>, Encoding = Encoding::Color);
+
+    [[nodiscard]] Encoding encoding() const {
+        return encoding_;
+    }
+
+    [[nodiscard]] std::size_t residentBytes() const {
+        return sizeof(*this) + vertices_.capacity() * sizeof(HardwareVertex) +
+               indices_.capacity() * sizeof(UInt32);
+    }
 
     [[nodiscard]] std::span<const HardwareVertex> vertices() const {
         return vertices_;
@@ -93,6 +110,7 @@ private:
     std::vector<HardwareVertex> vertices_;
     std::vector<UInt32> indices_;
     UInt64 revision_{};
+    Encoding encoding_{};
 };
 
 struct HardwareMeshInstance {
@@ -167,6 +185,12 @@ struct HardwareDraw {
 // remain UInt32, and malformed geometry or texture encodings are rejected.
 class HardwareBatch {
 public:
+    struct MemoryStats {
+        std::size_t batchBytes{}, meshBytes{},
+            textureBytes{}; // unique reachable allocations per batch
+    };
+
+    [[nodiscard]] MemoryStats memoryStats() const;
     [[nodiscard]] static std::optional<HardwareBatch> prepare(std::span<const HardwarePolygon>,
                                                               const Palette* = nullptr);
     // Combine independently prepared layers in draw order. Inputs remain owned
@@ -215,6 +239,16 @@ private:
     std::vector<UInt32> layerEnds_;
     std::vector<HardwareMeshInstance> meshes_;
 };
+
 // Discard this thread's disposable conversion LRU. Published batches remain owned.
 void clearHardwareTextureConversions();
+
+struct HardwareConversionCacheStats {
+    std::size_t entries{}, bytes{}, budgetBytes{}, budgetEntries{};
+    UInt64 hits{}, builds{};
+};
+
+[[nodiscard]] HardwareConversionCacheStats hardwareTextureConversionStats();
+// Per-thread disposable cache policy; zero disables retention, not conversion.
+void setHardwareTextureConversionBudget(std::size_t bytes, std::size_t entries = 4096);
 } // namespace opent1::gfx

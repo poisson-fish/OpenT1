@@ -17,6 +17,8 @@ def main():
     parser.add_argument('--driver', default='direct3d12')
     parser.add_argument('--frames', type=int, default=240)
     parser.add_argument('--projected-interiors', action='store_true')
+    parser.add_argument('--projected-terrain', action='store_true')
+    parser.add_argument('--projected-shapes', action='store_true')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     repository = Path(__file__).resolve().parent.parent
@@ -29,6 +31,8 @@ def main():
                                               text=True).splitlines(),
         'frames': args.frames, 'warmup_frames': 120, 'driver': args.driver,
         'projected_interiors': args.projected_interiors,
+        'projected_terrain': args.projected_terrain,
+        'projected_shapes': args.projected_shapes,
         'instrumented_allocations': False,
     }
     (args.output / 'capture-provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
@@ -37,6 +41,12 @@ def main():
         env['OPENT1_PROJECTED_INTERIORS'] = '1'
     else:
         env.pop('OPENT1_PROJECTED_INTERIORS', None)
+    for key, enabled in (('OPENT1_PROJECTED_TERRAIN', args.projected_terrain),
+                         ('OPENT1_PROJECTED_SHAPES', args.projected_shapes)):
+        if enabled:
+            env[key] = '1'
+        else:
+            env.pop(key, None)
     for mode in ('stationary', 'rotate', 'travel'):
         for label, root, mission, mod in (('base', args.base, 'Raindance', []),
                                           ('base', args.base, 'Broadside', []),

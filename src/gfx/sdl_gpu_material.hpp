@@ -63,6 +63,7 @@ private:
     SDL_GPUTexture* depth_{};
     Int32 depthWidth_{}, depthHeight_{};
     SDL_GPUBuffer* vertices_{};
+    SDL_GPUBuffer* instances_{};
     SDL_GPUTransferBuffer* transfer_{};
     SDL_GPUTexture* whiteArray_{};
     GpuResourceStats resources_;

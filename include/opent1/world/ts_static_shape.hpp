@@ -5,6 +5,15 @@
 #include <unordered_map>
 
 namespace opent1::world {
+struct TsHardwareCacheStats {
+    std::size_t entries{}, bytes{}, budget{};
+    UInt64 hits{}, builds{};
+};
+
+[[nodiscard]] TsHardwareCacheStats tsHardwareCacheStats();
+void trimTsHardwareMeshes(std::size_t budget = 32U * 1024U * 1024U);
+void clearTsHardwareMeshes();
+
 struct TsStaticView {
     // Row-vector transform to +Y-forward, +Z-up camera coordinates.
     TMat3F shapeToCamera;
@@ -113,8 +122,10 @@ class TsStaticShapeFrame {
 public:
     [[nodiscard]] static std::optional<TsStaticShapeFrame> prepare(TsShapeResources,
                                                                    const TsStaticView&);
-    [[nodiscard]] static std::optional<TsStaticShapeFrame>
-    prepare(TsShapeResources, const TsStaticView&, const TsShapePose&);
+    [[nodiscard]] static std::optional<TsStaticShapeFrame> prepare(TsShapeResources,
+                                                                   const TsStaticView&,
+                                                                   const TsShapePose&,
+                                                                   bool retainedHardware = false);
     [[nodiscard]] static std::optional<TsStaticShapeFrame> prepareSurfaces(
         TsMaterialResources, std::span<const StaticSurfaceTriangle>, const TsStaticView&);
 
@@ -145,6 +156,11 @@ public:
     bool draw(gfx::SoftwareSurface&) const;
 
 private:
+    struct RetainedPart {
+        std::shared_ptr<const gfx::HardwareMesh> mesh;
+        gfx::HardwareTransform transform;
+    };
+
     struct Polygon {
         std::array<gfx::PolygonVertex, 3> vertices;
         std::size_t material{};
@@ -156,6 +172,8 @@ private:
         std::shared_ptr<const NativeSurfaceTexture> nativeSoftware{};
         Int32 nativeMip{};
         std::array<gfx::PolygonVertex, 3> softwareVertices{};
+        std::shared_ptr<const RetainedPart> retained{};
+        UInt32 firstIndex{};
     };
 
     TsShapeResources resources_;
@@ -165,5 +183,9 @@ private:
     bool perspective_{true};
     Flt32 opacity_{1};
     bool texturePerspective_{true};
+    std::optional<TsShapePose> retainedPose_;
+    std::optional<TsStaticView> retainedView_;
+    mutable std::shared_ptr<const TsStaticShapeFrame> projected_;
+    [[nodiscard]] const TsStaticShapeFrame* projected() const;
 };
 } // namespace opent1::world

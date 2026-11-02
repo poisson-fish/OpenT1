@@ -464,6 +464,12 @@ bool InteriorShape::processQuery(sim::SimQuery& query) {
         return true;
     }
     if (auto* wsq = dynamic_cast<world::WorldSurfaceQuery*>(&query)) {
+        if (wsq->trimCaches) {
+            cachedSurfaceMesh_.reset();
+            cachedLightSlots_.clear();
+            wsq->image.reset();
+            return true;
+        }
         if (destroyed_) {
             return false;
         }

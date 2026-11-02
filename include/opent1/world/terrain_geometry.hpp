@@ -26,4 +26,11 @@ terrainGeometryDetails(Int32 scale, const TerrainGeometryView&);
                                                       UInt32 level,
                                                       Flt32 distance,
                                                       const TerrainGeometryDetail&);
+// First-writer GPU inputs: authored height, merge height, fraction, authored distance.
+[[nodiscard]] std::optional<std::array<Flt32, 4>> terrainMorphInputs(const TerrainGridBlock&,
+                                                                     UInt32 x,
+                                                                     UInt32 y,
+                                                                     UInt32 level,
+                                                                     Flt32 distance,
+                                                                     const TerrainGeometryDetail&);
 } // namespace opent1::world

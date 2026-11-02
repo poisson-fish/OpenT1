@@ -212,6 +212,8 @@ void liveDatablockReplacement() {
     blocks.restoreSnapshot(snapshot);
     blocks.reset();
     CHECK(!owner.expired() && shape.getDatPtr() == source);
+    CHECK(shape.initResources(source));
+    CHECK(!owner.expired() && shape.getDatPtr() == source);
     // Force a new material preparation after the original registry owner leaves.
     world::WorldShapeQuery query;
     CHECK(shape.processQuery(query) && query.image);

@@ -650,6 +650,33 @@ if(OPENT1_BUILD_PLATFORM)
     add_executable(opent1_render_benchmark EXCLUDE_FROM_ALL tools/render_benchmark.cpp)
     target_link_libraries(opent1_render_benchmark PRIVATE opent1_game opent1_gfx_sdl)
 endif()
+# Explicit diagnostic target: allocation tracking is confined to this executable.
+add_executable(opent1_memory_audit EXCLUDE_FROM_ALL tools/memory_audit.cpp src/audio/wave.cpp)
+target_link_libraries(opent1_memory_audit PRIVATE opent1_game)
+if(WIN32)
+    target_link_libraries(opent1_memory_audit PRIVATE psapi dxgi)
+endif()
+if(OPENT1_BUILD_PLATFORM)
+    target_compile_definitions(opent1_memory_audit PRIVATE OPENT1_MEMORY_GPU=1)
+    target_include_directories(opent1_memory_audit PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/gfx")
+    target_link_libraries(opent1_memory_audit PRIVATE opent1_gfx_sdl)
+endif()
+if(OPENT1_BUILD_AUDIO)
+    add_custom_command(
+        TARGET opent1_memory_audit
+        POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:OpenAL>
+                $<TARGET_FILE_DIR:opent1_memory_audit>
+    )
+endif()
+if(WIN32 AND TARGET SDL3::SDL3-shared)
+    add_custom_command(
+        TARGET opent1_memory_audit
+        POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared>
+                $<TARGET_FILE_DIR:opent1_memory_audit>
+    )
+endif()
 if(OPENT1_BUILD_AUDIO)
     add_custom_command(
         TARGET opent1

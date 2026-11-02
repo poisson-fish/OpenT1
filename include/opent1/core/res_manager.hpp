@@ -177,10 +177,14 @@ public:
     // preserve identity across mount changes. Loose files remain explicitly reloaded.
     bool setSourceOnlyLoader(std::string_view extension, bool enabled = true);
 
+    // Explicit same-type replacement supports measured/decorated loaders.
+    // Existing decoded handles/cache entries are preserved; affects future loads.
+    // Configure registrations outside loader callbacks.
     template <class T, class Fn>
     bool registerLoader(std::string_view extension,
                         Fn loader,
-                        std::chrono::milliseconds timeout = kResDefaultTimeout) {
+                        std::chrono::milliseconds timeout = kResDefaultTimeout,
+                        bool replaceSameType = false) {
         return registerErased(
             resourceType(extension),
             typeid(T),
@@ -192,7 +196,8 @@ public:
                 }
                 return std::make_unique<detail::TypedPayload<T>>(std::move(value));
             },
-            timeout);
+            timeout,
+            replaceSameType);
     }
 
     template <class T> [[nodiscard]] Resource<T> load(std::string_view name) {
@@ -215,7 +220,8 @@ private:
     bool registerErased(UInt32 id,
                         std::type_index type,
                         Loader loader,
-                        std::chrono::milliseconds timeout);
+                        std::chrono::milliseconds timeout,
+                        bool replaceSameType);
     bool addErased(std::string_view name,
                    std::type_index type,
                    std::unique_ptr<detail::ResourcePayload> payload,

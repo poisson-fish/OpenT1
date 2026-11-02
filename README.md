@@ -59,6 +59,7 @@ execution.
 - [Architecture](docs/architecture.md): module boundaries, ownership, and runtime flow.
 - [Development](docs/development.md): configuration, tests, and adding regression coverage.
 - [Runtime](docs/runtime.md): launch options, data paths, and diagnostics.
+- [Render measurements and plan](docs/render-improvements.md): base/RPG memory baselines and platform-aware rendering work.
 - [Script runtime](docs/script-runtime.md): console integration and scripting contracts.
 - [Simulation networking](docs/simulation-networking.md): replication and wire behavior.
 

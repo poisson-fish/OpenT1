@@ -509,9 +509,18 @@ bool ResourceManager::getCrc(std::string_view name, UInt32& crc, UInt32 initial)
 bool ResourceManager::registerErased(UInt32 id,
                                      std::type_index type,
                                      Loader loader,
-                                     std::chrono::milliseconds timeout) {
+                                     std::chrono::milliseconds timeout,
+                                     bool replaceSameType) {
     if (id == kInvalidResourceId || timeout.count() < 0 || !loader) {
         return false;
+    }
+    const auto found = impl_->loaders.find(id);
+    if (found != impl_->loaders.end()) {
+        if (!replaceSameType || found->second.type != type) {
+            return false;
+        }
+        found->second = Impl::Factory{type, std::move(loader), timeout, found->second.sourceOnly};
+        return true;
     }
     return impl_->loaders.emplace(id, Impl::Factory{type, std::move(loader), timeout}).second;
 }

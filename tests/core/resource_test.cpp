@@ -177,6 +177,25 @@ void tests() {
         loadedText.reset();
         CHECK(manager.purge() == 1);
         CHECK(manager.load<std::string>("text.txt") && calls == 2);
+        const auto retainedText = manager.load<std::string>("text.txt");
+        int measuredCalls = 0;
+        CHECK(manager.registerLoader<std::string>(
+            ".txt",
+            [&](StreamIO& stream, UInt32 size) {
+                ++measuredCalls;
+                std::string value(size, ' ');
+                if (!stream.readBytes(std::as_writable_bytes(std::span(value)))) {
+                    return std::unique_ptr<std::string>{};
+                }
+                return std::make_unique<std::string>(value);
+            },
+            0ms,
+            true));
+        CHECK(!manager.registerLoader<Counted>(
+            ".txt", [](StreamIO&, UInt32) { return std::make_unique<Counted>(); }, 0ms, true));
+        CHECK(manager.load<std::string>("text.txt").get() == retainedText.get() && measuredCalls == 0);
+        CHECK(manager.setSearchPaths(roots));
+        CHECK(manager.load<std::string>("text.txt") && measuredCalls == 1 && *retainedText == second);
         int attempts = 0;
         CHECK(manager.registerLoader<Counted>(
             ".bad", [&](StreamIO&, UInt32) -> std::unique_ptr<Counted> {

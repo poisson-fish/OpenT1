@@ -263,7 +263,10 @@ bool GameBase::processArgumentsView(std::span<const std::string_view> arguments)
 bool GameBase::initResources(GameBaseData* ptr) {
     data_ = ptr;
     if (ptr) {
-        retainedData_ = ptr->clone();
+        auto* dbm = resolveDataBlockManager();
+        retainedData_ = dbm ? dbm->retainDataBlock(ptr) : nullptr;
+        if (!retainedData_)
+            retainedData_ = ptr->clone();
     } else {
         retainedData_.reset();
     }

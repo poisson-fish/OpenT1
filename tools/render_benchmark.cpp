@@ -240,8 +240,11 @@ int main(int argc, char** argv) {
                     require(game.stepFrame((warm + count + 9 + i) * .032, false),
                             "transition simulation failed");
                     gfx::HardwareBatch next;
-                    require(game.renderFrame(surface->software(), &next),
-                            "transition preparation failed");
+                    if (!game.renderFrame(surface->software(), &next)) {
+                        throw std::runtime_error(
+                            "transition preparation failed at frame " + std::to_string(i) + ": " +
+                            std::string(game.console().getVariable("OpenT1::LastRenderError")));
+                    }
                     frame.hazeColor = game.hardwareHazeColor();
                     require(surface->render(next, frame), "transition submission failed");
                 }

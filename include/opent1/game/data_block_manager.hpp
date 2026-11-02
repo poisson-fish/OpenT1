@@ -886,6 +886,8 @@ public:
     [[nodiscard]] Int32 readBlockId(BitStream& stream, Int32 group) const;
 
     [[nodiscard]] GameBaseData* lookupDataBlock(Int32 blockId, Int32 groupId) const noexcept;
+    // Live objects may outlast a client reset, replacement, or script rollback.
+    [[nodiscard]] std::shared_ptr<GameBaseData> retainDataBlock(const GameBaseData*) const noexcept;
     [[nodiscard]] GameBaseData*
     lookupDataBlock(std::string_view name, Int32 groupId, Int32* blockId = nullptr) const noexcept;
     [[nodiscard]] GameBaseData* lookupDataBlock(std::string_view name) const noexcept;
@@ -923,7 +925,7 @@ private:
 
     bool isServer_{true};
     std::shared_ptr<ResourceManager> resources_;
-    std::array<std::vector<std::unique_ptr<GameBaseData>>, NumDataTypes> dataBlocks_{};
+    std::array<std::vector<std::shared_ptr<GameBaseData>>, NumDataTypes> dataBlocks_{};
     std::array<std::vector<HashNode>, kHashTableSize> hashTable_{};
     std::string lastError_;
 };

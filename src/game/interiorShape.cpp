@@ -99,6 +99,10 @@ void InteriorShape::setLightAnimParams(std::vector<LightAnimParam> params) {
 void InteriorShape::setShapeResources(std::shared_ptr<world::InteriorShapeResources> res) {
     shapeResources_ = std::move(res);
     cachedSurfaceMesh_.reset();
+    cachedLightSlots_.clear();
+    visibleSource_.reset();
+    visibleMesh_.reset();
+    visibleSurfaces_.clear();
     collisionImage_.reset();
     checkVals_.clear();
     if (shapeResources_ && shapeResources_->shape) {
@@ -467,6 +471,9 @@ bool InteriorShape::processQuery(sim::SimQuery& query) {
         if (wsq->trimCaches) {
             cachedSurfaceMesh_.reset();
             cachedLightSlots_.clear();
+            visibleSource_.reset();
+            visibleMesh_.reset();
+            visibleSurfaces_.clear();
             wsq->image.reset();
             return true;
         }

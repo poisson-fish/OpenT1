@@ -1874,6 +1874,17 @@ bool DataBlockManager::serverPreload() {
     return ok;
 }
 
+std::shared_ptr<GameBaseData>
+DataBlockManager::retainDataBlock(const GameBaseData* block) const noexcept {
+    if (block && block->dbmGroup >= 0 && block->dbmGroup < NumDataTypes && block->dbmIndex >= 0) {
+        const auto& group = dataBlocks_[static_cast<std::size_t>(block->dbmGroup)];
+        const auto index = static_cast<std::size_t>(block->dbmIndex);
+        if (index < group.size() && group[index].get() == block)
+            return group[index];
+    }
+    return {};
+}
+
 void DataBlockManager::reset() {
     for (auto& grp : dataBlocks_) {
         grp.clear();

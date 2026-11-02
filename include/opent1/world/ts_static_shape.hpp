@@ -156,10 +156,7 @@ public:
     bool draw(gfx::SoftwareSurface&) const;
 
 private:
-    struct RetainedPart {
-        std::shared_ptr<const gfx::HardwareMesh> mesh;
-        gfx::HardwareTransform transform;
-    };
+    struct RetainedPart;
 
     struct Polygon {
         std::array<gfx::PolygonVertex, 3> vertices;

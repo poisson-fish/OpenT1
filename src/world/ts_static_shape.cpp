@@ -9,6 +9,15 @@
 #include <ranges>
 
 namespace opent1::world {
+struct TsStaticShapeFrame::RetainedPart {
+    std::shared_ptr<const gfx::HardwareMesh> mesh;
+    gfx::HardwareTransform transform;
+    TMat3F toCamera;
+    Point3F offset;
+    std::optional<TsPreparedLighting>
+        lighting; // prepared scalars; no copied directional shadow maps
+};
+
 namespace {
 bool finite(Point3F p) {
     return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z);
@@ -462,7 +471,16 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
                   view.minimumProjectedAltitude == 0;
     if (retain) {
         result.retainedPose_ = pose;
-        result.retainedView_ = view;
+        // Software fallback needs clipping optics and the prepared per-mesh
+        // lights below. Retaining the source view would clone full shadow maps.
+        auto& projection = result.retainedView_.emplace();
+        projection.width = view.width;
+        projection.height = view.height;
+        projection.focal = view.focal;
+        projection.center = view.center;
+        projection.nearDistance = view.nearDistance;
+        projection.farDistance = view.farDistance;
+        projection.perspective = view.perspective;
     }
     std::vector<Vertex> vertices, scratch;
     vertices.reserve(10);
@@ -593,8 +611,12 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
                     }
                     transform.ambient[3] = Flt32(active);
                 }
-                part = std::make_shared<const RetainedPart>(
-                    RetainedPart{sourceMesh->hardware, transform});
+                part =
+                    std::make_shared<const RetainedPart>(RetainedPart{sourceMesh->hardware,
+                                                                      transform,
+                                                                      toCamera,
+                                                                      object.offset,
+                                                                      std::move(preparedLights)});
             }
             return std::ranges::all_of(mesh.faces, [&](const auto& face) {
                 if (face.material == -1) {
@@ -1110,10 +1132,60 @@ std::unique_ptr<gfx::Bitmap> TsStaticShapeFrame::silhouette() const {
 
 const TsStaticShapeFrame* TsStaticShapeFrame::projected() const {
     if (!projected_) {
-        auto frame = prepare(resources_, *retainedView_, *retainedPose_);
-        if (!frame)
-            return nullptr;
-        projected_ = std::make_shared<const TsStaticShapeFrame>(std::move(*frame));
+        auto result = std::make_shared<TsStaticShapeFrame>();
+        result->resources_ = resources_;
+        result->viewport_ = viewport_;
+        result->detail_ = detail_;
+        result->perspective_ = perspective_;
+        result->opacity_ = opacity_;
+        result->texturePerspective_ = texturePerspective_;
+        std::vector<Vertex> vertices, scratch;
+        vertices.reserve(10);
+        scratch.reserve(10);
+        const auto& view = *retainedView_;
+        for (const auto& polygon : polygons_) {
+            const auto& part = *polygon.retained;
+            const auto indices = part.mesh->indices().subspan(polygon.firstIndex, 3);
+            const auto mode = part.mesh->vertices()[indices[0]].opacity;
+            const bool lit = part.lighting && mode != 0;
+            vertices.clear();
+            for (std::size_t j = 0; j < 3; ++j) {
+                const auto& v = part.mesh->vertices()[indices[j]];
+                Point3F point{v.position.x, v.position.y, v.inverseDepth};
+                Point3F color{1, 1, 1};
+                if (lit && (mode == 1 || j == 0)) {
+                    const auto value = part.lighting->lightVertex(point, v.color);
+                    if (!value)
+                        return nullptr;
+                    color = *value;
+                }
+                point += part.offset;
+                m_mul(point, part.toCamera, point);
+                if (!finite(point))
+                    return nullptr;
+                vertices.push_back({point, v.texture, color, {}, 0, polygon.vertices[0].haze});
+            }
+            const auto c = vertices.front().color;
+            const auto flat =
+                lit && mode == 2 ? std::min(1.f, c.x * .299f + c.z * .587f + c.y * .114f) : 1.f;
+            const auto clipped = clip(vertices, scratch, view);
+            for (std::size_t i = 1; i + 1 < clipped.size(); ++i) {
+                Polygon p{
+                    {project(clipped[0], view),
+                     project(clipped[i], view),
+                     project(clipped[i + 1], view)},
+                    polygon.material,
+                    lit ? (mode == 2 ? gfx::PolygonSource::Constant : gfx::PolygonSource::Vertex)
+                        : gfx::PolygonSource::None,
+                    flat};
+                if (!visibleTriangle(p.vertices, 0))
+                    continue;
+                if (result->polygons_.size() >= gfx::renderLimits().polygons)
+                    return nullptr;
+                result->polygons_.push_back(std::move(p));
+            }
+        }
+        projected_ = std::move(result);
     }
     return projected_.get();
 }

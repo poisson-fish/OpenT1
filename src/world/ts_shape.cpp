@@ -1027,6 +1027,10 @@ std::optional<Int32> selectTsDetail(const TsShape& shape, Flt32 projectedSize) {
 bool registerTsLoaders(ResourceManager& manager) {
     const auto a = manager.registerLoader<TsShape>(".dts", TsShape::load);
     const auto b = manager.registerLoader<TsMaterialList>(".dml", TsMaterialList::load);
+    if (a)
+        manager.setSourceOnlyLoader(".dts");
+    if (b)
+        manager.setSourceOnlyLoader(".dml");
     return a && b;
 }
 

@@ -1039,6 +1039,18 @@ bool registerBitmapFontLoaders(ResourceManager& resources) {
                pft = resources.registerLoader<BitmapFont>(".pft", [](StreamIO& s, UInt32 size) {
                    return BitmapFont::load(s, size);
                });
+    if (bmp)
+        resources.setSourceOnlyLoader(".bmp");
+    if (dib)
+        resources.setSourceOnlyLoader(".dib");
+    if (pbm)
+        resources.setSourceOnlyLoader(".pbm");
+    if (png)
+        resources.setSourceOnlyLoader(".png");
+    if (pba)
+        resources.setSourceOnlyLoader(".pba");
+    if (pft)
+        resources.setSourceOnlyLoader(".pft");
     return bmp && dib && pbm && png && pba && pft;
 }
 } // namespace opent1::gfx

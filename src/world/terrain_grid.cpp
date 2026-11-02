@@ -421,6 +421,10 @@ std::vector<std::string> TerrainGridFile::dependencies(std::string_view name) co
 bool registerTerrainLoaders(ResourceManager& manager) {
     const auto grid = manager.registerLoader<TerrainGridFile>(".dtf", TerrainGridFile::load);
     const auto block = manager.registerLoader<TerrainGridBlock>(".dtb", TerrainGridBlock::load);
+    if (grid)
+        manager.setSourceOnlyLoader(".dtf");
+    if (block)
+        manager.setSourceOnlyLoader(".dtb");
     return grid && block;
 }
 

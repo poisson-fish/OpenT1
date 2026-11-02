@@ -623,6 +623,12 @@ bool registerInteriorLoaders(ResourceManager& manager) {
     const auto shape = manager.registerLoader<InteriorShape>(".dis", InteriorShape::load);
     const auto geometry = manager.registerLoader<InteriorGeometry>(".dig", InteriorGeometry::load);
     const auto lighting = manager.registerLoader<InteriorLighting>(".dil", InteriorLighting::load);
+    if (shape)
+        manager.setSourceOnlyLoader(".dis");
+    if (geometry)
+        manager.setSourceOnlyLoader(".dig");
+    if (lighting)
+        manager.setSourceOnlyLoader(".dil");
     return shape && geometry && lighting;
 }
 

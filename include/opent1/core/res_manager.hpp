@@ -1,6 +1,7 @@
 #pragma once
 #include <opent1/core/stream_io.hpp>
 #include <chrono>
+#include <atomic>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -36,6 +37,11 @@ template <class T> struct TypedPayload final : ResourcePayload {
 };
 
 struct ResourceState {
+    const UInt64 revision = [] {
+        static std::atomic<UInt64> next{1};
+        return next.fetch_add(1, std::memory_order_relaxed);
+    }();
+    UInt64 volumeRevision{};
     std::unique_ptr<ResourcePayload> payload;
     std::type_index type{typeid(void)};
     std::string name;
@@ -100,6 +106,15 @@ public:
         return state_ ? state_->name : std::string_view{};
     }
 
+    [[nodiscard]] UInt64 revision() const noexcept {
+        return state_ ? state_->revision : 0;
+    }
+
+    // Aliasing const ownership keeps the published asset alive across unmounts.
+    [[nodiscard]] std::shared_ptr<const T> immutable() const noexcept {
+        return state_ ? std::shared_ptr<const T>(state_, get()) : std::shared_ptr<const T>{};
+    }
+
 private:
     friend class ResourceManager;
 
@@ -121,7 +136,7 @@ struct ResourceMatch {
 // mounted wins), then added objects. ASCII case folding and both slashes match
 // legacy asset names. Virtual names reject traversal/absolute paths. All streams
 // returned here own their bytes. File/decoded-entry size defaults to 64 MiB.
-// Path/mount changes invalidate the cache; existing handles stay valid.
+// Path/mount changes invalidate changed resolutions; existing handles stay valid.
 // Loaders may load dependencies; cycles fail. Loaders must not mutate paths/mounts.
 class ResourceManager {
 public:
@@ -152,6 +167,10 @@ public:
     // Drop one unused decoded disk/volume cache entry. Live handles and added
     // objects remain intact; a later load can decode the source again.
     bool evict(std::string_view name);
+    // Opt in only for immutable decoders whose output depends solely on the input
+    // bytes (no ResourceManager dependencies). Live unchanged archive sources then
+    // preserve identity across mount changes. Loose files remain explicitly reloaded.
+    bool setSourceOnlyLoader(std::string_view extension, bool enabled = true);
 
     template <class T, class Fn>
     bool registerLoader(std::string_view extension,

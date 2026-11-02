@@ -489,6 +489,12 @@ bool registerPaletteLoaders(ResourceManager& resources) {
     const bool pal = resources.registerLoader<Palette>(".pal", load),
                ppl = resources.registerLoader<Palette>(".ppl", load),
                dpl = resources.registerLoader<Palette>(".dpl", load);
+    if (pal)
+        resources.setSourceOnlyLoader(".pal");
+    if (ppl)
+        resources.setSourceOnlyLoader(".ppl");
+    if (dpl)
+        resources.setSourceOnlyLoader(".dpl");
     return pal && ppl && dpl;
 }
 } // namespace opent1::gfx

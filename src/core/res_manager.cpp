@@ -147,6 +147,8 @@ struct ResourceManager::Impl {
         std::filesystem::path path;
         VolumeRStream stream;
         std::size_t refs{1};
+        UInt64 revision{};
+        std::map<std::string, std::weak_ptr<detail::ResourceState>, std::less<>> decoded;
         std::map<std::string, std::size_t, std::less<>> entries;
     };
 
@@ -154,6 +156,7 @@ struct ResourceManager::Impl {
         std::type_index type;
         Loader load;
         std::chrono::milliseconds timeout;
+        bool sourceOnly{};
     };
 
     std::map<std::string, File, std::less<>> files;
@@ -166,6 +169,7 @@ struct ResourceManager::Impl {
 
     std::vector<Match> matches;
     UInt64 nextCursor{1};
+    UInt64 nextVolumeRevision{1};
     std::vector<std::unique_ptr<Volume>> volumes;
     std::map<UInt32, Factory> loaders;
     std::set<std::string, std::less<>> loading;
@@ -174,6 +178,18 @@ struct ResourceManager::Impl {
     auto volumeFor(std::string_view key) const {
         return std::ranges::find_if(volumes, [&](const auto& v) {
             return v->entries.contains(key);
+        });
+    }
+
+    void reconcileCache() {
+        std::erase_if(cache, [&](const auto& entry) {
+            const auto& [name, state] = entry;
+            const auto factory = loaders.find(resourceType(name));
+            if (state.use_count() == 1 || factory == loaders.end() || !factory->second.sourceOnly ||
+                files.contains(name))
+                return true;
+            const auto volume = volumeFor(name);
+            return volume == volumes.end() || state->volumeRevision != (*volume)->revision;
         });
     }
 };
@@ -260,7 +276,7 @@ bool ResourceManager::setSearchPaths(std::span<const std::filesystem::path> root
             impl_->matches.insert(impl_->matches.begin(), std::move(entry));
         }
     }
-    impl_->cache.clear();
+    impl_->reconcileCache();
     return true;
 }
 
@@ -286,6 +302,7 @@ bool ResourceManager::addVolume(std::string_view name) {
     if (!volume->stream.openVolume(volume->path)) {
         return false;
     }
+    volume->revision = impl_->nextVolumeRevision++;
     const auto entries = volume->stream.getVolumeItems();
     std::ranges::for_each(std::views::iota(std::size_t{0}, entries.size()), [&](auto index) {
         if (entries[index].name) {
@@ -302,7 +319,7 @@ bool ResourceManager::addVolume(std::string_view name) {
         }
     }
     impl_->volumes.insert(impl_->volumes.begin(), std::move(volume));
-    impl_->cache.clear();
+    impl_->reconcileCache();
     return true;
 }
 
@@ -322,7 +339,7 @@ bool ResourceManager::removeVolume(std::string_view name) {
             return !entry.disk && entry.source == *key;
         });
         impl_->volumes.erase(it);
-        impl_->cache.clear();
+        impl_->reconcileCache();
     }
     return true;
 }
@@ -508,6 +525,14 @@ bool ResourceManager::addErased(std::string_view name,
     return true;
 }
 
+bool ResourceManager::setSourceOnlyLoader(std::string_view extension, bool enabled) {
+    const auto loader = impl_->loaders.find(resourceType(extension));
+    if (loader == impl_->loaders.end())
+        return false;
+    loader->second.sourceOnly = enabled;
+    return true;
+}
+
 std::shared_ptr<detail::ResourceState> ResourceManager::loadErased(std::string_view name,
                                                                    std::type_index type) {
     const auto key = keyOf(name);
@@ -525,6 +550,20 @@ std::shared_ptr<detail::ResourceState> ResourceManager::loadErased(std::string_v
     const auto factory = impl_->loaders.find(resourceType(*key));
     if (factory == impl_->loaders.end() || factory->second.type != type) {
         return {};
+    }
+    Impl::Volume* immutableVolume{};
+    if (factory->second.sourceOnly && !impl_->files.contains(*key)) {
+        const auto volume = impl_->volumeFor(*key);
+        if (volume != impl_->volumes.end()) {
+            immutableVolume = volume->get();
+            const auto previous = immutableVolume->decoded.find(*key);
+            if (previous != immutableVolume->decoded.end()) {
+                if (auto state = previous->second.lock(); state && state->type == type) {
+                    impl_->cache.emplace(*key, state);
+                    return state;
+                }
+            }
+        }
     }
     if (!impl_->loading.insert(*key).second) {
         return {};
@@ -553,7 +592,14 @@ std::shared_ptr<detail::ResourceState> ResourceManager::loadErased(std::string_v
     state->type = type;
     state->payload = std::move(payload);
     state->timeout = factory->second.timeout;
+    if (!impl_->files.contains(*key)) {
+        const auto volume = impl_->volumeFor(*key);
+        if (volume != impl_->volumes.end())
+            state->volumeRevision = (*volume)->revision;
+    }
     impl_->cache.emplace(*key, state);
+    if (immutableVolume)
+        immutableVolume->decoded[*key] = state;
     return state;
 }
 

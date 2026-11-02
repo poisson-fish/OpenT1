@@ -6,6 +6,7 @@ add_executable(
     core/stream_test.cpp
     core/compression_test.cpp
     core/resource_test.cpp
+    core/resource_retention_test.cpp
     core/persist_test.cpp
     math/integer_test.cpp
     math/rotation_test.cpp

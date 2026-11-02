@@ -58,7 +58,7 @@ SDL_GPUShader* shader(SDL_GPUDevice* device, bool vertex) {
     SDL_GPUShaderCreateInfo info{};
     info.stage = vertex ? SDL_GPU_SHADERSTAGE_VERTEX : SDL_GPU_SHADERSTAGE_FRAGMENT;
     info.num_uniform_buffers = 1;
-    info.num_samplers = vertex ? 0 : 2;
+    info.num_samplers = vertex ? 0 : 3;
     const auto formats = SDL_GetGPUShaderFormats(device);
     if (formats & SDL_GPU_SHADERFORMAT_SPIRV) {
         info.format = SDL_GPU_SHADERFORMAT_SPIRV;
@@ -93,6 +93,7 @@ struct Resources {
     std::vector<SDL_GPUTexture*> textures;
     std::vector<SDL_GPUBuffer*> buffers{};
     std::vector<std::shared_ptr<LightMapSlot>> slots{};
+    std::vector<std::shared_ptr<TextureArraySlot>> arrays{};
 
     ~Resources() {
         if (commands) {
@@ -110,10 +111,11 @@ struct FragmentUniform {
     std::array<Flt32, 4> tint, haze, options, alpha;
     std::array<Flt32, 4> clip{};
     std::array<Flt32, 4> lightRect{1, 1, 0, 0};
+    std::array<Flt32, 4> imageArray{}; // layer, enabled, unused, unused
     bool operator==(const FragmentUniform&) const = default;
 };
 
-static_assert(sizeof(FragmentUniform) == 96 && sizeof(HardwareVertex) == 48);
+static_assert(sizeof(FragmentUniform) == 112 && sizeof(HardwareVertex) == 48);
 
 struct VertexUniform {
     std::array<Flt32, 4> frame;
@@ -126,7 +128,7 @@ static_assert(sizeof(VertexUniform) == 96);
 
 struct DrawState {
     SDL_GPUGraphicsPipeline* pipeline;
-    std::array<SDL_GPUTextureSamplerBinding, 2> samplers;
+    std::array<SDL_GPUTextureSamplerBinding, 3> samplers;
     VertexUniform frame;
     FragmentUniform material;
     SDL_GPUBuffer *vertices{}, *indices{};
@@ -216,6 +218,8 @@ public:
 
 GpuMaterialRenderer::~GpuMaterialRenderer() {
     clearTextureCache();
+    if (whiteArray_)
+        SDL_ReleaseGPUTexture(device_, whiteArray_);
     for (const auto& [id, mesh] : meshes_) {
         (void)id;
         SDL_ReleaseGPUBuffer(device_, mesh.vertices);
@@ -254,7 +258,7 @@ GpuMaterialRenderer::~GpuMaterialRenderer() {
 
 void GpuMaterialRenderer::clearTextureCache() noexcept {
     for (auto& t : textures_) {
-        if (!t.slot)
+        if (!t.slot && !t.array)
             SDL_ReleaseGPUTexture(device_, t.gpu);
     }
     stats_.evictions += textures_.size();
@@ -262,10 +266,35 @@ void GpuMaterialRenderer::clearTextureCache() noexcept {
     textures_.clear();
     stats_.textures = stats_.bytes = 0;
     stats_.physicalTextures = stats_.lightMapPages = stats_.lightMapPageBytes = 0;
+    stats_.textureArrays = stats_.textureArrayBytes = stats_.allocatedPayloadBytes = 0;
+}
+
+bool GpuMaterialRenderer::trimCaches() {
+    if (frameFence_) {
+        if (!SDL_WaitForGPUFences(device_, true, &frameFence_, 1))
+            return false;
+        SDL_ReleaseGPUFence(device_, std::exchange(frameFence_, nullptr));
+    }
+    clearTextureCache();
+    for (const auto& [id, mesh] : meshes_) {
+        (void)id;
+        SDL_ReleaseGPUBuffer(device_, mesh.vertices);
+        SDL_ReleaseGPUBuffer(device_, mesh.indices);
+    }
+    meshes_.clear();
+    resources_.meshes = resources_.meshBytes = 0;
+    if (vertices_)
+        SDL_ReleaseGPUBuffer(device_, std::exchange(vertices_, nullptr));
+    if (transfer_)
+        SDL_ReleaseGPUTransferBuffer(device_, std::exchange(transfer_, nullptr));
+    resources_.vertexCapacity = resources_.uploadCapacity = 0;
+    return true;
 }
 
 bool GpuMaterialRenderer::prepareResources(
     Int32 width, Int32 height, UInt32 vertexBytes, UInt32 transferBytes, bool gamma) {
+    if (transferBytes > stagingBytes_)
+        return SDL_SetError("Hardware staging budget exceeded");
     const auto ensureTarget = [&](SDL_GPUTexture*& target, bool depth) {
         if (target) {
             return true;
@@ -323,7 +352,7 @@ bool GpuMaterialRenderer::prepareResources(
     if (resources_.uploadCapacity < transferBytes) {
         SDL_GPUTransferBufferCreateInfo info{};
         info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-        info.size = capacity(transferBytes);
+        info.size = std::min(capacity(transferBytes), stagingBytes_);
         auto* next = SDL_CreateGPUTransferBuffer(device_, &info);
         if (!next) {
             return false;
@@ -342,7 +371,14 @@ std::unique_ptr<GpuMaterialRenderer> GpuMaterialRenderer::create(SDL_GPUDevice* 
                                                                  std::size_t textureCacheEntries,
                                                                  std::size_t meshBytes,
                                                                  std::size_t textureBytes,
-                                                                 std::size_t pageBytes) {
+                                                                 std::size_t pageBytes,
+                                                                 std::size_t arrayBytes,
+                                                                 UInt32 stagingBytes) {
+    if (stagingBytes < 4096 || stagingBytes > maxTransfer || textureBytes < 4 ||
+        !textureCacheEntries) {
+        SDL_SetError("Invalid material cache budget");
+        return {};
+    }
     if (!SDL_GPUTextureSupportsFormat(device,
                                       depthFormat,
                                       SDL_GPU_TEXTURETYPE_2D,
@@ -350,8 +386,17 @@ std::unique_ptr<GpuMaterialRenderer> GpuMaterialRenderer::create(SDL_GPUDevice* 
         SDL_SetError("Hardware materials require a D32 floating-point depth target");
         return {};
     }
-    auto result = std::unique_ptr<GpuMaterialRenderer>(
-        new GpuMaterialRenderer(device, textureCacheEntries, meshBytes, textureBytes, pageBytes));
+    auto result = std::unique_ptr<GpuMaterialRenderer>(new GpuMaterialRenderer(
+        device, textureCacheEntries, meshBytes, textureBytes, pageBytes, arrayBytes, stagingBytes));
+    SDL_GPUTextureCreateInfo arrayInfo{};
+    arrayInfo.type = SDL_GPU_TEXTURETYPE_2D_ARRAY;
+    arrayInfo.format = colorFormat;
+    arrayInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    arrayInfo.width = arrayInfo.height = arrayInfo.layer_count_or_depth = arrayInfo.num_levels = 1;
+    arrayInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    result->whiteArray_ = SDL_CreateGPUTexture(device, &arrayInfo);
+    if (!result->whiteArray_)
+        return {};
     auto* vertex = shader(device, true);
     if (!vertex) {
         return {};
@@ -477,11 +522,31 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
     Resources r{device_, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, {}};
     std::unordered_map<UInt64, CachedMesh> pendingMeshes;
     std::vector<CachedMesh*> meshBindings;
-    for (auto& [id, mesh] : meshes_) {
-        (void)id;
-        mesh.pinned = false;
-    }
+    std::unordered_map<UInt64, const HardwareMesh*> wanted;
+    for (const auto& instance : batch.meshes())
+        wanted.emplace(instance.mesh->revision(), instance.mesh.get());
     std::size_t newMeshBytes{};
+    for (const auto& [id, mesh] : wanted) {
+        if (!meshes_.contains(id))
+            newMeshBytes += mesh->vertices().size_bytes() + mesh->indices().size_bytes();
+    }
+    for (auto& [id, mesh] : meshes_) {
+        mesh.pinned = wanted.contains(id);
+    }
+    for (auto it = meshes_.begin(); it != meshes_.end();) {
+        if (!it->second.pinned && resources_.meshBytes + newMeshBytes > meshCacheBytes_) {
+            SDL_ReleaseGPUBuffer(device_, it->second.vertices);
+            SDL_ReleaseGPUBuffer(device_, it->second.indices);
+            resources_.meshBytes -= it->second.bytes;
+            it = meshes_.erase(it);
+        } else
+            ++it;
+    }
+    resources_.meshes = meshes_.size();
+    if (newMeshBytes > meshCacheBytes_ || resources_.meshBytes > meshCacheBytes_ - newMeshBytes) {
+        SDL_SetError("Retained mesh budget exceeded");
+        return nullptr;
+    }
     for (const auto& instance : batch.meshes()) {
         const auto id = instance.mesh->revision();
         if (auto old = meshes_.find(id); old != meshes_.end()) {
@@ -494,7 +559,6 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
                 mesh.source = instance.mesh;
                 mesh.bytes =
                     instance.mesh->vertices().size_bytes() + instance.mesh->indices().size_bytes();
-                newMeshBytes += mesh.bytes;
                 mesh.pinned = true;
                 SDL_GPUBufferCreateInfo info{};
                 info.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
@@ -658,8 +722,8 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
         }
         const auto victim =
             std::ranges::find_if(textures_.rbegin(), textures_.rend(), [&](const auto& old) {
-                return !old.pinned && !old.slot && !old.source->lightMap && old.source->dynamic &&
-                       old.source->width == next.source->width &&
+                return !old.pinned && !old.slot && !old.array && !old.source->lightMap &&
+                       old.source->dynamic && old.source->width == next.source->width &&
                        old.source->height == next.source->height &&
                        old.source->mips.size() == next.source->mips.size() &&
                        std::ranges::equal(
@@ -693,7 +757,7 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
             return nullptr;
         }
         const auto oldest = std::prev(victim.base());
-        if (!oldest->slot)
+        if (!oldest->slot && !oldest->array)
             SDL_ReleaseGPUTexture(device_, oldest->gpu);
         eraseCached(oldest);
         ++stats_.evictions;
@@ -704,6 +768,14 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
             if (next.slot) {
                 next.gpu = next.slot->page->texture;
                 r.slots.push_back(next.slot);
+            }
+        }
+        if (!next.source->lightMap && !next.source->dynamic &&
+            next.source != batch.textureRefs()[0]) {
+            next.array = arrays_.allocate(*next.source);
+            if (next.array) {
+                next.gpu = next.array->page->texture;
+                r.arrays.push_back(next.array);
             }
         }
     }
@@ -842,11 +914,17 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
             to.x = slot->rect.x;
             to.y = slot->rect.y;
         }
+        if (const auto& slot = bindings[t.texture]->array)
+            to.layer = slot->layer;
         to.mip_level = t.level;
         to.w = t.width;
         to.h = t.height;
         to.d = 1;
         SDL_UploadToGPUTexture(copy, &from, &to, false);
+        if (t.texture == 0 && t.level == 0) {
+            to.texture = whiteArray_;
+            SDL_UploadToGPUTexture(copy, &from, &to, false);
+        }
     });
     SDL_EndGPUCopyPass(copy);
     const auto begin = [&](SDL_GPUTexture* color) {
@@ -887,11 +965,14 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
         for (const auto end : batch.layerEnds()) {
             const auto layer = batch.draws().subspan(start, end - start);
             std::ranges::for_each(layer, [&](const auto& draw) {
-                const std::array<SDL_GPUTextureSamplerBinding, 2> samplers{
-                    {{bindings[draw.texture]->gpu,
-                      samplers_[std::size_t(draw.mipFilter) * 8 + (draw.wrap ? 4U : 0U) +
-                                (draw.magnificationLinear ? 2U : 0U) + (draw.linear ? 1U : 0U)]},
-                     {bindings[draw.lightMap]->gpu, samplers_[3]}}};
+                const auto* image = bindings[draw.texture];
+                auto* imageSampler =
+                    samplers_[std::size_t(draw.mipFilter) * 8 + (draw.wrap ? 4U : 0U) +
+                              (draw.magnificationLinear ? 2U : 0U) + (draw.linear ? 1U : 0U)];
+                const std::array<SDL_GPUTextureSamplerBinding, 3> samplers{
+                    {{image->array ? bindings[0]->gpu : image->gpu, imageSampler},
+                     {bindings[draw.lightMap]->gpu, samplers_[3]},
+                     {image->array ? image->gpu : whiteArray_, imageSampler}}};
                 VertexUniform frame{{w, h, draw.perspective ? 1.f : 0.f, draw.mesh ? 1.f : 0.f}};
                 if (draw.mesh) {
                     const auto& transform = batch.meshes()[draw.mesh - 1].transform;
@@ -909,6 +990,8 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
                      0}};
                 if (draw.mesh)
                     material.clip = frame.clip;
+                if (image->array)
+                    material.imageArray = {Flt32(image->array->layer), 1, 0, 0};
                 if (const auto& slot = bindings[draw.lightMap]->slot) {
                     constexpr Flt32 side = Flt32(LightMapPage::Side);
                     material.lightRect = {Flt32(slot->rect.width - 2) / side,
@@ -936,8 +1019,10 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
                                                                          : HardwareDepth::TestOnly;
                 // The overlay shader uses only interpolated haze. Canonical
                 // white bindings allow different base textures to share a run.
-                const std::array<SDL_GPUTextureSamplerBinding, 2> samplers{
-                    {{bindings[0]->gpu, samplers_[0]}, {bindings[0]->gpu, samplers_[3]}}};
+                const std::array<SDL_GPUTextureSamplerBinding, 3> samplers{
+                    {{bindings[0]->gpu, samplers_[0]},
+                     {bindings[0]->gpu, samplers_[3]},
+                     {whiteArray_, samplers_[0]}}};
                 const VertexUniform frame{{w, h, draw.perspective ? 1.f : 0.f, 0}};
                 const FragmentUniform material{
                     {1, 1, 1, 1},
@@ -965,8 +1050,10 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
             return nullptr;
         }
         SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
-        const std::array<SDL_GPUTextureSamplerBinding, 2> samplers{
-            {{r.color, samplers_[0]}, {bindings[0]->gpu, samplers_[3]}}};
+        const std::array<SDL_GPUTextureSamplerBinding, 3> samplers{
+            {{r.color, samplers_[0]},
+             {bindings[0]->gpu, samplers_[3]},
+             {whiteArray_, samplers_[0]}}};
         const VertexUniform frame{{w, h, 0, 0}};
         const FragmentUniform material{{1, 1, 1, 1}, {0, 0, 0, 0}, {1 / gamma, 0, 0, 0}, {}};
         DrawEncoder correction(r.commands, pass, submission);
@@ -1004,10 +1091,16 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
     stats_.textures = textures_.size();
     stats_.lightMapPages = pages_.count();
     stats_.lightMapPageBytes = stats_.lightMapPages * LightMapPage::Bytes;
-    stats_.physicalTextures =
-        stats_.lightMapPages + std::size_t(std::ranges::count_if(textures_, [](const auto& entry) {
-            return !entry.slot;
-        }));
+    stats_.textureArrays = arrays_.count();
+    stats_.textureArrayBytes = arrays_.bytes();
+    stats_.physicalTextures = stats_.lightMapPages + stats_.textureArrays +
+                              std::size_t(std::ranges::count_if(textures_, [](const auto& entry) {
+                                  return !entry.slot && !entry.array;
+                              }));
+    stats_.allocatedPayloadBytes = stats_.lightMapPageBytes + stats_.textureArrayBytes;
+    for (const auto& entry : textures_)
+        if (!entry.slot && !entry.array)
+            stats_.allocatedPayloadBytes += entry.bytes;
     r.textures.clear(); // ownership transfers to the cache only after submission
     nextTarget_ = 1 - nextTarget_;
     return r.corrected ? r.corrected : r.color;

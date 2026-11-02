@@ -4855,6 +4855,11 @@ gui::Presentation FearGameApp::guiPresentation(Point2I pixels) const {
         pixels, gui::Presentation::requestedScale(console().getVariable("pref::UI::scale")));
 }
 
+void FearGameApp::trimRenderCaches() {
+    softwareTextureCache_.clear();
+    gfx::clearHardwareTextureConversions();
+}
+
 bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
                               gfx::HardwareBatch* hardware,
                               Flt32 paletteGamma) {

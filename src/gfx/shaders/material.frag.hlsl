@@ -14,6 +14,14 @@ Texture2D<float4> lightMap : register(t1, space2);
 [[vk::combinedImageSampler]]
 #endif
 SamplerState lightMapSampler : register(s1, space2);
+#ifdef __spirv__
+[[vk::combinedImageSampler]]
+#endif
+Texture2DArray<float4> imageArray : register(t2, space2);
+#ifdef __spirv__
+[[vk::combinedImageSampler]]
+#endif
+SamplerState imageArraySampler : register(s2, space2);
 cbuffer Material : register(b0, space3) {
     float4 tint; // RGB, opacity
     float4 hazeColor;
@@ -22,6 +30,7 @@ cbuffer Material : register(b0, space3) {
         alphaControls; // alpha cutoff, zero-alpha texture cutout, haze pass (0=inline,1=deferred base,2=overlay), unused
     float4 geometryClip; // near, far, local geometry, unused
     float4 lightRect; // page UV scale/offset; (1,1,0,0) for standalone maps
+    float4 arrayControls; // layer, enabled, unused, unused
 }
 
 float4 main(float4 position : SV_Position,
@@ -35,7 +44,9 @@ float4 main(float4 position : SV_Position,
     if (geometryClip.z != 0 && (cameraDepth < geometryClip.x || cameraDepth > geometryClip.y)) discard;
     if (alphaControls.z == 2)
         return float4(hazeColor.rgb, saturate(haze));
-    float4 texel = image.SampleBias(imageSampler, uv, options.z);
+    float4 texel = arrayControls.y != 0
+        ? imageArray.SampleBias(imageArraySampler, float3(uv,arrayControls.x), options.z)
+        : image.SampleBias(imageSampler, uv, options.z);
     float3 light = lightMap.Sample(lightMapSampler, saturate(lightUV) * lightRect.xy + lightRect.zw).rgb;
     float alpha = options.w == 0   ? texel.a * tint.a
                   : options.w == 1 ? tint.a

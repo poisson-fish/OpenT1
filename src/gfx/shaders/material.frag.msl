@@ -12,7 +12,7 @@ struct Input {
 };
 
 struct Material {
-    float4 tint, hazeColor, options, alphaControls, geometryClip, lightRect;
+    float4 tint, hazeColor, options, alphaControls, geometryClip, lightRect, arrayControls;
 };
 
 fragment float4 main0(Input v [[stage_in]],
@@ -20,11 +20,15 @@ fragment float4 main0(Input v [[stage_in]],
                       sampler imageSampler [[sampler(0)]],
                       texture2d<float> lightMap [[texture(1)]],
                       sampler lightMapSampler [[sampler(1)]],
+                      texture2d_array<float> imageArray [[texture(2)]],
+                      sampler imageArraySampler [[sampler(2)]],
                       constant Material& m [[buffer(0)]]) {
     if (m.geometryClip.z != 0 && (v.cameraDepth < m.geometryClip.x || v.cameraDepth > m.geometryClip.y)) discard_fragment();
     if (m.alphaControls.z == 2)
         return float4(m.hazeColor.rgb, saturate(v.haze));
-    float4 texel = image.sample(imageSampler, v.uv, bias(m.options.z));
+    float4 texel = m.arrayControls.y != 0
+        ? imageArray.sample(imageArraySampler,v.uv,uint(m.arrayControls.x),bias(m.options.z))
+        : image.sample(imageSampler, v.uv, bias(m.options.z));
     float3 light = lightMap.sample(lightMapSampler, saturate(v.lightMap) * m.lightRect.xy + m.lightRect.zw).rgb;
     float alpha = m.options.w == 0   ? texel.a * m.tint.a
                   : m.options.w == 1 ? m.tint.a

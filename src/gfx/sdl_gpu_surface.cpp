@@ -51,6 +51,8 @@ struct SdlGpuSurface::Impl {
     GpuPresentMode presentMode{GpuPresentMode::VSync};
     std::size_t textureCacheEntries{};
     std::size_t meshCacheBytes{}, textureCacheBytes{}, lightMapPageBytes{};
+    std::size_t textureArrayBytes{};
+    UInt32 stagingBytes{};
 
     ~Impl() {
         cleanup.reset();
@@ -150,7 +152,9 @@ std::unique_ptr<SdlGpuSurface> SdlGpuSurface::create(platform::SdlWindow& window
                                                      const GpuSurfaceConfig& config) {
     if (!window.nativeHandle() || !framebufferPitch(width, height) ||
         config.presentMode > GpuPresentMode::Mailbox ||
-        config.driver.find('\0') != config.driver.npos || !config.textureCacheEntries) {
+        config.driver.find('\0') != config.driver.npos || !config.textureCacheEntries ||
+        config.textureCacheBytes < 4 || config.stagingBytes < 4096 ||
+        config.stagingBytes > 128U * 1024U * 1024U) {
         SDL_SetError("Invalid GPU framebuffer configuration");
         return {};
     }
@@ -159,6 +163,8 @@ std::unique_ptr<SdlGpuSurface> SdlGpuSurface::create(platform::SdlWindow& window
     impl->meshCacheBytes = config.meshCacheBytes;
     impl->textureCacheBytes = config.textureCacheBytes;
     impl->lightMapPageBytes = config.lightMapPageBytes;
+    impl->textureArrayBytes = config.textureArrayBytes;
+    impl->stagingBytes = config.stagingBytes;
     constexpr auto formats = SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXBC |
                              SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL;
     impl->device = SDL_CreateGPUDevice(
@@ -413,7 +419,9 @@ bool SdlGpuSurface::render(const HardwareBatch& batch, const GpuFrameConfig& con
                                                           s.textureCacheEntries,
                                                           s.meshCacheBytes,
                                                           s.textureCacheBytes,
-                                                          s.lightMapPageBytes);
+                                                          s.lightMapPageBytes,
+                                                          s.textureArrayBytes,
+                                                          s.stagingBytes);
         if (!s.materials) {
             return false;
         }
@@ -444,6 +452,12 @@ void SdlGpuSurface::clearTextureCache() noexcept {
     if (impl_->materials) {
         impl_->materials->clearTextureCache();
     }
+}
+
+bool SdlGpuSurface::trimCaches() {
+    if (!ready())
+        return SDL_SetError("GPU material window is closed");
+    return !impl_->materials || impl_->materials->trimCaches();
 }
 
 PresentResult SdlGpuSurface::presentFrame() {

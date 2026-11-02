@@ -37,6 +37,7 @@ void retainedWorkingSet(platform::SdlWindow& window) {
     CHECK(surface->render(first) && surface->render(second));
     const auto warm = surface->textureCacheStats();
     CHECK(warm.textures == 2401 && warm.evictions == 0);
+    CHECK(warm.textureArrays > 0 && warm.physicalTextures < warm.textures);
     CHECK(surface->render(first) && surface->render(second));
     const auto stable = surface->textureCacheStats();
     CHECK(stable.uploads == warm.uploads && stable.evictions == 0);
@@ -96,6 +97,15 @@ void retainedMesh(platform::SdlWindow& window) {
     CHECK(batch && surface->render(*batch));
     CHECK(surface->resourceStats().meshUploads == warm.meshUploads);
     CHECK(surface->submissionStats().meshUploadBytes == 0);
+    CHECK(surface->readback(pixels));
+    const auto published = pixels;
+    CHECK(surface->trimCaches());
+    CHECK(surface->resourceStats().meshes == 0 && surface->resourceStats().uploadCapacity == 0);
+    CHECK(surface->readback(pixels));
+    CHECK(pixels == published);
+    CHECK(surface->render(*batch) && surface->resourceStats().meshUploads == warm.meshUploads + 1);
+    CHECK(surface->render(*batch));
+    CHECK(surface->submissionStats().meshUploadBytes == 0);
     // Near/far clipping applies per fragment while retaining the shared inverse depth convention.
     polygon.transform.clip[0] = 5;
     batch = gfx::HardwareBatch::prepare(std::span(&polygon, 1));
@@ -103,7 +113,20 @@ void retainedMesh(platform::SdlWindow& window) {
     CHECK(pixels[(8 * 16 + 8) * 4] == std::byte{0});
     const auto empty = gfx::HardwareBatch::prepare({});
     CHECK(empty && surface->render(*empty));
-    CHECK(surface->resourceStats().meshUploads == warm.meshUploads);
+    CHECK(surface->resourceStats().meshUploads == warm.meshUploads + 1);
+    surface.reset();
+    gfx::GpuSurfaceConfig bounded;
+    bounded.meshCacheBytes = 0;
+    bounded.stagingBytes = 4096;
+    bounded.textureArrayBytes = bounded.lightMapPageBytes = 0;
+    surface = gfx::SdlGpuSurface::create(window, 16, 16, bounded);
+    CHECK(surface && surface->render(*empty) && surface->readback(pixels));
+    const auto preserved = pixels;
+    CHECK(!surface->render(*batch));
+    CHECK(surface->resourceStats().meshAllocations == 0);
+    CHECK(!surface->render(
+        content(0))); // staging is bounded independently of resident texture payload
+    CHECK(surface->readback(pixels) && pixels == preserved);
 }
 
 void interiorReadbacks(platform::SdlWindow& window) {

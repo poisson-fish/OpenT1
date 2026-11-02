@@ -158,6 +158,9 @@ int main(int argc, char** argv) {
             << ",\"mean_binds\":" << double(binds) / count << ",\"textures\":" << textures.textures
             << ",\"texture_bytes\":" << textures.bytes
             << ",\"physical_textures\":" << textures.physicalTextures
+            << ",\"texture_arrays\":" << textures.textureArrays
+            << ",\"texture_array_bytes\":" << textures.textureArrayBytes
+            << ",\"allocated_texture_payload_bytes\":" << textures.allocatedPayloadBytes
             << ",\"lightmap_pages\":" << textures.lightMapPages
             << ",\"lightmap_page_bytes\":" << textures.lightMapPageBytes
             << ",\"texture_uploads\":" << textures.uploads
@@ -173,6 +176,48 @@ int main(int argc, char** argv) {
             << ",\"mean_texture_upload_bytes\":" << double(textureBytes) / count
             << ",\"geometry_builds\":" << geometryBuilds << ",\"map_builds\":" << mapBuilds
             << "}\n";
+        // Optional acceptance work is deliberately outside all timing samples.
+        if (std::getenv("OPENT1_VALIDATE_RENDER")) {
+            gfx::HardwareBatch snapshot;
+            require(game.renderFrame(surface->software(), &snapshot), "validation snapshot failed");
+            gfx::GpuFrameConfig frame;
+            frame.hazeColor = game.hardwareHazeColor();
+            require(surface->render(snapshot, frame), "validation submission failed");
+            std::vector<std::byte> before(pixels.size()), after(pixels.size());
+            require(surface->readback(before), "validation readback failed");
+            require(surface->trimCaches(), "cache trim failed");
+            game.trimRenderCaches();
+            require(surface->readback(after) && before == after, "trim changed published frame");
+            require(surface->render(snapshot, frame) && surface->readback(after),"trimmed batch submission failed");
+            unsigned trimError{};
+            for (std::size_t i = 0; i < before.size(); ++i)
+                trimError = std::max(trimError,unsigned(std::abs(int(before[i])-int(after[i]))));
+            std::cout << "Trim readback maximum channel error: " << trimError << '\n';
+            // A fresh page layout may change normalized UV rounding by a color level.
+            require(trimError <= 2,"immutable batch did not survive trimming");
+            require(game.renderFrame(surface->software()) && game.lastScenePolygonCount() > 0,
+                    "software compatibility frame failed");
+            bool transitioned{};
+            if (const auto* mission = std::getenv("OPENT1_VALIDATE_TRANSITION")) {
+                require(game.loadMission(mission), "transition mission load failed");
+                for (unsigned i = 0; i < 36; ++i) {
+                    require(game.stepFrame((warm + count + 9 + i) * .032, false),
+                            "transition simulation failed");
+                    gfx::HardwareBatch next;
+                    require(game.renderFrame(surface->software(), &next),
+                            "transition preparation failed");
+                    frame.hazeColor = game.hardwareHazeColor();
+                    require(surface->render(next, frame), "transition submission failed");
+                }
+                require(game.lastScenePolygonCount() > 0,
+                        "transition did not render world geometry");
+                transitioned = true;
+            }
+            std::ofstream validation(output.string() + ".validation.json");
+            validation << "{\"trim_preserved_frame\":true,\"batch_survived_trim\":true,\"software_"
+                          "rendered\":true,\"transition_rendered\":"
+                       << (transitioned ? "true" : "false") << ",\"trim_max_channel_error\":" << trimError << "}\n";
+        }
         game.shutdown();
         std::cout << "Saved " << output.string() << '\n';
         return 0;

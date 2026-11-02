@@ -215,4 +215,6 @@ private:
     std::vector<UInt32> layerEnds_;
     std::vector<HardwareMeshInstance> meshes_;
 };
+// Discard this thread's disposable conversion LRU. Published batches remain owned.
+void clearHardwareTextureConversions();
 } // namespace opent1::gfx

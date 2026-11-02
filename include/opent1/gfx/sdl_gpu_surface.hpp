@@ -19,6 +19,9 @@ struct GpuSurfaceConfig {
     std::size_t meshCacheBytes{64U * 1024U * 1024U};
     std::size_t textureCacheBytes{64U * 1024U * 1024U}; // logical RGBA payload
     std::size_t lightMapPageBytes{16U * 1024U * 1024U}; // zero selects standalone maps
+    std::size_t textureArrayBytes{16U * 1024U * 1024U}; // compatible RGBA layouts; zero disables
+    UInt32 stagingBytes{128U * 1024U *
+                        1024U}; // transfer capacity, separate from resident resources
 };
 
 struct GpuFrameConfig {
@@ -32,6 +35,7 @@ struct GpuTextureCacheStats {
     UInt64 hits{}, uploads{}, evictions{};
     UInt64 reuses{}; // uploads into recycled dynamic texture allocations
     std::size_t physicalTextures{}, lightMapPages{}, lightMapPageBytes{};
+    std::size_t textureArrays{}, textureArrayBytes{}, allocatedPayloadBytes{};
 };
 
 struct GpuResourceStats {
@@ -97,6 +101,8 @@ public:
     // Last successfully submitted frame, including deferred haze and gamma.
     [[nodiscard]] GpuSubmissionStats submissionStats() const noexcept;
     void clearTextureCache() noexcept; // does not discard the published frame
+    bool
+    trimCaches(); // lifecycle/pressure hook: waits, releases disposable caches and upload buffers
     // Presents the last uploaded/rendered frame without uploading software again.
     PresentResult presentFrame();
     // Synchronous readback of the last successfully uploaded/rendered RGBA frame.

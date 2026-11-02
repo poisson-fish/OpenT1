@@ -361,6 +361,12 @@ class ConvertedTextures {
     }
 
 public:
+    void clear() {
+        index_.clear();
+        entries_.clear();
+        bytes_ = 0;
+    }
+
     template <class Convert>
     std::shared_ptr<const HardwareTexture> get(ConversionKey key,
                                                SourceLayout layout,
@@ -410,6 +416,10 @@ public:
 
 thread_local ConvertedTextures convertedTextures;
 const auto whiteTexture = immutable({1, 1, std::vector<std::byte>(4, std::byte{255}), {}});
+}
+
+void clearHardwareTextureConversions() {
+    convertedTextures.clear();
 }
 
 std::optional<HardwareMaterial>

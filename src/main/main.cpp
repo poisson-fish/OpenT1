@@ -704,6 +704,12 @@ protected:
     }
 
     void onEvent(const platform::Event& ev) override {
+        if (const auto* lifecycle = std::get_if<platform::AppEvent>(&ev.data);
+            lifecycle && (lifecycle->type == SDL_EVENT_WILL_ENTER_BACKGROUND ||
+                          lifecycle->type == SDL_EVENT_LOW_MEMORY)) {
+            if (gpuSurface_) (void)gpuSurface_->trimCaches();
+            app_.trimRenderCaches();
+        }
         bindInput();
         if (const auto* key = std::get_if<platform::KeyEvent>(&ev.data);
             key && key->scancode == SDL_SCANCODE_GRAVE) {

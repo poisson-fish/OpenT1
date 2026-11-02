@@ -18,6 +18,44 @@ struct Tile {
     UInt32 index, bx, by, x, y, size;
 };
 
+struct TerrainTopology {
+    std::array<UInt8, 18> indices{};
+    UInt8 count{};
+};
+
+// The native half-square templates depend only on diagonal parity and four
+// reached edge midpoints. Share their ordered indices across all blocks/LODs;
+// camera-dependent heights and materials remain independent of topology.
+constexpr auto nativeTopologies = [] {
+    std::array<TerrainTopology, 32> result{};
+    for (UInt32 key = 0; key < result.size(); ++key) {
+        auto& topology = result[key];
+        const auto emit = [&](UInt32 a, UInt32 b, UInt32 c) {
+            topology.indices[topology.count++] = UInt8(a & 7U);
+            topology.indices[topology.count++] = UInt8(b & 7U);
+            topology.indices[topology.count++] = UInt8(c & 7U);
+        };
+        for (const auto start : key & 16U ? std::array{6U, 2U} : std::array{0U, 4U}) {
+            const bool left = key & (1U << (((start + 1) & 7U) / 2)),
+                       top = key & (1U << (((start + 3) & 7U) / 2));
+            if (left && top) {
+                emit(start, start + 3, start + 4);
+                emit(start, start + 1, start + 3);
+                emit(start + 1, start + 2, start + 3);
+            } else if (left) {
+                emit(start, start + 1, start + 4);
+                emit(start + 1, start + 2, start + 4);
+            } else if (top) {
+                emit(start, start + 2, start + 3);
+                emit(start, start + 3, start + 4);
+            } else {
+                emit(start, start + 2, start + 4);
+            }
+        }
+    }
+    return result;
+}();
+
 // Collect first, then sort/deduplicate once. Boundary queries retain the native
 // coordinate order without allocating a tree node for each reached edge point.
 class Edges {
@@ -813,33 +851,29 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                                   point(s, s / 2),
                                   point(s, 0),
                                   point(s / 2, 0)};
-            if (geometry && std::ranges::all_of(boundary, [&](const auto& p) {
-                    return std::ranges::find(ring, p) != ring.end();
-                })) {
+            UInt32 midpointMask{};
+            const bool nativeBoundary =
+                geometry && std::ranges::all_of(boundary, [&](const auto& p) {
+                    const auto found = std::ranges::find(ring, p);
+                    if (found == ring.end())
+                        return false;
+                    const auto index = UInt32(found - ring.begin());
+                    if (s > 1 && (index & 1U))
+                        midpointMask |= 1U << (index / 2);
+                    return true;
+                });
+            if (nativeBoundary) {
                 // Original PolyList/FaceList triangulate the two authored
                 // half-squares using only corners and reached edge midpoints.
                 // Conservative material/pin refinement can introduce additional
                 // edge points; those retain the general stitch fan below.
-                const auto split = ((t.x / s) ^ (t.y / s)) & 1U;
-                for (const auto start : split ? std::array{6U, 2U} : std::array{0U, 4U}) {
-                    const auto a = ring[start], b = ring[(start + 1) & 7U],
-                               c = ring[(start + 2) & 7U], d = ring[(start + 3) & 7U],
-                               e = ring[(start + 4) & 7U];
-                    const bool left = s > 1 && std::ranges::find(boundary, b) != boundary.end(),
-                               top = s > 1 && std::ranges::find(boundary, d) != boundary.end();
-                    if (left && top) {
-                        if (!emit(t, a, d, e) || !emit(t, a, b, d) || !emit(t, b, c, d)) {
-                            return {};
-                        }
-                    } else if (left) {
-                        if (!emit(t, a, b, e) || !emit(t, b, c, e)) {
-                            return {};
-                        }
-                    } else if (top) {
-                        if (!emit(t, a, c, d) || !emit(t, a, d, e)) {
-                            return {};
-                        }
-                    } else if (!emit(t, a, c, e)) {
+                const auto key = midpointMask | ((((t.x / s) ^ (t.y / s)) & 1U) << 4);
+                const auto& topology = nativeTopologies[key];
+                for (UInt32 i = 0; i < topology.count; i += 3) {
+                    if (!emit(t,
+                              ring[topology.indices[i]],
+                              ring[topology.indices[i + 1]],
+                              ring[topology.indices[i + 2]])) {
                         return {};
                     }
                 }

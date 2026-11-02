@@ -338,7 +338,9 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::interior(const InteriorShapeRe
         result.interiorSceneLighting = *options.scene;
     std::vector<gfx::HardwareVertex> hardwareVertices;
     std::vector<UInt32> hardwareIndices;
-    std::vector<std::array<UInt32, 2>> hardwareRanges(g.surfaces.size());
+    std::vector<std::array<UInt32, 2>> hardwareRanges(reuse ? 0 : g.surfaces.size());
+    std::vector<std::shared_ptr<const NativeSurfaceTexture>> hardwareSoftware(
+        reuse ? 0 : g.surfaces.size());
     std::size_t samples{};
     for (std::size_t i = 0; i < g.surfaces.size(); ++i) {
         const auto& s = g.surfaces[i];
@@ -451,7 +453,7 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::interior(const InteriorShapeRe
             }
             vertices.push_back(p);
         }
-        if (vertices.size() - 2 > 1'048'576 - result.triangles.size()) {
+        if (vertices.size() - 2 > 1'048'576 - result.interiorSurfaceIds.size()) {
             return {};
         }
         const auto first = UInt32(hardwareVertices.size());
@@ -482,25 +484,28 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::interior(const InteriorShapeRe
                 software->points.push_back(vertex.position);
             }
         }
-        std::ranges::for_each(std::views::iota(std::size_t{1}, vertices.size() - 1), [&](auto j) {
-            result.triangles.push_back({{vertices[0], vertices[j], vertices[j + 1]},
-                                        s.material,
-                                        baked,
-                                        true,
-                                        map,
-                                        software});
-            result.interiorSurfaceIds.push_back(UInt32(i));
-        });
+        hardwareSoftware[i] = std::move(software);
+        result.interiorSurfaceIds.insert(
+            result.interiorSurfaceIds.end(), vertices.size() - 2, UInt32(i));
     }
     if (!reuse) {
-        if (!computeBounds(result))
-            return {};
+        if (!hardwareVertices.empty()) {
+            const auto position = [](const auto& v) {
+                return Point3F{v.position.x, v.position.y, v.inverseDepth};
+            };
+            result.bounds = {position(hardwareVertices.front()),
+                             position(hardwareVertices.front())};
+            for (const auto& vertex : hardwareVertices) {
+                result.bounds.fMin.setMin(position(vertex));
+                result.bounds.fMax.setMax(position(vertex));
+            }
+        }
         auto geometry = std::make_shared<InteriorMesh>();
         geometry->source = resources.geometry[lod];
         if (lighting)
             geometry->lighting = resources.lighting[std::size_t(
                 UInt64(resources.shape->lods[lod].firstLightState) + state)];
-        geometry->triangles = std::move(result.triangles);
+        geometry->software = std::move(hardwareSoftware);
         geometry->surfaceIds = std::move(result.interiorSurfaceIds);
         geometry->materials = resources.materials;
         geometry->ranges = std::move(hardwareRanges);
@@ -510,8 +515,6 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::interior(const InteriorShapeRe
             if (!geometry->hardware)
                 return {};
         }
-        for (auto& triangle : geometry->triangles)
-            triangle.lightMap.reset();
         // Weak canonical cache preserves repeated instances without retaining old missions.
         static thread_local std::vector<std::weak_ptr<const InteriorMesh>> canonical;
         std::erase_if(canonical, [](const auto& entry) {

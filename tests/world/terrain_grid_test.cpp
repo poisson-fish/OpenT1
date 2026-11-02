@@ -308,6 +308,27 @@ void resourcesAndCollision() {
         CHECK(manager.add("map#0.dtb", loadBlock(captured(0))));
         const auto resource = TerrainGridResources::load(manager, "MAP.DTF");
         CHECK(resource);
+        SimTerrainSurface retainedSurface(*resource, {}, false, Box2F{0, 0, 16, 16});
+        WorldSurfaceQuery query;
+        query.camera.emplace();
+        query.camera->viewport = {0, 0, 63, 63};
+        query.camera->focal = {32, 32};
+        query.camera->center = {32, 32};
+        query.camera->worldToCamera.p = {-8, -8, -64};
+        query.camera->worldToCamera.flags = RMat3F::Matrix_HasTranslation;
+        query.terrainTiming = TerrainTextureTiming::RetainedLru;
+        CHECK(retainedSurface.processQuery(query) && query.image);
+        const auto stationary = query.image->mesh;
+        CHECK(retainedSurface.processQuery(query) && query.image->mesh == stationary);
+        query.camera->worldToCamera.p.x -= 1;
+        CHECK(retainedSurface.processQuery(query) && query.image->mesh != stationary);
+        const auto moved = query.image->mesh;
+        query.camera->worldToCamera.m[0][0] = 2;
+        CHECK(!retainedSurface.processQuery(query));
+        query.camera->worldToCamera.m[0][0] = 1;
+        CHECK(retainedSurface.processQuery(query) && query.image->mesh == moved);
+        query.terrainTiming = TerrainTextureTiming::NativeSoftware;
+        CHECK(retainedSurface.processQuery(query) && query.image->mesh != moved);
         for (const bool native : {false, true}) {
             TerrainLodState state(*resource);
             TerrainLodView view{{8, 8, 64}, 320, 0};

@@ -38,6 +38,7 @@ int retainedInteriorLighting() {
         options.slots = dark;
         auto first = world::WorldSurfaceMesh::interior(resources, 0, 0, true, options);
         CHECK(first && first->triangleCount() == 2);
+        CHECK(first->triangles.empty()); // compact indexed storage is the retained representation
         options.previous = &*first;
         options.slots = bright;
         auto next = world::WorldSurfaceMesh::interior(resources, 0, 0, true, options);

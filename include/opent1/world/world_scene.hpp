@@ -255,6 +255,10 @@ private:
     TerrainLodState lodState_;
     std::shared_ptr<TerrainResourceStream> stream_;
     std::shared_ptr<Terrain2> terrain2_;
+    std::shared_ptr<const WorldSurfaceMesh> retainedMesh_;
+    std::optional<sim::EnvironmentCamera> retainedCamera_;
+    std::optional<TsLighting> retainedLights_;
+    std::optional<TerrainTextureTiming> retainedTiming_;
 };
 
 // Explicit simulation-clock interior playback. Render queries never advance

@@ -17,6 +17,7 @@ struct RenderWorkStats {
     std::uint64_t hardwareSkyPolygons{};
     std::uint64_t bitmapCopyBytes{}, layerScanPixels{}, surfaceInversions{};
     std::uint64_t interiorGeometryBuilds{}, interiorLightMapBuilds{}, interiorLightMapBytes{};
+    std::uint64_t terrainMeshCacheHits{};
 };
 
 inline thread_local RenderWorkStats* currentRenderWorkStats{};

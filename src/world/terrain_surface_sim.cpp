@@ -1,4 +1,5 @@
 #include <opent1/world/world_scene.hpp>
+#include <opent1/gfx/render_stats.hpp>
 #include "collision_geometry.hpp"
 #ifdef OPENT1_HAS_TERRAIN2
 #include <opent1/world/terrain2.hpp>
@@ -29,6 +30,8 @@ std::optional<UInt16> SimTerrainSurface::sampleLighting(Point3F position) const 
 }
 
 bool SimTerrainSurface::setTerrain2(bool enabled) {
+    retainedMesh_.reset();
+    retainedCamera_.reset();
     if (!enabled) {
         terrain2_.reset();
         return true;
@@ -149,6 +152,25 @@ bool SimTerrainSurface::processQuery(sim::SimQuery& query) {
             throw std::invalid_argument("invalid terrain scene lights");
         }
     }
+    // Hardware callbacks have no per-render software pixel-ring side effects.
+    // Preserve the exact selected topology, geomorph and lighting at unchanged inputs.
+    const auto sameCamera = [](const auto& a, const auto& b) {
+        return a.worldToCamera.m == b.worldToCamera.m && a.worldToCamera.p == b.worldToCamera.p &&
+               a.worldToCamera.flags == b.worldToCamera.flags && a.viewport == b.viewport &&
+               a.center == b.center && a.focal == b.focal && a.nearDistance == b.nearDistance &&
+               a.farDistance == b.farDistance && a.perspective == b.perspective;
+    };
+    const bool retain =
+        !terrain2_ && policy.textureTiming == TerrainTextureTiming::RetainedLru &&
+        (!surface->terrainTiming || *surface->terrainTiming == TerrainTextureTiming::RetainedLru);
+    if (retain && retainedMesh_ && retainedCamera_ &&
+        sameCamera(*retainedCamera_, *surface->camera) && retainedLights_ == lights &&
+        retainedTiming_ == surface->terrainTiming) {
+        surface->image = WorldSurfaceInstance{retainedMesh_, placement_};
+        if (gfx::currentRenderWorkStats)
+            ++gfx::currentRenderWorkStats->terrainMeshCacheHits;
+        return true;
+    }
 #ifdef OPENT1_HAS_TERRAIN2
     if (terrain2_ && surface->camera->perspective) {
         Terrain2View view;
@@ -232,6 +254,12 @@ bool SimTerrainSurface::processQuery(sim::SimQuery& query) {
     }
     surface->image = WorldSurfaceInstance{
         std::make_shared<const WorldSurfaceMesh>(std::move(*mesh)), placement_};
+    if (retain) {
+        retainedMesh_ = surface->image->mesh;
+        retainedCamera_ = surface->camera;
+        retainedLights_ = std::move(lights);
+        retainedTiming_ = surface->terrainTiming;
+    }
     return true;
 }
 } // namespace opent1::world

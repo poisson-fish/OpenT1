@@ -85,7 +85,7 @@ struct WorldSurfaceMesh {
     struct InteriorMesh {
         Resource<InteriorGeometry> source;
         Resource<InteriorLighting> lighting;
-        std::vector<StaticSurfaceTriangle> triangles;
+        std::vector<std::shared_ptr<const NativeSurfaceTexture>> software;
         std::vector<UInt32> surfaceIds;
         TsMaterialResources materials;
         std::shared_ptr<const gfx::HardwareMesh> hardware;
@@ -111,18 +111,32 @@ struct WorldSurfaceMesh {
     Box3F bounds;
 
     [[nodiscard]] auto surfaceTriangles() const {
-        const auto source = interiorMesh
-                                ? std::span<const StaticSurfaceTriangle>(interiorMesh->triangles)
-                                : std::span<const StaticSurfaceTriangle>(triangles);
-        return std::views::iota(std::size_t{}, source.size()) | std::views::filter([this](auto i) {
+        const auto count = interiorMesh ? interiorMesh->surfaceIds.size() : triangles.size();
+        return std::views::iota(std::size_t{}, count) | std::views::filter([this](auto i) {
                    return !interiorMesh || !interiorSelection ||
                           std::ranges::binary_search(*interiorSelection,
                                                      interiorMesh->surfaceIds[i]);
                }) |
-               std::views::transform([this, source](auto i) {
-                   auto triangle = source[i];
-                   if (interiorMesh && interiorMaps)
-                       triangle.lightMap = (*interiorMaps)[interiorMesh->surfaceIds[i]];
+               std::views::transform([this](auto i) {
+                   if (!interiorMesh)
+                       return triangles[i];
+                   StaticSurfaceTriangle triangle;
+                   const auto id = interiorMesh->surfaceIds[i];
+                   triangle.material = interiorMesh->source->surfaces[id].material;
+                   triangle.lit = bool(interiorMesh->lighting);
+                   triangle.repeatTexture = true;
+                   triangle.nativeSoftware = interiorMesh->software[id];
+                   if (interiorMaps)
+                       triangle.lightMap = (*interiorMaps)[id];
+                   for (std::size_t j = 0; j < 3; ++j) {
+                       const auto& v =
+                           interiorMesh->hardware
+                               ->vertices()[interiorMesh->hardware->indices()[i * 3 + j]];
+                       triangle.vertices[j] = {{v.position.x, v.position.y, v.inverseDepth},
+                                               v.texture,
+                                               v.color,
+                                               v.lightMap};
+                   }
                    return triangle;
                });
     }
@@ -131,7 +145,7 @@ struct WorldSurfaceMesh {
         if (!interiorMesh)
             return triangles.size();
         if (!interiorSelection)
-            return interiorMesh->triangles.size();
+            return interiorMesh->surfaceIds.size();
         return std::size_t(std::ranges::distance(surfaceTriangles()));
     }
 

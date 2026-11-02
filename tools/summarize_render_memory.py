@@ -43,7 +43,7 @@ def mission(rows):
         'gpu_maximum': {key: max(r.get(key, 0) for r in gpu) for key in (
             'physical_textures', 'rgba_bytes', 'allocated_texture_payload_bytes',
             'dxgi_local_bytes', 'dxgi_nonlocal_bytes', 'retained_mesh_bytes',
-            'vertex_capacity_bytes', 'transfer_capacity_bytes')},
+            'vertex_capacity_bytes', 'transfer_capacity_bytes', 'instance_capacity_bytes')},
     }
     # Frame-tag allocations include render preparation/submission, not simulation.
     # Use the final interval, after the first rotating working-set warmup.

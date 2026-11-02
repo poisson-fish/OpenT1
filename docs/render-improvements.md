@@ -380,15 +380,168 @@ Validation details are in [render-validation.json](data/render-validation.json):
   Linux desktop Vulkan, Android Vulkan and iOS Metal devices are unavailable; native
   Metal shader compilation and those runtime/lifecycle measurements are unverified.
 
-The next priorities follow the measured remaining work: moving-camera terrain still
-costs about 0.4-1.5 ms per frame, while RPG map 1's local simulation costs about
+At that milestone, the remaining priorities followed the measurements: moving-camera terrain
+cost about 0.4-1.5 ms per frame, while RPG map 1's local simulation cost about
 5.4-5.9 ms and is outside the renderer's ownership. A GPU terrain/animated-shape path
-needs to preserve native far-sphere clipping, first-writer geomorph/stitch rules,
-per-vertex lighting and software callbacks. It is not complete here. Complete source
-residency is measured on these installations; there is no universal source RAM cap
+needed to preserve native far-sphere clipping, first-writer geomorph/stitch rules,
+per-vertex lighting and software callbacks. The follow-up below implements those
+paths and explicit residency policies. Complete source residency was measured on
+these installations; there is no universal source RAM cap
 for arbitrary mods. Remote-client-only timing, GPU timestamps, full-process allocation
 rates, exhaustive long traversal and target-device headroom remain open. No worker
 threads or simulation/networking rule changes are introduced to mask those gaps.
+
+## Retained terrain, animated TS and residency follow-up
+
+The follow-up builds on `48c5e23`, which committed the native memory audit after
+`5f9c0d6`. The historical captures above and their JSON files are unchanged.
+Fresh comparisons and validation are recorded separately in
+[render-retained-followup.json](data/render-retained-followup.json).
+
+Native terrain now publishes compact selected patches. Each patch references a
+shared stitch template and eight first-writer inputs: authored height, merge
+height, morph fraction and authored distance. Selection, holes, row introduction,
+seam ownership and texture callbacks retain their CPU rules. A single persistent
+18-vertex GPU patch draws all 32 templates, with degenerate padding for shorter
+templates. Camera-dependent inputs use a separately accounted reusable instance
+buffer. The vertex shader morphs and transforms the patches; interpolated native
+distances clip the far sphere and produce the deferred haze pass. Consecutive
+compatible instances batch without changing primitive or transparency order.
+Conservative CPU patch admission avoids converting textures for rejected patches.
+Repeated block placements do not acquire expanded vertex or triangle meshes.
+Software drawing and receiver queries reconstruct the selected triangles lazily.
+Native software callback/ring timing continues through its original path.
+The draw view's sphere limit and the terrain's prepared haze limit remain
+independent, including when an immutable snapshot is drawn through a different
+clip context.
+
+Animated TS drawing retains immutable local mesh frames, UV frames and packed
+normals, keyed by source identity and material shading policy. Evaluated poses
+still provide shared CPU node transforms for collision, targeting and LOD; GPU
+draws receive those transforms independently of source geometry. Native per-mesh
+light preparation, including authored bounds and shadow attenuation, remains on
+the CPU. Up to two active prepared directional, nonlinear, wrap or point lights
+evaluate on the GPU. Flat shading with point lights, more active lights,
+orthographic/two-sided views and explicit subpixel rejection use CPU projection.
+Material remaps, cutouts, opacity and image-level transparency sorting survive
+the retained submission path. A lazy projected frame supports software drawing
+and silhouettes from the same immutable local meshes and prepared lighting scalars,
+without cloning directional shadow maps.
+Conservative CPU admission uses retained face planes and bounds computed from
+actual mesh vertices, retaining compatibility with stale exported shape spheres.
+
+Residency policies distinguish ownership and accounting domains:
+
+| Domain | Policy and accounting |
+| --- | --- |
+| Decoded sources | `ResourceManager` defaults to a 256 MiB soft cache target. It evicts the least-recently released unused reloadable entries. Live handles, retired immutable versions and nonreloadable added objects retain ownership; oversized live sets report budget debt. Primary decoded formats report owned allocation capacities; custom types without an estimator report incomplete accounting. |
+| Decoder input staging | A separate configurable 128 MiB aggregate limit covers nested loader input buffers, with current/peak counters and failure before publication. File validation limits remain independent. Caller-owned `read()`/`openStream()` results and archive backing are separate domains. |
+| Derived CPU caches | TS local meshes have a configurable 32 MiB default budget and a 512-entry cap. Disabled or oversized TS entries use CPU projection before expanding local GPU geometry. Texture conversion has an independent configurable 64 MiB / 4096-entry budget, including compact comparison snapshots; conversion remains available without retention. Existing terrain tile and software texture budgets remain independent. Published snapshots survive cache eviction. |
+| Published batches | `HardwareBatch::memoryStats()` counts batch allocation capacities and unique reachable CPU mesh/texture snapshots. Cache and batch reachable bytes overlap and must not be added as separate allocations. |
+| GPU allocations | Existing mesh, texture, lightmap-page and array budgets remain configurable. Mesh payload, page/array capacity, physical textures, persistent vertex/instance capacities and allocation counters remain distinct from backend allocation/alignment usage measured by the native audit. |
+| GPU staging | The configured transfer limit includes new mesh uploads, texture uploads and instance inputs together. Admission failure preserves the published frame. Trimming waits for the preceding fence and releases disposable buffers while retaining the color readback. |
+
+Pressure/background handling now reaches terrain tile/selection caches, interior
+view caches and retained TS meshes as well as conversion/software caches and
+unused decoded resources. Mission loading clears disposable TS source-frame
+retention. Trimming does not change animation clocks, authoritative collision or
+live immutable snapshots. Source budget debt explicitly distinguishes an
+oversized live mission from an oversized unused cache; it is not an application
+memory allowance or a measured mobile safety limit.
+Transition stress testing also exposed a gameplay datablock lifetime bug:
+reconnection replaced registry entries while surviving shapes kept raw derived
+datablock pointers. Live objects now retain the original managed datablock across
+reset, replacement and script rollback, releasing it when their ownership ends.
+
+`OPENT1_PROJECTED_TERRAIN=1` and `OPENT1_PROJECTED_SHAPES=1` independently select
+the compatibility paths. The benchmark runner records corresponding
+`--projected-terrain` and `--projected-shapes` options. The existing
+`--projected-interiors` comparison disables retained world hardware preparation.
+CPU frame measurements include simulation, preparation, submission and the
+preceding fence wait. Retained submission counts include source primitives that
+the GPU later clips; they do not imply a change in visible geometry.
+
+### Follow-up measurements and acceptance
+
+Two serial reference/retained pairs use ordinary MSVC Release executables, D3D12,
+800x600, 120 warm-up and 240 measured frames per case. Each pair uses the same
+binary for both paths. The second pair adds only a datablock self-initialization
+ownership guard; the render algorithms are unchanged. The JSON preserves both
+pairs, executable hashes, revisions, distributions, readback hashes and independent
+terrain-only/TS-only captures. Values below average the two run means, in ms.
+
+| Mission / camera | CPU frame, projected -> retained | Preparation, projected -> retained | Preparation reduction |
+| --- | ---: | ---: | ---: |
+| Raindance stationary | 2.418 -> 2.196 | 1.751 -> 1.586 | 9.4% |
+| Raindance rotate | 2.596 -> 2.460 | 1.883 -> 1.759 | 6.6% |
+| Raindance travel | 3.731 -> 3.592 | 2.219 -> 2.085 | 6.0% |
+| Broadside stationary | 3.704 -> 3.477 | 2.868 -> 2.644 | 7.8% |
+| Broadside rotate | 3.320 -> 3.141 | 2.528 -> 2.347 | 7.2% |
+| Broadside travel | 4.542 -> 4.393 | 2.879 -> 2.711 | 5.8% |
+| RPG map 1 stationary | 7.632 -> 6.886 | 3.631 -> 2.877 | 20.8% |
+| RPG map 1 rotate | 8.552 -> 7.224 | 4.112 -> 3.280 | 20.2% |
+| RPG map 1 travel | 8.925 -> 8.213 | 3.828 -> 3.289 | 14.1% |
+| RPG map 5 stationary | 7.009 -> 6.188 | 4.058 -> 3.332 | 17.9% |
+| RPG map 5 rotate | 7.803 -> 7.318 | 4.780 -> 4.294 | 10.2% |
+| RPG map 5 travel | 8.293 -> 7.745 | 4.761 -> 4.225 | 11.3% |
+
+Full CPU frame means improve 3.3-15.5% in these comparisons. Terrain accounts for
+most preparation savings. TS-only gains are smaller and scene-dependent; these
+captures do not establish a benefit for every animated model or lighting setup.
+The fallback policies retain the CPU path for incompatible lighting and views.
+RPG map 1 travel reference run means vary from 8.532 to 9.319 ms; the individual
+run results matter more than a precise universal speedup claim.
+
+Upload traffic includes instance inputs as well as vertices. For stationary
+Raindance, Broadside, RPG map 1 and RPG map 5 in the repeated pair, combined
+vertex/instance bytes per frame fall from 82,532 / 140,160 / 254,862 / 251,491 to
+61,460 / 87,040 / 190,176 / 197,152. All four have zero measured warm mesh-upload
+bytes. Texture uploads and growing retained working sets remain separately
+reported; this is not an allocation-free renderer.
+
+The fresh native audit is in
+[render-memory-followup.json](data/render-memory-followup.json), separately from
+the unchanged preceding audit. These are requested C++ bytes and DXGI local usage,
+in MiB; they are overlapping domains and must not be added.
+
+| Mission | Tracked C++, preceding -> follow-up | DXGI local, preceding -> follow-up |
+| --- | ---: | ---: |
+| Raindance | 52.69 -> 52.81 | 79.20 -> 79.86 |
+| Broadside | 54.62 -> 54.74 | 82.67 -> 83.66 |
+| RPG map 1 | 102.32 -> 102.53 | 140.99 -> 142.21 |
+| RPG map 5 | 136.40 -> 136.68 | 150.37 -> 151.77 |
+
+Follow-up process private commit is 233.17 / 241.45 / 366.88 / 419.45 MiB for
+those four maps. Fresh Raindance/Broadside repeats are 235.44 / 240.63 MiB, showing
+variation larger than their tracked C++ change. Final-interval render-tag allocation
+rates are about 2,431 / 3,995 / 5,657 / 7,187 per frame, slightly above the preceding
+audit. Source, batch/cache reachable bytes, physical GPU allocations and staging
+capacities remain separate counters. None of these measurements establishes
+mobile headroom or a universal application RAM limit.
+
+All 13 Windows Release CTest suites and all 11 Clang 23.1.1 Linux headless suites
+pass. Real-device D3D12 and Windows Vulkan platform suites cover all 32 terrain
+templates, independent sphere/haze limits and 315 TS light/material/depth cases.
+Compact terrain reconstruction tests preserve first-writer values, holes,
+repeated/unequal seams and software callback policy. Frozen TS lighting, source
+budgets, retired owners, staging rejection and live datablock replacement/reset/
+rollback/self-initialization have regression coverage.
+
+Four real-device mission acceptance cases cover base and RPG transitions in both
+directions, software fallback, published-frame preservation and immutable batch
+re-submission after trimming. All four trim re-submissions have zero channel error.
+After fixing the discovered datablock lifetime bug, twelve additional fresh RPG
+transition stress processes pass. Installed base fixpack, RPG and RPG-model suites
+pass. Both complete catalogs again have zero supported decode failures, entry errors
+or individual-allocation release mismatches; six GPU audit missions render world
+geometry and allocator self-checks pass.
+
+The twelve final projected/retained readbacks differ at 813-8,299 of 480,000 pixels,
+mostly by one or two channel levels. Only 1-8 pixels per image exceed two levels,
+with an isolated maximum of 190 at an edge. Full images and magnified edge crops
+were reviewed. GPU/CPU transform rounding is not pixel-identical. Metal compilation
+and runtime, Linux desktop Vulkan, Android/iOS devices, exhaustive traversal,
+remote-client-only timing and GPU timestamps remain unverified or unmeasured.
 
 ## Reproduction
 

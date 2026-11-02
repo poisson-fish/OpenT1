@@ -36,6 +36,7 @@ add_executable(
     game/gameplay_fix_pack_test.cpp
     game/trpg_behavior_test.cpp
     game/rpg_paths_test.cpp
+    game/rpg_regressions_test.cpp
     game/compatibility_test.cpp
     game/model_rendering_test.cpp
     video/video_test.cpp

@@ -1916,8 +1916,10 @@ void FearPlugin::init(Console& console, sim::SimManager* manager) {
         0,
         "GameBase::virtual",
         [this](Console& con, Int32, std::span<const std::string> args) -> std::string {
-            auto* base =
-                args.size() >= 3 ? dynamic_cast<GameBase*>(game_.findObject(args[1])) : nullptr;
+            auto* manager = sg_.manager ? sg_.manager : game_.manager();
+            auto* base = args.size() >= 3
+                             ? dynamic_cast<GameBase*>(resolveSimObject(manager, args[1]))
+                             : nullptr;
             if (!base) {
                 return "False";
             }
@@ -4800,13 +4802,15 @@ bool FearGameApp::bindGameplayActions() {
         return handleGameplayAction(event);
     };
     const std::array names{
-        "simgame.sae", "actionMap.sae", gameplayGuiMode_ == 2 ? "pdaMap.sae" : "playMap.sae"};
+        "simgame.sae",
+        "actionMap.sae",
+        gameplayGuiMode_ == 2 ? "pdaMap.sae" : gameplayGuiMode_ == 1 ? "playMap.sae" : ""};
     std::array<std::shared_ptr<const sim::SimActionMap>, 3> maps;
     for (std::size_t i = 0; i < names.size(); ++i) {
         maps[i] = inputMaps_.find(names[i]);
     }
     if (inputTarget_.resolve(*cg.manager) == cg.playerPSC && maps == boundInputMaps_) {
-        return bool(maps.back());
+        return bool(maps[1]);
     }
     if (auto* previous = inputTarget_.resolve(*cg.manager)) {
         handler->pop(*previous);
@@ -4818,7 +4822,7 @@ bool FearGameApp::bindGameplayActions() {
     }
     inputTarget_ = cg.playerPSC->address();
     boundInputMaps_ = std::move(maps);
-    return bool(boundInputMaps_.back());
+    return bool(boundInputMaps_[1]);
 }
 
 bool FearGameApp::gameplayWorldVisible() const {

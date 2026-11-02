@@ -207,9 +207,7 @@ public:
 
     [[nodiscard]] virtual Int32 getDamageSkinLevel(Int32 detailLevel) const noexcept;
 
-    [[nodiscard]] virtual std::string_view getSkinBase() const noexcept {
-        return "base";
-    }
+    [[nodiscard]] virtual std::string_view getSkinBase() const noexcept;
 
     void reSkin(bool force = false);
 

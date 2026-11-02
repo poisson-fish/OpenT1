@@ -205,7 +205,8 @@ bool ShapeCollisionImage::collide(const SimCollisionImage& image,
         if (!ti) {
             return false;
         }
-        mat = buildImageTransform(*ti);
+        // Terrain tests consume the shape in terrain space, as in 1.11.
+        mat = ti->buildImageTransform(*this);
         Point3F center{};
         m_mul(sphere.center, mat, center);
         const auto infoOpt = ti->nativeGeometry()
@@ -231,7 +232,7 @@ bool ShapeCollisionImage::collide(const SimCollisionImage& image,
         if (!ii) {
             return false;
         }
-        mat = buildImageTransform(*ii);
+        mat = ii->buildImageTransform(*this);
         if (ii->geometry().box(bbox, mat, list)) {
             list.tLocal = mat;
             list.tLocal.inverse();

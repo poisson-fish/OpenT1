@@ -186,8 +186,11 @@ The optional `trpg` suite hosts `rpgmap5`, spawns an enemy through the installed
 RPG scripts, and checks that the player's mounted pickaxe and the enemy's weapon
 both deal damage. It also fires a bot's sling through the RPG scripts, collects
 a loot chest through player collision, checks repeated enemy-zone scans, and
-submits chat twice through the installed GUI. It uses the same asset variable
-and a temporary write directory:
+submits chat twice through the installed GUI. A second case checks town NPC
+positions and rendered skins, server/client ferry movement, inventory reentry
+through the installed key bindings and Escape, thrown loot collection, visible
+enemy death packs, and an AI caster completing a damaging spell. Both use the
+same asset variable and temporary write directories:
 
 ```powershell
 .\build\x64-debug\tests\opent1_tests.exe --suite trpg
@@ -198,6 +201,9 @@ callbacks and fallback lookup, pitched melee traces, crouch collision bounds,
 uphill acceleration and turn timing, the jump arc, and grounded prediction during smoothing.
 It also covers message recipients, sound-only chat, reopened chat and history
 editing, throw aiming and collision callbacks, and the thrower pickup blackout.
+Additional regressions cover item collisions with translated/rotated terrain and
+interiors, bot skin replication and score filtering, client-ID damage callbacks,
+zoom notifications triggered by input, and ferry waypoint arrival and reset.
 
 ## Continuous integration and validation limits
 

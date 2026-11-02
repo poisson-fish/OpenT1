@@ -176,7 +176,13 @@ bool FearGameApp::gameplayInputActive() const {
 }
 
 bool FearGameApp::gameplayKeyboardActive() const {
-    return gameplayInputActive() || (showingScores_ && !consoleVisible() && !missionPending());
+    const auto& cg = fearPlugin_->clientGlobals();
+    if (consoleVisible() || missionPending() || !cg.playerPSC ||
+        !cg.playerPSC->getControlObject() || !guiRuntime_ || !guiRuntime_->canvas.top()) {
+        return false;
+    }
+    const auto* chat = findGameplayControl<FearGuiChat>(guiRuntime_->canvas.top());
+    return !chat || !chat->visible();
 }
 
 bool FearGameApp::setGameplayGuiMode(UInt32 mode) {
@@ -274,8 +280,16 @@ bool FearGameApp::escapeGameplay() {
     if (inPlay) {
         return setGameplayGuiMode(6);
     }
-    return setGameplayGuiMode(
-        cg.playerPSC->guiMode() >= 1 && cg.playerPSC->guiMode() <= 5 ? cg.playerPSC->guiMode() : 1);
+    if (gameplayGuiMode_ == 6) {
+        return setGameplayGuiMode(cg.playerPSC->guiMode() >= 1 && cg.playerPSC->guiMode() <= 5
+                                     ? cg.playerPSC->guiMode()
+                                     : 1);
+    }
+    if (!game_.console().isFunction("remotePlayMode")) {
+        return setGameplayGuiMode(1);
+    }
+    const std::array<std::string, 2> args{"2048", "PlayMode"};
+    return game_.console().execute("remoteEval", args).ok();
 }
 
 bool FearGameApp::handleGameplayAction(const sim::SimActionEvent& event) {

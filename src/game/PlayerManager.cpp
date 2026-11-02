@@ -923,7 +923,7 @@ void PlayerManager::setClientSkin(Int32 clientId, std::string_view newSkin) {
         return;
     }
     auto* client = findClient(clientId);
-    if (!client || !client->loginStatus || client->skinBase == newSkin) {
+    if (!client || client->skinBase == newSkin) {
         return;
     }
     client->skinBase = newSkin;

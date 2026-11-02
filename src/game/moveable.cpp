@@ -54,6 +54,9 @@ bool Moveable::onAdd() {
         addToSet(MoveableSetId);
         setPathId(findPathId());
         setWaypointPosition(0);
+    } else if (pathId_ != UndefinedPathId) {
+        buildMovementVector(currentWaypoint_, moveState_ == BackwardState);
+        updatePosition(true);
     }
     return true;
 }
@@ -97,6 +100,7 @@ Int32 Moveable::findPathId() const {
 }
 
 void Moveable::setPathId(Int32 pid) {
+    const auto previous = pathId_;
     if (pid < UndefinedPathId && pid >= 0) {
         if (pid != pathId_) {
             pathId_ = pid;
@@ -107,6 +111,17 @@ void Moveable::setPathId(Int32 pid) {
         setMaskBits(PathMask);
     }
     waypointCount_ = 0;
+    if (!isGhost() && pathId_ != UndefinedPathId && pathId_ != previous) {
+        if (currentWaypoint_ == UndefinedWaypoint) {
+            setWaypointPosition(0);
+        }
+        if (auto* con = resolveConsole()) {
+            const auto callback = scriptName("onNewPath");
+            if (!callback.empty()) {
+                (void)con->execute(callback, std::array<std::string, 1>{scriptThis()});
+            }
+        }
+    }
 }
 
 Int32 Moveable::getWaypointCount() noexcept {
@@ -222,8 +237,14 @@ void Moveable::updateMoveState(State newState) {
 }
 
 bool Moveable::setWaypoint(Flt32 wp) {
-    currentWaypoint_ = static_cast<Int32>(wp);
+    if (!std::isfinite(wp) || wp < 0 || wp >= static_cast<Flt32>(getWaypointCount())) {
+        return false;
+    }
+    const auto index = static_cast<Int32>(wp);
+    currentWaypoint_ = index;
     position_ = 0.0f;
+    buildMovementVector(currentWaypoint_, moveState_ == BackwardState);
+    updatePosition(true);
     setMaskBits(PositionMask);
     return true;
 }
@@ -330,6 +351,10 @@ std::string_view Moveable::getMoveStateName() const noexcept {
 }
 
 void Moveable::serverProcess(UInt32 curTime) {
+    // Paths can be registered after their sibling moveables during mission loading.
+    if (!isGhost() && pathId_ == UndefinedPathId) {
+        setPathId(findPathId());
+    }
     const Flt32 dt = (curTime > lastProcessTime_)
                          ? static_cast<Flt32>(curTime - lastProcessTime_) * 0.001f
                          : 0.0f;
@@ -354,12 +379,12 @@ void Moveable::serverProcess(UInt32 curTime) {
                     ++currentWaypoint_;
                     position_ = 0.0f;
                     hitWaypoint = true;
-                    if (currentWaypoint_ >= waypoint_ ||
-                        currentWaypoint_ >= getWaypointCount() - 1) {
+                    if (!buildMovementVector(currentWaypoint_, false)) {
                         stopMove = true;
                         break;
                     }
-                    if (!buildMovementVector(currentWaypoint_, false)) {
+                    if (currentWaypoint_ >= waypoint_ ||
+                        currentWaypoint_ >= getWaypointCount() - 1) {
                         stopMove = true;
                         break;
                     }
@@ -455,11 +480,14 @@ void Moveable::clientProcess(UInt32 curTime) {
                     stepDt -= (1.0f - position_) / ivScale_;
                     ++currentWaypoint_;
                     position_ = 0.0f;
+                    if (!buildMovementVector(currentWaypoint_, false)) {
+                        stopMove = true;
+                        break;
+                    }
                     if (currentWaypoint_ == waypoint_) {
                         stopMove = true;
                         break;
                     }
-                    buildMovementVector(currentWaypoint_, false);
                 } else {
                     position_ += step;
                     break;

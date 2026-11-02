@@ -152,8 +152,8 @@ bool Item::initResources(GameBaseData* in_data) {
     }
 
     if (isRotate_) {
-        setMovementFlags(movementFlags() | AtRest);
         setLinearVelocity(Point3F{0.0f, 0.0f, 0.0f});
+        setMovementFlags(movementFlags() | AtRest);
         setTimeSlice(0.05f);
     }
     return true;
@@ -551,8 +551,8 @@ bool Item::unpackUpdate(sim::network::GhostManager& gm, BitStream& stream) {
     }
 
     if (stream.readFlag()) {
-        setMovementFlags(movementFlags() | AtRest);
         setLinearVelocity(Point3F{0.0f, 0.0f, 0.0f});
+        setMovementFlags(movementFlags() | AtRest);
     } else if (stream.readFlag()) {
         Point3F vel{};
         if (!readPod(stream, vel)) {

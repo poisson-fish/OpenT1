@@ -593,6 +593,7 @@ bool PlayerPSC::onSimActionEvent(const sim::SimActionEvent& event) {
             setTargetFov((val != 0.0f) ? sniperFov : playerFov, clientInputTime_);
             return true;
         case IDACTION_INC_SNIPER_FOV:
+            zoomChangeTime_ = clientInputTime_;
             if (sniperFov <= 5.625f) {
                 sniperFov = 45.0f;
             } else {

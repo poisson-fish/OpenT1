@@ -89,13 +89,10 @@ void Crosshair::updateLive(sim::SimManager& manager,
     if (!metrics_.enabled) {
         return;
     }
-    if (lastSniperFov_ != PlayerPSC::sniperFov) {
-        lastSniperFov_ = PlayerPSC::sniperFov;
-        zoomChangeTime_ = now;
-    }
     const auto center = fields_.extent / 2;
     metrics_.showZoomRectangle =
-        !metrics_.zoomReticle && psc.getFov() == psc.targetFov() && now - zoomChangeTime_ < 2000;
+        !metrics_.zoomReticle && psc.getFov() == psc.targetFov() && psc.zoomChangeTime() &&
+        now - *psc.zoomChangeTime() < 2000;
     const auto halfHeight = Int32(
         std::tan(std::clamp(PlayerPSC::sniperFov, 1.f, 90.f) * kPi / 360) * fields_.extent.y * .5f);
     metrics_.zoomRect.top = center.y - halfHeight;

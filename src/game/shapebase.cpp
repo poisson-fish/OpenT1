@@ -643,6 +643,16 @@ Int32 ShapeBase::getDamageSkinLevel(Int32 detailLevel) const noexcept {
     return 0;
 }
 
+std::string_view ShapeBase::getSkinBase() const noexcept {
+    if (const auto* players = PlayerManager::get(getManager())) {
+        if (const auto* owner = players->findBaseRep(getLastOwnerClient())) {
+            return owner->skinBase;
+        }
+        return players->getTeamSkinBase(getTeam());
+    }
+    return "base";
+}
+
 void ShapeBase::reSkin(bool force) {
     const std::string_view newSkinBase = getSkinBase();
     const Int32 dlevel = getDamageSkinLevel(prefDamageSkinDetail);
@@ -1141,8 +1151,11 @@ bool ShapeBase::onWorldShapeQuery(world::WorldShapeQuery& query) const {
             if (!dbm || !dbm->resources()) {
                 return false;
             }
-            auto materials =
-                world::TsMaterialResources::load(*dbm->resources(), *resources.shape->materials);
+            auto materials = world::TsMaterialResources::loadSkin(
+                *dbm->resources(),
+                *resources.shape->materials,
+                getSkinBase(),
+                shapeData_ ? shapeData_->fileName : "");
             if (!materials) {
                 return false;
             }
@@ -1210,6 +1223,7 @@ bool ShapeBase::processQuery(sim::SimQuery& query) {
         return onSimImageTransformQuery(*imgXformQ);
     }
     if (auto* shapeQ = dynamic_cast<world::WorldShapeQuery*>(&query)) {
+        reSkin();
         const auto now = getManager() ? UInt32(getManager()->getCurrentTime() * 1000.f) : 0U;
         (void)computeFadeFactor(now);
         if (!m_lastSunUpdated_ || now - m_lastSunUpdated_ >= 32) {

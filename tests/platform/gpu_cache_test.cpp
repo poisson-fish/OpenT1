@@ -264,6 +264,89 @@ void pageReadbacks(platform::SdlWindow& window) {
     CHECK(surface->render(first));
 }
 
+gfx::HardwareBatch arrayContent(bool changedPalette) {
+    gfx::Palette palette;
+    for (unsigned i = 0; i < 256; ++i) {
+        auto& c = palette.palettes[0].colors[i];
+        c = {UInt8(i), UInt8((i * 23) & 255), UInt8((i * 61) & 255), UInt8((i * 37) & 255)};
+        if (changedPalette)
+            std::swap(c.red, c.green);
+    }
+    std::array<std::array<gfx::PolygonVertex, 4>, 32> quads;
+    std::vector<std::unique_ptr<gfx::Bitmap>> sources;
+    std::vector<gfx::HardwarePolygon> polygons;
+    for (std::size_t i = 0; i < quads.size(); ++i) {
+        // Authored mip chains require power-of-two source dimensions; single
+        // mip images also exercise the supported non-power-of-two array layout.
+        const auto levels = Int32(i % 3 + 1);
+        auto bitmap = gfx::Bitmap::create(levels == 1 && (i & 1U) ? 6 : 8, 4);
+        CHECK(bitmap);
+        bitmap->detailLevels = levels;
+        if (bitmap->detailLevels > 1) {
+            std::size_t bytes{};
+            for (Int32 level = 0; level < bitmap->detailLevels; ++level)
+                bytes += std::size_t(std::max(1, bitmap->width >> level)) *
+                         std::max(1, bitmap->height >> level);
+            bitmap->pixels.resize(bytes);
+        }
+        for (std::size_t j = 0; j < bitmap->pixels.size(); ++j)
+            bitmap->pixels[j] = std::byte((j * 17 + i * 7) % 255 + 1);
+        const auto x = Flt32((i % 8) * 16), y = Flt32((i / 8) * 16);
+        quads[i] = {{{{x, y}, {-.5f, -.5f}},
+                     {{x + 16, y}, {2.5f, -.5f}},
+                     {{x + 16, y + 16}, {2.5f, 2.5f}},
+                     {{x, y + 16}, {-.5f, 2.5f}}}};
+        gfx::HardwareMaterial material;
+        material.texture = bitmap.get();
+        material.perspective = false;
+        material.depth = gfx::HardwareDepth::Disabled;
+        material.linear = (i & 1U) != 0;
+        material.wrap = (i & 2U) != 0;
+        material.mipFilter = i % 3 == 0 ? gfx::HardwareMipFilter::None
+                                        : (i % 3 == 1 ? gfx::HardwareMipFilter::Nearest
+                                                      : gfx::HardwareMipFilter::Linear);
+        material.lodBias = Flt32(i % 5) * .75f;
+        material.paletteAlpha = true;
+        material.alphaCutoff = i % 4 == 0 ? .3f : 0;
+        material.blend = i % 4 == 1 ? gfx::HardwareBlend::Alpha : gfx::HardwareBlend::Opaque;
+        polygons.push_back({quads[i], material});
+        sources.push_back(std::move(bitmap));
+    }
+    auto batch = gfx::HardwareBatch::prepare(polygons, &palette);
+    CHECK(batch);
+    return std::move(*batch);
+}
+
+void arrayReadbacks(platform::SdlWindow& window) {
+    const auto first = arrayContent(false), changed = arrayContent(true);
+    const std::array<const gfx::HardwareBatch*, 3> frames{&first, &changed, &first};
+    gfx::GpuSurfaceConfig config;
+    config.textureArrayBytes = 0;
+    auto surface = gfx::SdlGpuSurface::create(window, 128, 64, config);
+    CHECK(surface);
+    std::array<std::vector<std::byte>, 3> reference;
+    for (std::size_t i = 0; i < frames.size(); ++i) {
+        reference[i].resize(128 * 64 * 4);
+        CHECK(surface->render(*frames[i]) && surface->readback(reference[i]));
+    }
+    CHECK(surface->textureCacheStats().textureArrays == 0);
+    surface.reset();
+    config.textureArrayBytes = 1024 * 1024;
+    surface = gfx::SdlGpuSurface::create(window, 128, 64, config);
+    CHECK(surface);
+    for (std::size_t i = 0; i < frames.size(); ++i) {
+        std::vector<std::byte> actual(reference[i].size());
+        CHECK(surface->render(*frames[i]) && surface->readback(actual));
+        for (std::size_t p = 0; p < actual.size(); ++p)
+            CHECK(std::abs(int(actual[p]) - int(reference[i][p])) <= 2);
+        if (i == 1)
+            CHECK(surface->trimCaches());
+    }
+    const auto stats = surface->textureCacheStats();
+    CHECK(stats.textureArrays >= 3 && stats.textureArrayBytes <= config.textureArrayBytes);
+    CHECK(stats.physicalTextures < stats.textures);
+}
+
 int gpuCache() {
     return test::run([] {
         platform::SdlApplication app;
@@ -281,6 +364,7 @@ int gpuCache() {
         retainedMesh(window);
         interiorReadbacks(window);
         pageReadbacks(window);
+        arrayReadbacks(window);
     });
 }
 }

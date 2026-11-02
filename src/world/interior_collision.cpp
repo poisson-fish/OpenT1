@@ -2,6 +2,7 @@
 #include "collision_geometry.hpp"
 #include <functional>
 #include <numeric>
+#include <memory_resource>
 
 namespace opent1::world {
 using namespace collision_detail;
@@ -70,23 +71,91 @@ bool polygonSphere(std::span<const Point3F> vertices,
 }
 
 struct Face {
-    std::vector<Point3F> vertices;
+    std::pmr::vector<Point3F> vertices;
     Int32 plane{-1};
     Point3F normal;
+
+    explicit Face(std::pmr::memory_resource* memory) : vertices(memory) {}
 };
 
-using Polyhedron = std::vector<Face>;
+using Polyhedron = std::pmr::vector<Face>;
+
+// Fixed per-query-thread scratch, never a retained expanded collision mesh.
+// Depth-first traversal rewinds each node's temporaries; overflow uses ordinary
+// allocations with their original lifetimes. A nested query gets an independent
+// allocator so it cannot overwrite an active query's storage.
+class BspScratch : public std::pmr::memory_resource {
+    struct Storage {
+        std::array<std::byte, 32 * 1024> bytes;
+        bool busy{};
+    };
+
+    static Storage& storage() {
+        static thread_local Storage value;
+        return value;
+    }
+
+    bool acquired_{!storage().busy};
+    std::size_t used_{};
+
+    void* do_allocate(std::size_t bytes, std::size_t alignment) override {
+        if (acquired_) {
+            auto& buffer = storage().bytes;
+            void* next = buffer.data() + used_;
+            auto available = buffer.size() - used_;
+            if (std::align(alignment, bytes, next, available)) {
+                used_ = std::size_t(static_cast<std::byte*>(next) - buffer.data()) + bytes;
+                return next;
+            }
+        }
+        return std::pmr::new_delete_resource()->allocate(bytes, alignment);
+    }
+
+    void do_deallocate(void* p, std::size_t bytes, std::size_t alignment) override {
+        const auto address = reinterpret_cast<std::uintptr_t>(p);
+        const auto base = reinterpret_cast<std::uintptr_t>(storage().bytes.data());
+        if (!acquired_ || address < base || address - base >= storage().bytes.size())
+            std::pmr::new_delete_resource()->deallocate(p, bytes, alignment);
+    }
+
+    bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override {
+        return this == &other;
+    }
+
+public:
+    BspScratch() {
+        if (acquired_)
+            storage().busy = true;
+    }
+
+    ~BspScratch() override {
+        if (acquired_)
+            storage().busy = false;
+    }
+
+    struct Mark {
+        BspScratch& memory;
+        std::size_t offset{memory.used_};
+
+        ~Mark() {
+            memory.used_ = offset;
+        }
+    };
+};
+
+enum class ClipResult { Empty, Unchanged, Clipped };
 
 // Clip a convex polyhedron, retaining the BSP cap as a collision face. Every
 // temporary vertex visit is charged before publication of caller results.
-Polyhedron clip(const Polyhedron& input,
+ClipResult clip(const Polyhedron& input,
                 const PlaneF& plane,
                 UInt32 planeIndex,
                 bool front,
-                std::size_t& work) {
+                std::size_t& work,
+                Polyhedron& result) {
     const auto sign = front ? 1.f : -1.f;
-    Polyhedron result;
-    std::vector<Point3F> cap;
+    auto* memory = result.get_allocator().resource();
+    std::pmr::vector<Point3F> cap(memory);
     bool positive = false, negative = false;
     std::ranges::for_each(input, [&](const auto& face) {
         spend(work, face.vertices.size());
@@ -97,13 +166,13 @@ Polyhedron clip(const Polyhedron& input,
         });
     });
     if (!positive) {
-        return {};
+        return ClipResult::Empty;
     } // Zero-volume tangency is excluded.
     if (!negative) {
-        return input;
+        return ClipResult::Unchanged;
     }
     std::ranges::for_each(input, [&](const auto& face) {
-        Face out;
+        Face out(memory);
         out.plane = face.plane;
         out.normal = face.normal;
         auto a = face.vertices.back();
@@ -140,9 +209,13 @@ Polyhedron clip(const Polyhedron& input,
             return std::atan2(m_dot(a - center, v), m_dot(a - center, u)) <
                    std::atan2(m_dot(b - center, v), m_dot(b - center, u));
         });
-        result.push_back({std::move(cap), Int32(planeIndex), Point3F(plane) * (-sign)});
+        Face face(memory);
+        face.vertices = std::move(cap);
+        face.plane = Int32(planeIndex);
+        face.normal = Point3F(plane) * (-sign);
+        result.push_back(std::move(face));
     }
-    return result;
+    return ClipResult::Clipped;
 }
 }
 
@@ -490,9 +563,10 @@ bool InteriorCollision::box(const Box3F& box, const TMat3F& t, CollisionSurfaceL
                                                                  {{2, 6, 7, 3}},
                                                                  {{0, 4, 6, 2}},
                                                                  {{1, 3, 7, 5}}}};
-    Polyhedron initial;
+    BspScratch memory;
+    Polyhedron initial(&memory);
     std::ranges::for_each(indices, [&](const auto& face) {
-        Face f;
+        Face f(&memory);
         std::ranges::transform(face, std::back_inserter(f.vertices), vertex);
         initial.push_back(std::move(f));
     });
@@ -510,11 +584,13 @@ bool InteriorCollision::box(const Box3F& box, const TMat3F& t, CollisionSurfaceL
             return;
         }
         if (index >= 0) {
+            const BspScratch::Mark mark{memory};
             const auto& n = nodes_[std::size_t(index)];
-            const auto front = clip(poly, planes_[n.plane], n.plane, true, work);
-            visit(n.front, front);
-            const auto back = clip(poly, planes_[n.plane], n.plane, false, work);
-            visit(n.back, back);
+            Polyhedron front(&memory), back(&memory);
+            const auto f = clip(poly, planes_[n.plane], n.plane, true, work, front);
+            visit(n.front, f == ClipResult::Unchanged ? poly : front);
+            const auto b = clip(poly, planes_[n.plane], n.plane, false, work, back);
+            visit(n.back, b == ClipResult::Unchanged ? poly : back);
             return;
         }
         const auto& leaf = leaves_[std::size_t(-Int64(index) - 1)];

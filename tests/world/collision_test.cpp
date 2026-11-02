@@ -354,6 +354,25 @@ void interiorBoxesAndValidation() {
     throws([&] {
         geometry->box({{-1, -1, -1}, {1, 1, 1}}, bad, list);
     });
+
+    // A deep convex BSP exceeds the fixed clipping scratch. Overflow and later
+    // small queries must retain the same solid/empty classification and reset
+    // temporary storage independently of earlier traversals.
+    std::vector<PlaneF> deepPlanes;
+    std::vector<InteriorCollisionNode> deepNodes;
+    for (UInt32 i = 0; i < 96; ++i) {
+        const auto angle = Flt32(i) * 2.f * std::numbers::pi_v<Flt32> / 96.f;
+        deepPlanes.push_back({std::cos(angle), std::sin(angle), 0, -1});
+        deepNodes.push_back({i, -1, i + 1 == 96 ? -2 : Int32(i + 1)});
+    }
+    const std::array<InteriorCollisionLeaf, 2> deepLeaves{{{false, {}}, {true, {}}}};
+    const auto deep = InteriorCollision::prepare(deepPlanes, deepNodes, deepLeaves, {});
+    CHECK(deep);
+    for (unsigned i = 0; i < 3; ++i) {
+        CHECK(deep->box({{-2, -2, -2}, {2, 2, 2}}, {}, list) && list.contained);
+        CHECK(deep->box({{-.1f, -.1f, -.1f}, {.1f, .1f, .1f}}, {}, list) && list.contained);
+        CHECK(!deep->box({{-.1f, -.1f, -.1f}, {.1f, .1f, .1f}}, at({3, 0, 0}), list));
+    }
 }
 
 void dispatchAndLifetime() {

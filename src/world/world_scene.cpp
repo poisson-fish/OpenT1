@@ -500,8 +500,10 @@ WorldSceneFrame::captureContainers(sim::SimWorld& world,
                                    const sim::EnvironmentCamera& camera,
                                    const sim::VolumetricView& volumeView,
                                    bool lighting,
-                                   std::optional<TerrainTextureTiming> terrainTiming) {
-    return captureImpl(world, camera, volumeView, lighting, std::nullopt, true, terrainTiming);
+                                   std::optional<TerrainTextureTiming> terrainTiming,
+                                   bool retainedHardware) {
+    return captureImpl(
+        world, camera, volumeView, lighting, std::nullopt, true, terrainTiming, retainedHardware);
 }
 
 std::optional<WorldSceneFrame>
@@ -511,7 +513,8 @@ WorldSceneFrame::captureImpl(sim::SimWorld& world,
                              bool lighting,
                              std::optional<std::span<const InteriorSceneRoot>> interiorRoots,
                              bool containers,
-                             std::optional<TerrainTextureTiming> terrainTiming) {
+                             std::optional<TerrainTextureTiming> terrainTiming,
+                             bool retainedHardware) {
     if (camera.viewport.left != 0 || camera.viewport.top != 0 || camera.viewport.width() > 16384 ||
         camera.viewport.height() > 16384 || !rigid(camera.worldToCamera) ||
         (terrainTiming && *terrainTiming != TerrainTextureTiming::RetainedLru &&
@@ -540,6 +543,7 @@ WorldSceneFrame::captureImpl(sim::SimWorld& world,
     WorldSceneFrame frame;
     frame.camera_ = camera;
     frame.lightingEnabled_ = lighting;
+    frame.retainedHardware_ = retainedHardware && camera.perspective;
     auto& manager = world.manager();
     bool success = false;
     const char* stage = "resource service";
@@ -688,7 +692,10 @@ WorldSceneFrame::captureImpl(sim::SimWorld& world,
                     view.perspective = camera.perspective;
                     view.nearDistance = camera.nearDistance;
                     view.farDistance = camera.farDistance;
-                    auto prepared = image.mesh->prepare(view);
+                    const bool retained =
+                        frame.retainedHardware_ && image.mesh->retainedHardwareCompatible();
+                    auto prepared =
+                        retained ? std::optional(TsStaticShapeFrame{}) : image.mesh->prepare(view);
                     stage = "surface preparation";
                     if (!prepared ||
                         prepared->polygonCount() > gfx::renderLimits().polygons - polygons) {
@@ -799,8 +806,17 @@ WorldSceneFrame::hardware(const gfx::Palette& palette,
                           std::span<const sim::EnvironmentShadow> shadows,
                           Flt32 paletteGamma) const {
     std::vector<gfx::HardwarePolygon> polygons;
-    for (const auto& surface : surfaceFrames_) {
-        auto inputs = surface.hardwarePolygons(&palette, paletteGamma);
+    for (std::size_t i = 0; i < surfaceFrames_.size(); ++i) {
+        const auto& image = surfaces_[i];
+        TsStaticView view;
+        m_mul(image.placement, camera_.worldToCamera, view.shapeToCamera);
+        view.focal = camera_.focal;
+        view.center = camera_.center;
+        view.nearDistance = camera_.nearDistance;
+        view.farDistance = camera_.farDistance;
+        auto inputs = retainedHardware_ && image.mesh->retainedHardwareCompatible()
+                          ? image.mesh->hardwareInterior(view, palette, paletteGamma)
+                          : surfaceFrames_[i].hardwarePolygons(&palette, paletteGamma);
         if (!inputs) {
             return {};
         }
@@ -839,8 +855,24 @@ bool WorldSceneFrame::draw(gfx::SoftwareSurface& surface,
         return false;
     }
     std::vector<gfx::SortedPolygon> polygons;
-    for (const auto& world : surfaceFrames_) {
-        auto inputs = world.softwarePolygons(surface.palette(), cache);
+    for (std::size_t i = 0; i < surfaceFrames_.size(); ++i) {
+        std::optional<TsStaticShapeFrame> software;
+        if (retainedHardware_ && surfaces_[i].mesh->retainedHardwareCompatible()) {
+            TsStaticView view;
+            m_mul(surfaces_[i].placement, camera_.worldToCamera, view.shapeToCamera);
+            view.width = Int32(camera_.viewport.width());
+            view.height = Int32(camera_.viewport.height());
+            view.focal = camera_.focal;
+            view.center = camera_.center;
+            view.perspective = camera_.perspective;
+            view.nearDistance = camera_.nearDistance;
+            view.farDistance = camera_.farDistance;
+            software = surfaces_[i].mesh->prepare(view);
+            if (!software)
+                return false;
+        }
+        auto inputs =
+            (software ? *software : surfaceFrames_[i]).softwarePolygons(surface.palette(), cache);
         if (!inputs) {
             return false;
         }
@@ -868,6 +900,7 @@ WorldSceneFrame::reframed(const sim::EnvironmentCamera& camera) const {
         return {};
     }
     WorldSceneFrame result = *this;
+    result.retainedHardware_ = false;
     result.camera_ = camera;
     result.shapes_.clear();
     result.surfaceFrames_.clear();

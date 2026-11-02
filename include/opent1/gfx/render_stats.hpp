@@ -16,6 +16,7 @@ struct RenderWorkStats {
     double skyMs{};
     std::uint64_t hardwareSkyPolygons{};
     std::uint64_t bitmapCopyBytes{}, layerScanPixels{}, surfaceInversions{};
+    std::uint64_t interiorGeometryBuilds{}, interiorLightMapBuilds{}, interiorLightMapBytes{};
 };
 
 inline thread_local RenderWorkStats* currentRenderWorkStats{};

@@ -20,6 +20,7 @@ cbuffer Material : register(b0, space3) {
     float4 options; // inverse gamma, enable discard, mip LOD bias, alpha source
     float4
         alphaControls; // alpha cutoff, zero-alpha texture cutout, haze pass (0=inline,1=deferred base,2=overlay), unused
+    float4 geometryClip; // near, far, local geometry, unused
 }
 
 float4 main(float4 position : SV_Position,
@@ -27,8 +28,10 @@ float4 main(float4 position : SV_Position,
             float3 color : TEXCOORD1,
             float haze : TEXCOORD2,
             float2 lightUV : TEXCOORD3,
-            float opacity : TEXCOORD4)
+            float opacity : TEXCOORD4,
+            float cameraDepth : TEXCOORD5)
     : SV_Target0 {
+    if (geometryClip.z != 0 && (cameraDepth < geometryClip.x || cameraDepth > geometryClip.y)) discard;
     if (alphaControls.z == 2)
         return float4(hazeColor.rgb, saturate(haze));
     float4 texel = image.SampleBias(imageSampler, uv, options.z);

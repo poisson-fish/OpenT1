@@ -46,13 +46,14 @@ bool SimInteriorSurface::publish(InteriorLightPlayer player) {
     InteriorSurfaceLighting lighting;
     lighting.slots = player.slots();
     lighting.mission = mission_.get();
+    lighting.missionHandle = mission_;
+    lighting.previous = image_.mesh.get();
     auto mesh = WorldSurfaceMesh::interior(resources_, lod_, lightState_, true, lighting);
     if (!mesh) {
         return false;
     }
     image_.mesh = std::make_shared<const WorldSurfaceMesh>(std::move(*mesh));
     player_ = std::move(player);
-    cache_ = {};
     return true;
 }
 
@@ -274,6 +275,8 @@ bool SimInteriorSurface::processQuery(sim::SimQuery& query) {
         if (candidate.lod != lod || !candidate.base || candidate.slots != slots) {
             InteriorSurfaceLighting options;
             options.mission = mission_.get();
+            options.missionHandle = mission_;
+            options.previous = candidate.lod == lod ? candidate.base.get() : nullptr;
             if (player_) {
                 options.slots = slots;
             }
@@ -287,10 +290,7 @@ bool SimInteriorSurface::processQuery(sim::SimQuery& query) {
             base = candidate.base;
         }
     }
-    if (candidate.base != base) {
-        candidate.scene.reset();
-        candidate.lighting.reset();
-    }
+    const bool baseChanged = candidate.base != base;
     candidate.base = base;
     candidate.lod = lod;
     candidate.slots = slots;
@@ -301,12 +301,14 @@ bool SimInteriorSurface::processQuery(sim::SimQuery& query) {
             return fail();
         }
         if (!lights->lights.empty()) { // native ambient-only vector merging is a no-op
-            if (!candidate.lighting || *candidate.lighting != *lights) {
+            if (baseChanged || !candidate.lighting || *candidate.lighting != *lights) {
                 InteriorSurfaceLighting options;
                 options.slots =
                     lod == lod_ ? player_->slots() : std::span<const InteriorLightSlot>(slots);
                 options.mission = mission_.get();
+                options.missionHandle = mission_;
                 options.scene = &*lights;
+                options.previous = candidate.scene ? candidate.scene.get() : base.get();
                 auto mesh = WorldSurfaceMesh::interior(resources_, lod, lightState_, true, options);
                 if (!mesh) {
                     return fail();

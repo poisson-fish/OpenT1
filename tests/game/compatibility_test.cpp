@@ -268,8 +268,8 @@ void largeInteriorMeshes() {
         resources.materials.list.materials[0].flags = 1;
         resources.materials.textures.resize(1);
         const auto mesh = world::WorldSurfaceMesh::interior(resources, 0, 0, false);
-        CHECK(mesh && mesh->triangles.size() == std::size_t(count - 2) &&
-              mesh->interiorSurfaceIds.size() == mesh->triangles.size());
+        CHECK(mesh && mesh->triangleCount() == std::size_t(count - 2) && mesh->interiorMesh &&
+              mesh->interiorMesh->surfaceIds.size() == mesh->triangleCount());
         world::TsStaticView view;
         view.shapeToCamera.identity();
         view.shapeToCamera.p = {0, 5, 0};

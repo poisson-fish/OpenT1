@@ -33,12 +33,15 @@ struct GpuTextureCacheStats {
 struct GpuResourceStats {
     UInt64 targetAllocations{}, vertexAllocations{}, uploadAllocations{};
     UInt32 vertexCapacity{}, uploadCapacity{};
+    UInt64 meshAllocations{}, meshUploads{}, meshUploadBytes{};
+    std::size_t meshBytes{}, peakMeshBytes{}, meshes{};
 };
 
 struct GpuSubmissionStats {
     UInt32 inputDraws{}, draws{}, pipelineBinds{}, samplerBinds{}, vertexUniformPushes{},
         fragmentUniformPushes{};
     double fenceWaitMs{}; // CPU time in the preceding hardware submission's fence wait
+    UInt64 vertexUploadBytes{}, textureUploadBytes{}, meshUploadBytes{};
 };
 
 // Indexed software drawing/presentation and an RGBA/depth hardware material path.

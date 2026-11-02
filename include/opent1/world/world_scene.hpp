@@ -378,7 +378,8 @@ public:
                       const sim::EnvironmentCamera&,
                       const sim::VolumetricView&,
                       bool lighting = true,
-                      std::optional<TerrainTextureTiming> terrainTiming = std::nullopt);
+                      std::optional<TerrainTextureTiming> terrainTiming = std::nullopt,
+                      bool retainedHardware = false);
 
     // Present for explicit linked capture or automatic container capture.
     [[nodiscard]] std::optional<bool> interiorOutsideVisible() const {
@@ -430,7 +431,8 @@ private:
                 bool,
                 std::optional<std::span<const InteriorSceneRoot>>,
                 bool containers,
-                std::optional<TerrainTextureTiming>);
+                std::optional<TerrainTextureTiming>,
+                bool retainedHardware = false);
     sim::EnvironmentCamera camera_;
     std::vector<TsStaticShapeFrame> shapes_;
     std::vector<WorldShapeImage> shapeInputs_;
@@ -441,5 +443,6 @@ private:
     std::optional<bool> outsideVisible_;
     sim::SimSceneLighting lighting_;
     bool lightingEnabled_{};
+    bool retainedHardware_{};
 };
 } // namespace opent1::world

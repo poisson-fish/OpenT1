@@ -1,5 +1,6 @@
 #include <opent1/gfx/render_limits.hpp>
 #include <opent1/gfx/hardware_batch.hpp>
+#include <atomic>
 #include <algorithm>
 #include <cmath>
 #include <list>
@@ -446,6 +447,25 @@ std::optional<HardwareBatch> HardwareBatch::prepare(std::span<const HardwarePoly
     std::size_t inputVertices{}, textureBytes{4};
     if (!std::ranges::all_of(polygons, [&](const auto& p) {
             const auto& m = p.material;
+            if (p.mesh &&
+                (m.blend != HardwareBlend::Opaque || m.deferredHaze ||
+                 m.shadeSource != PolygonSource::None || m.hazeSource != PolygonSource::None ||
+                 p.indexCount == 0 || p.indexCount % 3 || p.firstIndex > p.mesh->indices().size() ||
+                 p.indexCount > p.mesh->indices().size() - p.firstIndex ||
+                 !std::ranges::all_of(p.transform.camera,
+                                      [](const auto& row) {
+                                          return std::ranges::all_of(row, [](auto value) {
+                                              return std::isfinite(value);
+                                          });
+                                      }) ||
+                 !std::ranges::all_of(p.transform.optics,
+                                      [](auto value) {
+                                          return std::isfinite(value);
+                                      }) ||
+                 !std::isfinite(p.transform.clip[0]) || !std::isfinite(p.transform.clip[1]) ||
+                 p.transform.clip[0] <= 0 || p.transform.clip[1] <= p.transform.clip[0] ||
+                 p.transform.clip[2] != 1))
+                return false;
             if (p.vertices.size() < 3 || p.vertices.size() > 100 ||
                 p.vertices.size() > renderLimits().vertices - inputVertices || !valid(m)) {
                 return false;
@@ -586,6 +606,21 @@ std::optional<HardwareBatch> HardwareBatch::prepare(std::span<const HardwarePoly
                               m.transparent,
                               m.deferredHaze,
                               m.magnificationLinear.value_or(m.linear)};
+            if (p.mesh) {
+                auto instance = std::ranges::find_if(result.meshes_, [&](const auto& value) {
+                    return value.mesh == p.mesh && value.transform == p.transform;
+                });
+                if (instance == result.meshes_.end()) {
+                    result.meshes_.push_back({p.mesh, p.transform});
+                    draw.mesh = UInt32(result.meshes_.size());
+                } else {
+                    draw.mesh = UInt32(instance - result.meshes_.begin() + 1);
+                }
+                draw.firstVertex = p.firstIndex;
+                draw.vertexCount = p.indexCount;
+                result.draws_.push_back(draw);
+                return true;
+            }
             const auto outputCount = (p.vertices.size() - 2) * 3;
             if (outputCount > renderLimits().outputVertices - result.vertices_.size() ||
                 outputCount >
@@ -661,6 +696,8 @@ std::optional<HardwareBatch> HardwareBatch::compose(std::span<const HardwareBatc
         const auto firstVertex = UInt32(result.vertices_.size()),
                    firstTexture = UInt32(result.textures_.size());
         const auto firstDraw = UInt32(result.draws_.size());
+        const auto firstMesh = UInt32(result.meshes_.size());
+        result.meshes_.insert(result.meshes_.end(), layer->meshes_.begin(), layer->meshes_.end());
         for (const auto end : layer->layerEnds_) {
             result.layerEnds_.push_back(firstDraw + end);
         }
@@ -672,12 +709,38 @@ std::optional<HardwareBatch> HardwareBatch::compose(std::span<const HardwareBatc
                                      layer->textureHashes_.begin(),
                                      layer->textureHashes_.end());
         for (auto draw : layer->draws_) {
-            draw.firstVertex += firstVertex;
+            if (draw.mesh)
+                draw.mesh += firstMesh;
+            else
+                draw.firstVertex += firstVertex;
             draw.texture += firstTexture;
             draw.lightMap += firstTexture;
             result.draws_.push_back(draw);
         }
     }
     return result;
+}
+
+std::shared_ptr<const HardwareMesh> HardwareMesh::create(std::vector<HardwareVertex> vertices,
+                                                         std::vector<UInt32> indices) {
+    if (vertices.empty() || vertices.size() > 4'194'304 || indices.empty() ||
+        indices.size() > 12'582'912 || indices.size() % 3 ||
+        !std::ranges::all_of(indices,
+                             [&](auto i) {
+                                 return i < vertices.size();
+                             }) ||
+        !std::ranges::all_of(vertices, [](const auto& v) {
+            return std::isfinite(v.position.x) && std::isfinite(v.position.y) &&
+                   std::isfinite(v.inverseDepth) && bounded(v.texture.x, 65536) &&
+                   bounded(v.texture.y, 65536) && bounded(v.lightMap.x, 65536) &&
+                   bounded(v.lightMap.y, 65536) && unit(v.color) && unit(v.haze) && unit(v.opacity);
+        }))
+        return {};
+    static std::atomic<UInt64> next{1};
+    auto mesh = std::make_shared<HardwareMesh>();
+    mesh->vertices_ = std::move(vertices);
+    mesh->indices_ = std::move(indices);
+    mesh->revision_ = next.fetch_add(1, std::memory_order_relaxed);
+    return mesh;
 }
 } // namespace opent1::gfx

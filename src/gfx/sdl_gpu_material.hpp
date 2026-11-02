@@ -33,7 +33,7 @@ private:
 
     SDL_GPUDevice* device_;
     SDL_GPUFence* frameFence_{};
-    std::array<SDL_GPUGraphicsPipeline*, 20> pipelines_{};
+    std::array<SDL_GPUGraphicsPipeline*, 40> pipelines_{};
     std::array<SDL_GPUSampler*, 24> samplers_{};
 
     struct Targets {
@@ -49,6 +49,15 @@ private:
     SDL_GPUTransferBuffer* transfer_{};
     GpuResourceStats resources_;
     GpuSubmissionStats submission_;
+
+    struct CachedMesh {
+        std::shared_ptr<const HardwareMesh> source;
+        SDL_GPUBuffer *vertices{}, *indices{};
+        std::size_t bytes{};
+        bool pinned{};
+    };
+
+    std::unordered_map<UInt64, CachedMesh> meshes_;
     bool prepareResources(Int32 width, Int32 height, UInt32 vertices, UInt32 transfer, bool gamma);
 
     struct CachedTexture {

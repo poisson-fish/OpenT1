@@ -18,9 +18,14 @@ struct Output {
     float haze [[user(locn2)]];
     float2 lightMap [[user(locn3)]];
     float opacity [[user(locn4)]];
+    float cameraDepth [[user(locn5)]];
 };
 
-vertex Output main0(Input v [[stage_in]], constant float4& frame [[buffer(0)]]) {
+struct Frame {
+    float4 frame, camera[3], optics, geometryClip;
+};
+vertex Output main0(Input v [[stage_in]], constant Frame& f [[buffer(0)]]) {
+    float4 frame = f.frame;
     Output o;
     float w = frame.z != 0 ? 1.0 / v.inverseDepth : 1.0;
     o.position = float4(v.position.x * 2.0 / frame.x - 1.0,
@@ -33,5 +38,14 @@ vertex Output main0(Input v [[stage_in]], constant float4& frame [[buffer(0)]]) 
     o.haze = v.haze;
     o.lightMap = v.lightMap;
     o.opacity = v.opacity;
+    o.cameraDepth = 0;
+    if (frame.w != 0) {
+        float4 local = float4(v.position, v.inverseDepth, 1);
+        float3 p = float3(dot(local, f.camera[0]), dot(local, f.camera[1]), dot(local, f.camera[2]));
+        o.position = float4((p.x * f.optics.x + p.y * f.optics.z) * 2 / frame.x - p.y,
+                            p.y - (p.y * f.optics.w - p.z * f.optics.y) * 2 / frame.y,
+                            1.0 / 65536.0, p.y);
+        o.cameraDepth = p.y;
+    }
     return o;
 }

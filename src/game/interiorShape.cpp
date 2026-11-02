@@ -418,9 +418,6 @@ void InteriorShape::clientProcess(UInt32 curTime) {
         const Flt32 floatStep = static_cast<Flt32>(timeStep * 67U) / 1000.0f;
         if (lightPlayer_) {
             lightPlayer_->advance(floatStep);
-            if (!std::ranges::equal(lightPlayer_->slots(), cachedLightSlots_)) {
-                cachedSurfaceMesh_.reset();
-            }
         }
     }
 }
@@ -474,20 +471,27 @@ bool InteriorShape::processQuery(sim::SimQuery& query) {
             wsq->failed = true;
             return true;
         }
-        if (!cachedSurfaceMesh_) {
+        if (!cachedSurfaceMesh_ || lightMapsInvalidated_ ||
+            (lightPlayer_ && !std::ranges::equal(lightPlayer_->slots(), cachedLightSlots_))) {
             world::InteriorSurfaceLighting lighting;
+            lighting.previous = cachedSurfaceMesh_.get();
+            lighting.refreshMaps = lightMapsInvalidated_;
             lighting.seconds = static_cast<Flt32>(lastUpdatedTime_) * 0.001f;
             if (lightPlayer_) {
                 lighting.slots = lightPlayer_->slots();
             }
             if (auto mesh =
                     world::WorldSurfaceMesh::interior(*shapeResources_, 0, 0, true, lighting)) {
+                lightMapsInvalidated_ = false;
                 cachedSurfaceMesh_ =
                     std::make_shared<const world::WorldSurfaceMesh>(std::move(*mesh));
                 cachedLightSlots_ =
                     lightPlayer_ ? std::vector<world::InteriorLightSlot>(
                                        lightPlayer_->slots().begin(), lightPlayer_->slots().end())
                                  : std::vector<world::InteriorLightSlot>{};
+            } else {
+                wsq->failed = true;
+                return true;
             }
         }
         if (!cachedSurfaceMesh_) {

@@ -1,4 +1,5 @@
 #include <opent1/world/world_surfaces.hpp>
+#include <opent1/gfx/render_stats.hpp>
 #include "collision_geometry.hpp"
 #include "interior_scene_lighting.hpp"
 
@@ -7,7 +8,7 @@ std::optional<UInt16> WorldSurfaceMesh::sampleLighting(Point3F point) const {
     if (!std::isfinite(point.x) || !std::isfinite(point.y) || !std::isfinite(point.z)) {
         return {};
     }
-    for (const auto& triangle : triangles) {
+    for (const auto& triangle : surfaceTriangles()) {
         if (!triangle.lightMap || !triangle.lightMap->valid()) {
             continue;
         }
@@ -317,6 +318,27 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::interior(const InteriorShapeRe
             return {};
         }
     }
+    const auto* previous = options.previous;
+    const bool reuse = previous && previous->interiorMesh &&
+                       previous->interiorMesh->source.get() == resources.geometry[lod].get() &&
+                       previous->interiorMesh->lighting.get() == lighting;
+    if (reuse) {
+        result.interiorMesh = previous->interiorMesh;
+        result.bounds = previous->bounds;
+    }
+    auto maps =
+        std::make_shared<std::vector<std::shared_ptr<const gfx::LightMap>>>(g.surfaces.size());
+    result.interiorMissionHandle = options.missionHandle;
+    for (const auto& handle : resources.missionLighting) {
+        if (handle.get() == mission)
+            result.interiorMissionHandle = handle;
+    }
+    result.interiorSceneAffected.resize(g.surfaces.size());
+    if (options.scene)
+        result.interiorSceneLighting = *options.scene;
+    std::vector<gfx::HardwareVertex> hardwareVertices;
+    std::vector<UInt32> hardwareIndices;
+    std::vector<std::array<UInt32, 2>> hardwareRanges(g.surfaces.size());
     std::size_t samples{};
     for (std::size_t i = 0; i < g.surfaces.size(); ++i) {
         const auto& s = g.surfaces[i];
@@ -345,30 +367,64 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::interior(const InteriorShapeRe
             if (samples > 16'777'216) {
                 return {};
             }
-            auto colors = lighting->lightmap(i, mission, *slots);
-            if (!colors) {
-                return {};
-            }
-            if (scene && !scene->merge(UInt32(i), *colors, samples)) {
-                return {};
-            }
-            auto prepared = std::make_shared<gfx::LightMap>();
-            prepared->offset = {ls.offsetX, ls.offsetY};
-            const auto width = std::max(1U, UInt32(ls.width)),
-                       height = std::max(1U, UInt32(ls.height));
-            prepared->size = {Int32(std::max(2U, width)), Int32(std::max(2U, height))};
-            for (Int32 y = 0; y < prepared->size.y; ++y) {
-                for (Int32 x = 0; x < prepared->size.x; ++x) {
-                    const auto index = std::size_t(std::min(UInt32(y), height - 1)) * width +
-                                       std::min(UInt32(x), width - 1);
-                    if (index >= colors->size()) {
-                        return {};
+            const bool sceneAffected =
+                scene && (!scene->pointLights(UInt32(i)).empty() ||
+                          (!resources.shape->linked && !mission && (s.flags & 0x40U)));
+            result.interiorSceneAffected[i] = sceneAffected;
+            const bool sameScene =
+                previous && ((!scene && !previous->interiorSceneLighting) ||
+                             (options.scene && previous->interiorSceneLighting &&
+                              *options.scene == *previous->interiorSceneLighting));
+            const bool unchanged =
+                reuse && !options.refreshMaps && previous->interiorMaps &&
+                (sameScene || (!sceneAffected && i < previous->interiorSceneAffected.size() &&
+                               !previous->interiorSceneAffected[i])) &&
+                previous->interiorMission == mission &&
+                (!mission ||
+                 (result.interiorMissionHandle &&
+                  result.interiorMissionHandle.get() == previous->interiorMissionHandle.get())) &&
+                ls.lightIndex >= 0 && ls.lightCount >= 0 &&
+                std::size_t(ls.lightIndex) + ls.lightCount <= slots->size() &&
+                previous->interiorSlots.size() == slots->size() &&
+                std::equal(slots->begin() + ls.lightIndex,
+                           slots->begin() + ls.lightIndex + ls.lightCount,
+                           previous->interiorSlots.begin() + ls.lightIndex);
+            if (unchanged) {
+                map = (*previous->interiorMaps)[i];
+            } else {
+                auto colors = lighting->lightmap(i, mission, *slots);
+                if (!colors) {
+                    return {};
+                }
+                if (scene && !scene->merge(UInt32(i), *colors, samples)) {
+                    return {};
+                }
+                auto prepared = std::make_shared<gfx::LightMap>();
+                prepared->offset = {ls.offsetX, ls.offsetY};
+                const auto width = std::max(1U, UInt32(ls.width)),
+                           height = std::max(1U, UInt32(ls.height));
+                prepared->size = {Int32(std::max(2U, width)), Int32(std::max(2U, height))};
+                for (Int32 y = 0; y < prepared->size.y; ++y) {
+                    for (Int32 x = 0; x < prepared->size.x; ++x) {
+                        const auto index = std::size_t(std::min(UInt32(y), height - 1)) * width +
+                                           std::min(UInt32(x), width - 1);
+                        if (index >= colors->size()) {
+                            return {};
+                        }
+                        prepared->samples.push_back((*colors)[index]);
                     }
-                    prepared->samples.push_back((*colors)[index]);
+                }
+                map = std::move(prepared);
+                if (gfx::currentRenderWorkStats) {
+                    ++gfx::currentRenderWorkStats->interiorLightMapBuilds;
+                    gfx::currentRenderWorkStats->interiorLightMapBytes +=
+                        map->samples.size() * sizeof(UInt16);
                 }
             }
-            map = std::move(prepared);
         }
+        (*maps)[i] = map;
+        if (reuse)
+            continue;
         std::vector<StaticSurfaceVertex> vertices;
         for (const auto v : std::span(g.vertices).subspan(s.firstVertex, s.vertexCount)) {
             if (v.point >= g.points.size() || v.texture >= g.texturePoints.size()) {
@@ -397,6 +453,19 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::interior(const InteriorShapeRe
         if (vertices.size() - 2 > 1'048'576 - result.triangles.size()) {
             return {};
         }
+        const auto first = UInt32(hardwareVertices.size());
+        hardwareRanges[i] = {UInt32(hardwareIndices.size()), UInt32((vertices.size() - 2) * 3)};
+        for (const auto& vertex : vertices) {
+            gfx::HardwareVertex v;
+            v.position = {vertex.position.x, vertex.position.y};
+            v.inverseDepth = vertex.position.z;
+            v.texture = texture ? vertex.texture : Point2F{};
+            v.lightMap = vertex.lightMap;
+            hardwareVertices.push_back(v);
+        }
+        for (UInt32 j = 1; j + 1 < vertices.size(); ++j) {
+            hardwareIndices.insert(hardwareIndices.end(), {first, first + j, first + j + 1});
+        }
         std::shared_ptr<NativeSurfaceTexture> software;
         if (lighting && texture) {
             software = std::make_shared<NativeSurfaceTexture>();
@@ -422,15 +491,165 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::interior(const InteriorShapeRe
             result.interiorSurfaceIds.push_back(UInt32(i));
         });
     }
-    return computeBounds(result) ? std::optional(std::move(result)) : std::nullopt;
+    if (!reuse) {
+        if (!computeBounds(result))
+            return {};
+        auto geometry = std::make_shared<InteriorMesh>();
+        geometry->source = resources.geometry[lod];
+        if (lighting)
+            geometry->lighting = resources.lighting[std::size_t(
+                UInt64(resources.shape->lods[lod].firstLightState) + state)];
+        geometry->triangles = std::move(result.triangles);
+        geometry->surfaceIds = std::move(result.interiorSurfaceIds);
+        geometry->materials = resources.materials;
+        geometry->ranges = std::move(hardwareRanges);
+        if (!hardwareIndices.empty()) {
+            geometry->hardware =
+                gfx::HardwareMesh::create(std::move(hardwareVertices), std::move(hardwareIndices));
+            if (!geometry->hardware)
+                return {};
+        }
+        for (auto& triangle : geometry->triangles)
+            triangle.lightMap.reset();
+        // Weak canonical cache preserves repeated instances without retaining old missions.
+        static thread_local std::vector<std::weak_ptr<const InteriorMesh>> canonical;
+        std::erase_if(canonical, [](const auto& entry) {
+            return entry.expired();
+        });
+        for (const auto& weak : canonical) {
+            const auto entry = weak.lock();
+            if (entry->source.get() == geometry->source.get() &&
+                entry->lighting.get() == geometry->lighting.get() &&
+                std::ranges::equal(entry->materials.textures,
+                                   resources.materials.textures,
+                                   [](const auto& a, const auto& b) {
+                                       return a.get() == b.get();
+                                   }) &&
+                std::ranges::equal(entry->materials.list.materials,
+                                   resources.materials.list.materials,
+                                   [](const auto& a, const auto& b) {
+                                       return a.flags == b.flags;
+                                   })) {
+                result.interiorMesh = entry;
+                break;
+            }
+        }
+        if (!result.interiorMesh) {
+            result.interiorMesh = std::move(geometry);
+            if (canonical.size() < 4096)
+                canonical.push_back(result.interiorMesh);
+        }
+        if (gfx::currentRenderWorkStats)
+            ++gfx::currentRenderWorkStats->interiorGeometryBuilds;
+    }
+    result.interiorMaps = std::move(maps);
+    if (slots)
+        result.interiorSlots = std::move(*slots);
+    result.interiorMission = mission;
+    return result;
 }
 
 std::optional<TsStaticShapeFrame> WorldSurfaceMesh::prepare(const TsStaticView& view) const {
-    return TsStaticShapeFrame::prepareSurfaces(materials, triangles, view);
+    if (!interiorMesh)
+        return TsStaticShapeFrame::prepareSurfaces(materials, triangles, view);
+    std::vector<StaticSurfaceTriangle> selected;
+    selected.reserve(triangleCount());
+    for (auto triangle : surfaceTriangles())
+        selected.push_back(std::move(triangle));
+    return TsStaticShapeFrame::prepareSurfaces(materials, selected, view);
+}
+
+bool WorldSurfaceMesh::retainedHardwareCompatible() const {
+    return interiorMesh && interiorMesh->hardware &&
+           std::ranges::none_of(materials.list.materials, [](const auto& m) {
+               return (m.flags & 0x2000U) != 0;
+           });
+}
+
+std::optional<std::vector<gfx::HardwarePolygon>> WorldSurfaceMesh::hardwareInterior(
+    const TsStaticView& view, const gfx::Palette& palette, Flt32 gamma) const {
+    if (!retainedHardwareCompatible() || !view.perspective || !palette.valid() ||
+        !std::isfinite(gamma) || gamma < .05f || gamma > 20)
+        return {};
+    // Ordinary preparation validates all material/texture encodings. Placeholder coverage
+    // carries material state only; the hardware batch uses immutable indexed local vertices.
+    static const std::array<gfx::PolygonVertex, 3> placeholder{{{{0, 0}}, {{1, 0}}, {{0, 1}}}};
+    static const std::array<Point2F, 3> lightUV{};
+    gfx::HardwareTransform transform;
+    for (std::size_t i = 0; i < 3; ++i) {
+        transform.camera[i] = {view.shapeToCamera.m[0][i],
+                               view.shapeToCamera.m[1][i],
+                               view.shapeToCamera.m[2][i],
+                               view.shapeToCamera.p[i]};
+    }
+    transform.optics = {view.focal.x, view.focal.y, view.center.x, view.center.y};
+    transform.clip = {view.nearDistance, view.farDistance, 1, 0};
+    std::vector<gfx::HardwarePolygon> polygons;
+    for (std::size_t i = 0; i < interiorMesh->ranges.size(); ++i) {
+        const auto range = interiorMesh->ranges[i];
+        if (!range[1] ||
+            (interiorSelection && !std::ranges::binary_search(*interiorSelection, UInt32(i))))
+            continue;
+        const auto id = interiorMesh->source->surfaces[i].material;
+        const auto& source = materials.list.materials[id];
+        gfx::HardwareMaterial material;
+        material.color = {1, 1, 1};
+        if (source.type() == 1) {
+            if (source.index < 0 || source.index > 255)
+                return {};
+            const auto c = palette.find().colors[std::size_t(source.index)];
+            material.color = {Flt32(c.red) / 255, Flt32(c.green) / 255, Flt32(c.blue) / 255};
+            for (std::size_t cidx = 0; cidx < 3; ++cidx)
+                material.color[cidx] = Flt32(std::pow(material.color[cidx], double(1.f / gamma)));
+        } else if (source.type() == 2) {
+            material.color = {
+                Flt32(source.rgb[0]) / 255, Flt32(source.rgb[1]) / 255, Flt32(source.rgb[2]) / 255};
+        } else if (source.type() == 3) {
+            material.texture = materials.textures[id].get();
+            if (!material.texture)
+                return {};
+            material.wrap = true;
+            material.linear = true;
+            material.useSurfacePalette = true;
+            material.magnificationLinear =
+                (material.texture->attributes & gfx::BitmapTransparent) == 0;
+            material.mipFilter = material.texture->detailLevels > 1
+                                     ? gfx::HardwareMipFilter::Nearest
+                                     : gfx::HardwareMipFilter::None;
+            material.transparent = (source.flags & 0x1000U) != 0;
+            material.alphaCutoff = material.transparent ? .65f : 0;
+            if (!material.transparent)
+                material.alphaSource = gfx::HardwareAlphaSource::Opaque;
+            if (material.texture->bitDepth == 8 && gamma != 1) {
+                material.paletteMode = gfx::HardwarePaletteMode::OpenGL;
+                material.paletteGamma = gamma;
+            }
+        } else
+            return {};
+        material.lightMap = interiorMaps ? (*interiorMaps)[i].get() : nullptr;
+        gfx::HardwarePolygon polygon{placeholder,
+                                     material,
+                                     material.lightMap ? std::span<const Point2F>(lightUV)
+                                                       : std::span<const Point2F>{}};
+        polygon.mesh = interiorMesh->hardware;
+        polygon.transform = transform;
+        polygon.firstIndex = range[0];
+        polygon.indexCount = range[1];
+        polygons.push_back(std::move(polygon));
+    }
+    return polygons;
 }
 
 std::optional<WorldSurfaceMesh>
 WorldSurfaceMesh::visibleInterior(std::span<const UInt32> surfaces) const {
+    if (interiorMesh) {
+        if (surfaces.size() > 65536 || !std::ranges::is_sorted(surfaces) ||
+            std::ranges::adjacent_find(surfaces) != surfaces.end())
+            return {};
+        WorldSurfaceMesh result = *this;
+        result.interiorSelection.emplace(surfaces.begin(), surfaces.end());
+        return result;
+    }
     if (triangles.size() != interiorSurfaceIds.size() || triangles.size() > 1'048'576 ||
         surfaces.size() > 65536 || !std::ranges::is_sorted(surfaces) ||
         std::ranges::adjacent_find(surfaces) != surfaces.end()) {
@@ -487,10 +706,10 @@ collectShadowReceivers(const sim::ShadowSourceWindow& w,
         }
         for (const auto& instance : instances) {
             if (!instance.mesh || !rigid(instance.placement) ||
-                instance.mesh->triangles.size() > 1'048'576) {
+                instance.mesh->triangleCount() > 1'048'576) {
                 return {};
             }
-            for (const auto& t : instance.mesh->triangles) {
+            for (const auto& t : instance.mesh->surfaceTriangles()) {
                 spend(work);
                 if (t.material >= instance.mesh->materials.list.materials.size()) {
                     return {};
@@ -637,7 +856,7 @@ worldShadowGeometry(const sim::ShadowSourceWindow& window,
                 if (!instance.mesh || !collision_detail::rigid(instance.placement)) {
                     return {};
                 }
-                for (const auto& triangle : instance.mesh->triangles) {
+                for (const auto& triangle : instance.mesh->surfaceTriangles()) {
                     collision_detail::spend(work);
                     if (triangle.material >= instance.mesh->materials.list.materials.size()) {
                         return {};

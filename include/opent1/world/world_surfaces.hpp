@@ -19,6 +19,9 @@ struct InteriorSurfaceLighting {
     std::optional<std::span<const InteriorLightSlot>>
         slots;                 // retained playback slots, copied into owned maps
     const TsLighting* scene{}; // local-space scene lights, borrowed only during preparation
+    const struct WorldSurfaceMesh* previous{}; // immutable snapshot for independent dirty maps
+    Resource<InteriorLighting> missionHandle;  // optional owning identity for an explicit override
+    bool refreshMaps{}; // explicit invalidation retains geometry but rebuilds lighting
 };
 
 struct TerrainLodWindow {
@@ -79,6 +82,25 @@ private:
 // Immutable after publication. Each triangle keeps local geometry for receivers
 // and the same UV/material/lighting input for software and GPU rendering.
 struct WorldSurfaceMesh {
+    struct InteriorMesh {
+        Resource<InteriorGeometry> source;
+        Resource<InteriorLighting> lighting;
+        std::vector<StaticSurfaceTriangle> triangles;
+        std::vector<UInt32> surfaceIds;
+        TsMaterialResources materials;
+        std::shared_ptr<const gfx::HardwareMesh> hardware;
+        std::vector<std::array<UInt32, 2>> ranges; // first index/count by authored surface
+    };
+
+    // Interior snapshots share local geometry, independently of maps and visibility.
+    std::shared_ptr<const InteriorMesh> interiorMesh;
+    std::shared_ptr<const std::vector<std::shared_ptr<const gfx::LightMap>>> interiorMaps;
+    std::vector<InteriorLightSlot> interiorSlots;
+    const InteriorLighting* interiorMission{}; // identity only, retained by provider/resources
+    Resource<InteriorLighting> interiorMissionHandle;
+    std::optional<TsLighting> interiorSceneLighting;
+    std::vector<bool> interiorSceneAffected;
+    std::optional<std::vector<UInt32>> interiorSelection;
     TsMaterialResources materials;
     std::vector<StaticSurfaceTriangle> triangles;
     std::vector<UInt32>
@@ -87,6 +109,32 @@ struct WorldSurfaceMesh {
     // Retained with the frame for source traces and cache/geometry diagnosis.
     std::vector<std::array<UInt32, 4>> terrainSquareIds;
     Box3F bounds;
+
+    [[nodiscard]] auto surfaceTriangles() const {
+        const auto source = interiorMesh
+                                ? std::span<const StaticSurfaceTriangle>(interiorMesh->triangles)
+                                : std::span<const StaticSurfaceTriangle>(triangles);
+        return std::views::iota(std::size_t{}, source.size()) | std::views::filter([this](auto i) {
+                   return !interiorMesh || !interiorSelection ||
+                          std::ranges::binary_search(*interiorSelection,
+                                                     interiorMesh->surfaceIds[i]);
+               }) |
+               std::views::transform([this, source](auto i) {
+                   auto triangle = source[i];
+                   if (interiorMesh && interiorMaps)
+                       triangle.lightMap = (*interiorMaps)[interiorMesh->surfaceIds[i]];
+                   return triangle;
+               });
+    }
+
+    [[nodiscard]] std::size_t triangleCount() const {
+        if (!interiorMesh)
+            return triangles.size();
+        if (!interiorSelection)
+            return interiorMesh->triangles.size();
+        return std::size_t(std::ranges::distance(surfaceTriangles()));
+    }
+
     // Region selects intersecting full-resolution cells in grid-local XY. Use
     // bounded patches for large terrains, or terrainLod() for adaptive geometry.
     [[nodiscard]] static std::optional<WorldSurfaceMesh> terrain(const TerrainGridResources&,
@@ -108,6 +156,9 @@ struct WorldSurfaceMesh {
              bool bakedLighting = true,
              const InteriorSurfaceLighting& = {});
     [[nodiscard]] std::optional<TsStaticShapeFrame> prepare(const TsStaticView&) const;
+    [[nodiscard]] bool retainedHardwareCompatible() const;
+    [[nodiscard]] std::optional<std::vector<gfx::HardwarePolygon>>
+    hardwareInterior(const TsStaticView&, const gfx::Palette&, Flt32 gamma = 1) const;
     // Select from a complete interior mesh while retaining its immutable maps.
     [[nodiscard]] std::optional<WorldSurfaceMesh>
     visibleInterior(std::span<const UInt32> surfaces) const;

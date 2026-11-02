@@ -8,10 +8,11 @@ struct Input {
     float haze [[user(locn2)]];
     float2 lightMap [[user(locn3)]];
     float opacity [[user(locn4)]];
+    float cameraDepth [[user(locn5)]];
 };
 
 struct Material {
-    float4 tint, hazeColor, options, alphaControls;
+    float4 tint, hazeColor, options, alphaControls, geometryClip;
 };
 
 fragment float4 main0(Input v [[stage_in]],
@@ -20,6 +21,7 @@ fragment float4 main0(Input v [[stage_in]],
                       texture2d<float> lightMap [[texture(1)]],
                       sampler lightMapSampler [[sampler(1)]],
                       constant Material& m [[buffer(0)]]) {
+    if (m.geometryClip.z != 0 && (v.cameraDepth < m.geometryClip.x || v.cameraDepth > m.geometryClip.y)) discard_fragment();
     if (m.alphaControls.z == 2)
         return float4(m.hazeColor.rgb, saturate(v.haze));
     float4 texel = image.sample(imageSampler, v.uv, bias(m.options.z));

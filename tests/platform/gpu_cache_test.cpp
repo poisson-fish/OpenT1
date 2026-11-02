@@ -1,5 +1,6 @@
 #include "test_support.hpp"
 #include <opent1/gfx/sdl_gpu_surface.hpp>
+#include <opent1/world/world_surfaces.hpp>
 #include <array>
 #include <string_view>
 
@@ -61,6 +62,125 @@ void retainedWorkingSet(platform::SdlWindow& window) {
           pixels[2] == std::byte{64});
 }
 
+void retainedMesh(platform::SdlWindow& window) {
+    auto surface = gfx::SdlGpuSurface::create(window, 16, 16);
+    CHECK(surface);
+    std::vector<gfx::HardwareVertex> vertices(3);
+    vertices[0].position = {-1, 4};
+    vertices[0].inverseDepth = -1;
+    vertices[1].position = {0, 4};
+    vertices[1].inverseDepth = 1;
+    vertices[2].position = {1, 4};
+    vertices[2].inverseDepth = -1;
+    const auto mesh = gfx::HardwareMesh::create(vertices, {0, 1, 2});
+    CHECK(mesh && !gfx::HardwareMesh::create(vertices, {0, 1, 9}));
+    const std::array<gfx::PolygonVertex, 3> placeholder{{{{0, 0}}, {{1, 0}}, {{0, 1}}}};
+    gfx::HardwareMaterial material;
+    material.color = {1, 0, 0};
+    gfx::HardwarePolygon polygon{placeholder, material};
+    polygon.mesh = mesh;
+    polygon.indexCount = 3;
+    polygon.transform.camera = {{{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}}};
+    polygon.transform.optics = {16, 16, 8, 8};
+    polygon.transform.clip = {.1f, 100, 1, 0};
+    auto batch = gfx::HardwareBatch::prepare(std::span(&polygon, 1));
+    CHECK(batch && batch->vertices().empty() && batch->meshes().size() == 1);
+    CHECK(surface->render(*batch));
+    std::vector<std::byte> pixels(16 * 16 * 4);
+    CHECK(surface->readback(pixels));
+    CHECK(pixels[(8 * 16 + 8) * 4] == std::byte{255});
+    const auto warm = surface->resourceStats();
+    CHECK(warm.meshUploads == 1 && warm.meshAllocations == 2);
+    polygon.transform.camera[0][3] = .25f;
+    batch = gfx::HardwareBatch::prepare(std::span(&polygon, 1));
+    CHECK(batch && surface->render(*batch));
+    CHECK(surface->resourceStats().meshUploads == warm.meshUploads);
+    CHECK(surface->submissionStats().meshUploadBytes == 0);
+    // Near/far clipping applies per fragment while retaining the shared inverse depth convention.
+    polygon.transform.clip[0] = 5;
+    batch = gfx::HardwareBatch::prepare(std::span(&polygon, 1));
+    CHECK(batch && surface->render(*batch) && surface->readback(pixels));
+    CHECK(pixels[(8 * 16 + 8) * 4] == std::byte{0});
+    const auto empty = gfx::HardwareBatch::prepare({});
+    CHECK(empty && surface->render(*empty));
+    CHECK(surface->resourceStats().meshUploads == warm.meshUploads);
+}
+
+void interiorReadbacks(platform::SdlWindow& window) {
+    ResourceManager manager;
+    auto shape = std::make_unique<world::InteriorShape>();
+    shape->lods.resize(1);
+    shape->lightStateNames.resize(1);
+    auto geometry = std::make_unique<world::InteriorGeometry>();
+    geometry->points = {{-1, 0, -1}, {-1, 0, 1}, {1, 0, 1}, {1, 0, -1}};
+    geometry->texturePoints = {{0, 1}, {0, 0}, {1, 0}, {1, 1}};
+    geometry->vertices = {{0, 0}, {1, 1}, {2, 2}, {3, 3}};
+    world::InteriorSurface face;
+    face.vertexCount = 4;
+    geometry->surfaces.push_back(face);
+    auto lighting = std::make_unique<world::InteriorLighting>();
+    lighting->surfaces = {{0x800007cdU, 0, 0, 1, 1, 0, 0}};
+    auto bitmap = gfx::Bitmap::create(2, 2);
+    CHECK(bitmap);
+    bitmap->pixels[0] = std::byte{0};
+    bitmap->pixels[1] = std::byte{1};
+    bitmap->pixels[bitmap->stride()] = std::byte{2};
+    bitmap->pixels[bitmap->stride() + 1] = std::byte{3};
+    CHECK(manager.add("gpu.dis", std::move(shape)) && manager.add("gpu.dig", std::move(geometry)) &&
+          manager.add("gpu.dil", std::move(lighting)) && manager.add("gpu.bmp", std::move(bitmap)));
+    world::InteriorShapeResources resources;
+    resources.shape = manager.load<world::InteriorShape>("gpu.dis");
+    resources.geometry.push_back(manager.load<world::InteriorGeometry>("gpu.dig"));
+    resources.lighting.push_back(manager.load<world::InteriorLighting>("gpu.dil"));
+    resources.materials.list.materials.resize(1);
+    resources.materials.list.materials[0].flags = 3;
+    resources.materials.textures.push_back(manager.load<gfx::Bitmap>("gpu.bmp"));
+    auto surface = gfx::SdlGpuSurface::create(window, 64, 64);
+    CHECK(surface);
+    gfx::Palette palette;
+    palette.palettes[0].colors[0] = {0, 0, 0, 0};
+    palette.palettes[0].colors[1] = {255, 0, 0, 0};
+    palette.palettes[0].colors[2] = {0, 255, 0, 0};
+    palette.palettes[0].colors[3] = {0, 0, 255, 0};
+    for (bool cutout : {false, true}) {
+        resources.materials.list.materials[0].flags = 3 | (cutout ? 0x1000U : 0);
+        const auto mesh = world::WorldSurfaceMesh::interior(resources);
+        CHECK(mesh);
+        for (Flt32 gamma : {1.f, 1.7f}) {
+            for (Flt32 distance : {.08f, .2f, 5.f, 19.8f, 21.f}) {
+                for (Flt32 angle : {-.8f, 0.f, .8f, 3.1415927f}) {
+                    world::TsStaticView view;
+                    view.width = view.height = 64;
+                    view.focal = {32, 32};
+                    view.center = {32, 32};
+                    view.nearDistance = .1f;
+                    view.farDistance = 20;
+                    view.shapeToCamera = TMat3F(EulerF{0, 0, angle}, {0, distance, 0});
+                    const auto projected = mesh->prepare(view);
+                    CHECK(projected);
+                    const auto reference = projected->hardware(&palette, gamma);
+                    const auto polygons = mesh->hardwareInterior(view, palette, gamma);
+                    CHECK(reference && polygons);
+                    const auto retained = gfx::HardwareBatch::prepare(*polygons, &palette);
+                    CHECK(retained && surface->render(*reference));
+                    std::vector<std::byte> a(64 * 64 * 4), b(a.size());
+                    CHECK(surface->readback(a) && surface->render(*retained) &&
+                          surface->readback(b));
+                    unsigned largeErrors{};
+                    for (std::size_t p = 0; p < a.size(); p += 4) {
+                        bool large{};
+                        for (std::size_t c = 0; c < 3; ++c)
+                            large |= std::abs(int(a[p + c]) - int(b[p + c])) > 2;
+                        largeErrors += large;
+                    }
+                    CHECK(largeErrors <= 20); // at most subpixel clipped/diagonal edge differences
+                }
+            }
+            std::swap(palette.palettes[0].colors[1], palette.palettes[0].colors[2]);
+        }
+    }
+}
+
 int gpuCache() {
     return test::run([] {
         platform::SdlApplication app;
@@ -75,6 +195,8 @@ int gpuCache() {
         config.width = config.height = 16;
         auto& window = app.createWindow(config);
         retainedWorkingSet(window);
+        retainedMesh(window);
+        interiorReadbacks(window);
     });
 }
 }

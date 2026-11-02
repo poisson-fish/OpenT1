@@ -89,7 +89,7 @@ public:
     }
 
     void invalidateLightMaps() {
-        cachedSurfaceMesh_.reset();
+        lightMapsInvalidated_ = true;
     }
 
     [[nodiscard]] const std::vector<UInt32>& checkVals() const noexcept {
@@ -217,6 +217,7 @@ private:
     std::shared_ptr<world::InteriorShapeResources> shapeResources_{};
     std::unique_ptr<world::InteriorLightPlayer> lightPlayer_{};
     mutable std::shared_ptr<const world::WorldSurfaceMesh> cachedSurfaceMesh_{};
+    bool lightMapsInvalidated_{};
     mutable std::shared_ptr<const world::WorldSurfaceMesh> visibleSource_, visibleMesh_;
     mutable std::vector<world::InteriorLightSlot> cachedLightSlots_;
     mutable std::vector<UInt32> visibleSurfaces_;

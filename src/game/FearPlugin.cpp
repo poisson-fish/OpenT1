@@ -5105,12 +5105,13 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
         // blurry and making a newly lit copy appear sharper than its base tile.
         const auto terrainTiming = hardware ? world::TerrainTextureTiming::RetainedLru
                                             : world::TerrainTextureTiming::NativeSoftware;
+        const bool retainedInteriors = hardware && !std::getenv("OPENT1_PROJECTED_INTERIORS");
         auto sceneFrame = world::WorldSceneFrame::captureContainers(
-            *activeWorld, envCam, volView, true, terrainTiming);
+            *activeWorld, envCam, volView, true, terrainTiming, retainedInteriors);
         if (!sceneFrame) {
             renderStats_.lightingFallback = true;
             sceneFrame = world::WorldSceneFrame::captureContainers(
-                *activeWorld, envCam, volView, false, terrainTiming);
+                *activeWorld, envCam, volView, false, terrainTiming, retainedInteriors);
         }
         if (sceneFrame) {
             renderStats_.captureMs = elapsed(captureStart);
@@ -5119,7 +5120,7 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
             std::size_t polyCount = 0;
             for (const auto& s : sceneFrame->surfaces()) {
                 if (s.mesh) {
-                    polyCount += s.mesh->triangles.size();
+                    polyCount += s.mesh->triangleCount();
                 }
             }
             for (const auto& sh : sceneFrame->shapes()) {

@@ -7,7 +7,8 @@
 namespace opent1::gfx::detail {
 class GpuMaterialRenderer {
 public:
-    [[nodiscard]] static std::unique_ptr<GpuMaterialRenderer> create(SDL_GPUDevice*);
+    [[nodiscard]] static std::unique_ptr<GpuMaterialRenderer>
+    create(SDL_GPUDevice*, std::size_t textureCacheEntries);
     ~GpuMaterialRenderer();
     [[nodiscard]] SDL_GPUTexture*
     render(const HardwareBatch&, Int32 width, Int32 height, const GpuFrameConfig&, Flt32 gamma);
@@ -27,7 +28,8 @@ public:
     void clearTextureCache() noexcept;
 
 private:
-    explicit GpuMaterialRenderer(SDL_GPUDevice* device) : device_(device) {}
+    explicit GpuMaterialRenderer(SDL_GPUDevice* device, std::size_t textureCacheEntries)
+        : device_(device), textureCacheEntries_(textureCacheEntries) {}
 
     SDL_GPUDevice* device_;
     SDL_GPUFence* frameFence_{};
@@ -61,5 +63,6 @@ private:
     using TextureIndex = std::unordered_multimap<UInt64, std::list<CachedTexture>::iterator>;
     TextureIndex textureIndex_;
     GpuTextureCacheStats stats_;
+    std::size_t textureCacheEntries_;
 };
 } // namespace opent1::gfx::detail

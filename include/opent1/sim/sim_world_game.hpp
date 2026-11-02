@@ -427,7 +427,9 @@ public:
     // Explicit monotonic wall-clock time (seconds), suitable for SDL callbacks
     // and deterministic replay. Paused scales (zero) retain event delays.
     bool setTimeScale(double);
-    void frame(double wallTime);
+    // Hosts which render after simulation/audio can skip the automatic canvas
+    // pass. Explicit script redraws still execute while advancing the world.
+    void frame(double wallTime, bool renderCanvases = true);
 
     [[nodiscard]] double simulationTime() const {
         return simTime_;

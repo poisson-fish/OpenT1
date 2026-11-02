@@ -303,7 +303,8 @@ bool GpuMaterialRenderer::prepareResources(
     return true;
 }
 
-std::unique_ptr<GpuMaterialRenderer> GpuMaterialRenderer::create(SDL_GPUDevice* device) {
+std::unique_ptr<GpuMaterialRenderer>
+GpuMaterialRenderer::create(SDL_GPUDevice* device, std::size_t textureCacheEntries) {
     if (!SDL_GPUTextureSupportsFormat(device,
                                       depthFormat,
                                       SDL_GPU_TEXTURETYPE_2D,
@@ -311,7 +312,8 @@ std::unique_ptr<GpuMaterialRenderer> GpuMaterialRenderer::create(SDL_GPUDevice* 
         SDL_SetError("Hardware materials require a D32 floating-point depth target");
         return {};
     }
-    auto result = std::unique_ptr<GpuMaterialRenderer>(new GpuMaterialRenderer(device));
+    auto result = std::unique_ptr<GpuMaterialRenderer>(
+        new GpuMaterialRenderer(device, textureCacheEntries));
     auto* vertex = shader(device, true);
     if (!vertex) {
         return {};
@@ -568,7 +570,7 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
         pending.size() + std::size_t(std::ranges::count_if(textures_, [](const auto& t) {
             return t.pinned;
         }));
-    const auto entryLimit = std::max(std::size_t{2048}, frameEntries);
+    const auto entryLimit = std::max(textureCacheEntries_, frameEntries);
     while (textures_.size() + pending.size() > entryLimit ||
            stats_.bytes + pendingBytes > Bitmap::MaxFileBytes) {
         const auto victim =

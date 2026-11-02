@@ -69,7 +69,7 @@ if(OPENT1_BUILD_AUDIO)
     list(APPEND suites audio)
 endif()
 if(OPENT1_BUILD_PLATFORM)
-    target_sources(opent1_tests PRIVATE platform/window_test.cpp)
+    target_sources(opent1_tests PRIVATE platform/window_test.cpp platform/gpu_cache_test.cpp)
     if(WIN32 AND TARGET SDL3::SDL3-shared)
         add_custom_command(
             TARGET opent1_tests

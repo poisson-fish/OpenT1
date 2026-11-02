@@ -296,6 +296,19 @@ protected:
                 gfx::GpuSurfaceConfig gpuCfg{};
                 gpuCfg.driver = opts_.gpuDriver;
                 gpuCfg.presentMode = gfx::GpuPresentMode::Immediate;
+                const auto cacheEntries =
+                    app_.console().getVariable("pref::GPUTextureCacheEntries");
+                if (!cacheEntries.empty()) {
+                    std::size_t entries{};
+                    const auto parsed = std::from_chars(
+                        cacheEntries.data(), cacheEntries.data() + cacheEntries.size(), entries);
+                    if (parsed.ec != std::errc{} ||
+                        parsed.ptr != cacheEntries.data() + cacheEntries.size() || !entries) {
+                        std::cerr << "Invalid pref::GPUTextureCacheEntries\n";
+                        return false;
+                    }
+                    gpuCfg.textureCacheEntries = entries;
+                }
                 try {
                     gpuSurface_ = gfx::SdlGpuSurface::create(win, 640, 480, gpuCfg);
                 } catch (...) {
@@ -831,7 +844,9 @@ protected:
                 ? (static_cast<double>(framesRun_ + 1u) * 0.032)
                 : (static_cast<double>(SDL_GetTicks() - startTicksMs_) * 0.001);
 
-        const bool keepGoing = app_.stepFrame(wallTimeSeconds);
+        // The SDL host renders once below, after prediction, GUI and audio
+        // updates. Keep the canvas callback for explicit script redraws.
+        const bool keepGoing = app_.stepFrame(wallTimeSeconds, false);
         if (opts_.verifyInput && framesRun_ == 3) {
             const auto* player =
                 cg.playerPSC ? dynamic_cast<Player*>(cg.playerPSC->getControlObject()) : nullptr;

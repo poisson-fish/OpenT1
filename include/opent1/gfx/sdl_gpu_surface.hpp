@@ -13,6 +13,9 @@ struct GpuSurfaceConfig {
     std::string driver; // empty selects an available SDL_GPU backend
     bool debug{};
     GpuPresentMode presentMode{GpuPresentMode::VSync};
+    // Retained content entries, not preallocated textures. Pixel payload is
+    // separately bounded to 64 MiB; driver alignment/metadata cost is extra.
+    std::size_t textureCacheEntries{8192};
 };
 
 struct GpuFrameConfig {
@@ -76,10 +79,11 @@ public:
     // each material/haze layer, preserving primitive and transparency order.
     // Waits for this surface's preceding hardware submission to bound memory.
     bool render(const HardwareBatch&, const GpuFrameConfig& = {});
-    // Per-device content cache: 2048 entries, expanded when needed by
-    // the current frame's native lightmaps; 64 MiB of GPU RGBA with shared
+    // Per-device content cache: configurable retained entries (8192 by default),
+    // expanded when needed by the current frame; 64 MiB of RGBA payload with shared
     // immutable CPU snapshots for collision-safe comparison. Hits/uploads count
     // successful frames; evictions include explicit clears and failed frames.
+    // Payload bytes exclude driver allocation alignment, descriptors and metadata.
     [[nodiscard]] GpuTextureCacheStats textureCacheStats() const noexcept;
     // Cumulative successful allocation counts and retained buffer capacities.
     [[nodiscard]] GpuResourceStats resourceStats() const noexcept;

@@ -49,6 +49,7 @@ struct SdlGpuSurface::Impl {
     bool uploaded{};
     std::string driver;
     GpuPresentMode presentMode{GpuPresentMode::VSync};
+    std::size_t textureCacheEntries{};
 
     ~Impl() {
         cleanup.reset();
@@ -148,11 +149,12 @@ std::unique_ptr<SdlGpuSurface> SdlGpuSurface::create(platform::SdlWindow& window
                                                      const GpuSurfaceConfig& config) {
     if (!window.nativeHandle() || !framebufferPitch(width, height) ||
         config.presentMode > GpuPresentMode::Mailbox ||
-        config.driver.find('\0') != config.driver.npos) {
+        config.driver.find('\0') != config.driver.npos || !config.textureCacheEntries) {
         SDL_SetError("Invalid GPU framebuffer configuration");
         return {};
     }
     auto impl = std::make_unique<Impl>();
+    impl->textureCacheEntries = config.textureCacheEntries;
     constexpr auto formats = SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXBC |
                              SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL;
     impl->device = SDL_CreateGPUDevice(
@@ -403,7 +405,7 @@ bool SdlGpuSurface::render(const HardwareBatch& batch, const GpuFrameConfig& con
         return SDL_SetError("GPU material window is closed");
     }
     if (!s.materials) {
-        s.materials = detail::GpuMaterialRenderer::create(s.device);
+        s.materials = detail::GpuMaterialRenderer::create(s.device, s.textureCacheEntries);
         if (!s.materials) {
             return false;
         }

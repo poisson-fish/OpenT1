@@ -162,3 +162,14 @@ updates into recycled dynamic-overlay allocations; subtract `gpuReuses` from
 Compare counter differences across a warmed-up capture rather than cumulative
 startup totals. The `total` timing covers rendering, GPU submission, and
 presentation; simulation and audio updates occur outside that interval.
+
+The hardware texture cache retains up to 8192 distinct content entries by
+default, growing when necessary to fit the current frame. Set the startup
+preference `$pref::GPUTextureCacheEntries` to a positive count to tune retention
+for a device; embedders use `GpuSurfaceConfig::textureCacheEntries`. The separate
+64 MiB limit counts RGBA payload, including mipmaps, rather than actual GPU
+allocation cost or the shared CPU snapshots. Driver alignment, descriptors and
+metadata consume additional memory. In particular, the bundled SDL D3D12 backend
+creates committed textures with 64 KiB alignment, even for tiny lightmaps.
+Use warmed-up upload/eviction deltas and device memory measurements together;
+raising the entry count does not reserve that many textures up front.

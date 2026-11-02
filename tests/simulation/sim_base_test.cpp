@@ -383,7 +383,40 @@ void persistence() {
 }
 }
 
+namespace {
+void hostOwnedRendering() {
+    struct Canvas : SimCanvas {
+        unsigned renders{};
+        bool setTitle(std::string_view) override {
+            return true;
+        }
+        void renderFrame() override {
+            ++renders;
+        }
+    };
+    SimGame game;
+    auto world = std::make_unique<SimWorld>();
+    auto* canvas = add<Canvas>(world->manager());
+    CHECK(game.setWorld(WorldType::Client, std::move(world)));
+    game.frame(0, false);
+    CHECK(canvas->renders == 0);
+    game.frame(.1);
+    CHECK(canvas->renders == 1);
+    game.console().addCommand(
+        0, "explicitRender", [canvas](Console&, Int32, std::span<const std::string>) {
+            canvas->renderFrame();
+            return std::string{};
+        });
+    CHECK(SimConsoleEvent::schedule(*canvas, "explicitRender();", .05f));
+    game.frame(.2, false);
+    CHECK(canvas->renders == 2);
+    game.frame(.3);
+    CHECK(canvas->renders == 3);
+}
+}
+
 int opent1_test_sim_base() {
+    hostOwnedRendering();
     legacyScale();
     graph();
     borrowedAndOrdering();

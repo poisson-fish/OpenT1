@@ -5596,7 +5596,7 @@ bool FearGameApp::init(std::span<const std::string_view> commandLineArgs) {
     return true;
 }
 
-bool FearGameApp::stepFrame(double wallTimeSeconds) {
+bool FearGameApp::stepFrame(double wallTimeSeconds, bool renderCanvases) {
     if (!initialized_ && !init()) {
         return false;
     }
@@ -5608,7 +5608,7 @@ bool FearGameApp::stepFrame(double wallTimeSeconds) {
         simulationWallTime_ += std::min(wallTimeSeconds - lastWallTime_, .256);
     }
     lastWallTime_ = wallTimeSeconds;
-    game_.frame(simulationWallTime_);
+    game_.frame(simulationWallTime_, renderCanvases);
     fearPlugin_->processPendingLocalDisconnect();
     if (guiRuntime_) {
         (void)guiRuntime_->canvas.advance(game_.simulationTime());

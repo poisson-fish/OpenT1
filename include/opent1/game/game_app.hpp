@@ -80,7 +80,7 @@ public:
     }
 
     bool loadPendingMission();
-    bool stepFrame(double wallTimeSeconds);
+    bool stepFrame(double wallTimeSeconds, bool renderCanvases = true);
     bool bindGameplayActions();
     [[nodiscard]] bool gameplayInputActive() const;
     [[nodiscard]] bool gameplayKeyboardActive() const;

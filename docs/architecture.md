@@ -81,7 +81,9 @@ draws the world and GUI. Presentation and audio update through the enabled
 adapters. SDL interactive frames use elapsed wall time; smoke and explicitly
 bounded runs supply 32 ms frame times. The fallback loop always supplies 32 ms
 frame times. `FearGameApp::stepFrame` delegates simulation advancement to
-`SimGame`, and rendering consumes the resulting state. Shutdown disconnects
+`SimGame`. The SDL host disables its automatic canvas pass and renders once
+after simulation, GUI and audio updates; explicit script redraws still execute.
+Rendering consumes the resulting state. Shutdown disconnects
 sessions, unregisters services, and releases world and native resources.
 
 ## Resources and rendering

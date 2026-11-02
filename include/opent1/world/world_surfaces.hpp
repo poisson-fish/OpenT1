@@ -90,6 +90,7 @@ struct WorldSurfaceMesh {
         TsMaterialResources materials;
         std::shared_ptr<const gfx::HardwareMesh> hardware;
         std::vector<std::array<UInt32, 2>> ranges; // first index/count by authored surface
+        std::vector<Box3F> surfaceBounds;
     };
 
     // Interior snapshots share local geometry, independently of maps and visibility.
@@ -110,23 +111,30 @@ struct WorldSurfaceMesh {
     std::vector<std::array<UInt32, 4>> terrainSquareIds;
     Box3F bounds;
 
-    [[nodiscard]] auto surfaceTriangles() const {
+    [[nodiscard]] auto surfaceTriangles(bool geometryOnly = false) const {
         const auto count = interiorMesh ? interiorMesh->surfaceIds.size() : triangles.size();
         return std::views::iota(std::size_t{}, count) | std::views::filter([this](auto i) {
                    return !interiorMesh || !interiorSelection ||
                           std::ranges::binary_search(*interiorSelection,
                                                      interiorMesh->surfaceIds[i]);
                }) |
-               std::views::transform([this](auto i) {
-                   if (!interiorMesh)
-                       return triangles[i];
+               std::views::transform([this, geometryOnly](auto i) {
+                   if (!interiorMesh) {
+                       if (!geometryOnly)
+                           return triangles[i];
+                       StaticSurfaceTriangle triangle;
+                       triangle.vertices = triangles[i].vertices;
+                       triangle.material = triangles[i].material;
+                       return triangle;
+                   }
                    StaticSurfaceTriangle triangle;
                    const auto id = interiorMesh->surfaceIds[i];
                    triangle.material = interiorMesh->source->surfaces[id].material;
                    triangle.lit = bool(interiorMesh->lighting);
                    triangle.repeatTexture = true;
-                   triangle.nativeSoftware = interiorMesh->software[id];
-                   if (interiorMaps)
+                   if (!geometryOnly)
+                       triangle.nativeSoftware = interiorMesh->software[id];
+                   if (!geometryOnly && interiorMaps)
                        triangle.lightMap = (*interiorMaps)[id];
                    for (std::size_t j = 0; j < 3; ++j) {
                        const auto& v =

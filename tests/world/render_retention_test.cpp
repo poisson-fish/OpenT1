@@ -46,6 +46,16 @@ int retainedInteriorLighting() {
         CHECK((*next->interiorMaps)[0] != (*first->interiorMaps)[0]);
         CHECK((*next->interiorMaps)[1] == (*first->interiorMaps)[1]);
         CHECK((*next->interiorMaps)[0]->samples[0] == 0xffff);
+        world::WorldSurfaceMesh expanded;
+        for (auto triangle : next->surfaceTriangles())
+            expanded.triangles.push_back(std::move(triangle));
+        for (int x = -12; x <= 12; ++x)
+            for (int z = -12; z <= 12; ++z) {
+                for (Flt32 depth : {-.051f, -.05f, 0.f, .05f, .051f}) {
+                    const Point3F point{Flt32(x) * .1f, depth, Flt32(z) * .1f};
+                    CHECK(next->sampleLighting(point) == expanded.sampleLighting(point));
+                }
+            }
         CHECK((*first->interiorMaps)[0]->samples[0] == 0);
         const std::array<UInt32, 1> visible{1};
         auto selection = next->visibleInterior(visible);

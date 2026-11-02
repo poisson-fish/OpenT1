@@ -432,11 +432,11 @@ bool SimTsShape::processQuery(sim::SimQuery& query) {
             if (!pose) {
                 throw std::invalid_argument("invalid TS collision pose");
             }
-            auto snapshot = TsShapeCollision::prepare(*pose, collisionDetail_);
+            auto snapshot = TsShapeCollision::shared(*pose, collisionDetail_);
             if (!snapshot) {
                 throw std::invalid_argument("invalid TS collision detail");
             }
-            geometry = std::make_shared<const TsShapeCollision>(std::move(*snapshot));
+            geometry = std::move(snapshot);
         }
         const auto& materials = resources_.materials.list;
         if (materials.materialsPerDetail < 0 ||

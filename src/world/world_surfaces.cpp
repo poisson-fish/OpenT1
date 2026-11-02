@@ -8,31 +8,65 @@ std::optional<UInt16> WorldSurfaceMesh::sampleLighting(Point3F point) const {
     if (!std::isfinite(point.x) || !std::isfinite(point.y) || !std::isfinite(point.z)) {
         return {};
     }
-    for (const auto& triangle : surfaceTriangles()) {
-        if (!triangle.lightMap || !triangle.lightMap->valid()) {
-            continue;
-        }
-        const auto& a = triangle.vertices[0];
-        const auto& b = triangle.vertices[1];
-        const auto& c = triangle.vertices[2];
+    const auto sample = [&](const std::array<StaticSurfaceVertex, 3>& vertices,
+                            const gfx::LightMap& map) -> std::optional<UInt16> {
+        if (!map.valid())
+            return {};
+        const auto& a = vertices[0];
+        const auto& b = vertices[1];
+        const auto& c = vertices[2];
         const auto u = b.position - a.position, v = c.position - a.position, p = point - a.position;
         const auto uu = m_dot(u, u), uv = m_dot(u, v), vv = m_dot(v, v), pu = m_dot(p, u),
                    pv = m_dot(p, v);
         const auto det = uu * vv - uv * uv;
         if (det <= 1e-12f) {
-            continue;
+            return {};
         }
         const auto y = (pu * vv - pv * uv) / det, z = (pv * uu - pu * uv) / det, x = 1 - y - z;
         if (x < -.001f || y < -.001f || z < -.001f || (p - u * y - v * z).len() > .05f) {
-            continue;
+            return {};
         }
-        const auto& map = *triangle.lightMap;
         const auto tex = a.lightMap * x + b.lightMap * y + c.lightMap * z;
         // Native getSurfaceInfo subtracts half a light texel before indexing;
         // the render UV already includes a positive half-texel origin.
         const auto ix = std::clamp(Int32(std::floor(tex.x * map.size.x - 1)), 0, map.size.x - 1);
         const auto iy = std::clamp(Int32(std::floor(tex.y * map.size.y - 1)), 0, map.size.y - 1);
         return map.samples[std::size_t(iy) * map.size.x + ix];
+    };
+    if (interiorMesh && interiorMaps) {
+        const auto vertices = interiorMesh->hardware ? interiorMesh->hardware->vertices()
+                                                     : std::span<const gfx::HardwareVertex>{};
+        const auto indices =
+            interiorMesh->hardware ? interiorMesh->hardware->indices() : std::span<const UInt32>{};
+        for (std::size_t id = 0; id < interiorMesh->ranges.size(); ++id) {
+            const auto* map = (*interiorMaps)[id].get();
+            if (!map ||
+                (interiorSelection && !std::ranges::binary_search(*interiorSelection, UInt32(id))))
+                continue;
+            const auto& box = interiorMesh->surfaceBounds[id];
+            // Conservative bound for the original barycentric and plane tolerances.
+            const auto margin = (box.fMax - box.fMin) * .003f + Point3F{.051f, .051f, .051f};
+            if (!Box3F{box.fMin - margin, box.fMax + margin}.contains(point))
+                continue;
+            const auto range = interiorMesh->ranges[id];
+            for (UInt32 i = range[0]; i < range[0] + range[1]; i += 3) {
+                std::array<StaticSurfaceVertex, 3> triangle;
+                for (std::size_t j = 0; j < 3; ++j) {
+                    const auto& v = vertices[indices[i + j]];
+                    triangle[j].position = {v.position.x, v.position.y, v.inverseDepth};
+                    triangle[j].lightMap = v.lightMap;
+                }
+                if (auto color = sample(triangle, *map))
+                    return color;
+            }
+        }
+        return {};
+    }
+    for (const auto& triangle : triangles) {
+        if (triangle.lightMap) {
+            if (auto color = sample(triangle.vertices, *triangle.lightMap))
+                return color;
+        }
     }
     return {};
 }
@@ -339,6 +373,7 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::interior(const InteriorShapeRe
     std::vector<gfx::HardwareVertex> hardwareVertices;
     std::vector<UInt32> hardwareIndices;
     std::vector<std::array<UInt32, 2>> hardwareRanges(reuse ? 0 : g.surfaces.size());
+    std::vector<Box3F> hardwareBounds(reuse ? 0 : g.surfaces.size());
     std::vector<std::shared_ptr<const NativeSurfaceTexture>> hardwareSoftware(
         reuse ? 0 : g.surfaces.size());
     std::size_t samples{};
@@ -457,6 +492,12 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::interior(const InteriorShapeRe
             return {};
         }
         const auto first = UInt32(hardwareVertices.size());
+        auto& surfaceBounds = hardwareBounds[i];
+        surfaceBounds = {vertices.front().position, vertices.front().position};
+        for (const auto& vertex : vertices) {
+            surfaceBounds.fMin.setMin(vertex.position);
+            surfaceBounds.fMax.setMax(vertex.position);
+        }
         hardwareRanges[i] = {UInt32(hardwareIndices.size()), UInt32((vertices.size() - 2) * 3)};
         for (const auto& vertex : vertices) {
             gfx::HardwareVertex v;
@@ -509,6 +550,7 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::interior(const InteriorShapeRe
         geometry->surfaceIds = std::move(result.interiorSurfaceIds);
         geometry->materials = resources.materials;
         geometry->ranges = std::move(hardwareRanges);
+        geometry->surfaceBounds = std::move(hardwareBounds);
         if (!hardwareIndices.empty()) {
             geometry->hardware =
                 gfx::HardwareMesh::create(std::move(hardwareVertices), std::move(hardwareIndices));
@@ -713,7 +755,7 @@ collectShadowReceivers(const sim::ShadowSourceWindow& w,
                 instance.mesh->triangleCount() > 1'048'576) {
                 return {};
             }
-            for (const auto& t : instance.mesh->surfaceTriangles()) {
+            for (const auto& t : instance.mesh->surfaceTriangles(true)) {
                 spend(work);
                 if (t.material >= instance.mesh->materials.list.materials.size()) {
                     return {};
@@ -860,7 +902,7 @@ worldShadowGeometry(const sim::ShadowSourceWindow& window,
                 if (!instance.mesh || !collision_detail::rigid(instance.placement)) {
                     return {};
                 }
-                for (const auto& triangle : instance.mesh->surfaceTriangles()) {
+                for (const auto& triangle : instance.mesh->surfaceTriangles(true)) {
                     collision_detail::spend(work);
                     if (triangle.material >= instance.mesh->materials.list.materials.size()) {
                         return {};

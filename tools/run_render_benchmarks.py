@@ -1,5 +1,8 @@
 """Run base/RPG optimized timing cases serially, with isolated writable game state."""
 import argparse
+from datetime import datetime, timezone
+import hashlib
+import json
 from pathlib import Path
 import os
 import subprocess
@@ -16,6 +19,19 @@ def main():
     parser.add_argument('--projected-interiors', action='store_true')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
+    repository = Path(__file__).resolve().parent.parent
+    provenance = {
+        'captured_utc': datetime.now(timezone.utc).isoformat(),
+        'executable_sha256': hashlib.sha256(args.executable.read_bytes()).hexdigest(),
+        'git_revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repository,
+                                                text=True).strip(),
+        'git_status': subprocess.check_output(['git', 'status', '--porcelain'], cwd=repository,
+                                              text=True).splitlines(),
+        'frames': args.frames, 'warmup_frames': 120, 'driver': args.driver,
+        'projected_interiors': args.projected_interiors,
+        'instrumented_allocations': False,
+    }
+    (args.output / 'capture-provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
     env = os.environ.copy()
     if args.projected_interiors:
         env['OPENT1_PROJECTED_INTERIORS'] = '1'

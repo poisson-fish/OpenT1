@@ -88,9 +88,9 @@ int main(int argc, char** argv) {
             gc.driver = argv[6];
         auto surface = gfx::SdlGpuSurface::create(window, 800, 600, gc);
         require(bool(surface), SDL_GetError());
-        std::vector<double> frames, prepares, captures, submissions, simulations;
+        std::vector<double> frames, prepares, captures, submissions, simulations, terrain, lighting;
         UInt64 polygons{}, draws{}, binds{}, vertexBytes{}, meshBytes{}, textureBytes{},
-            geometryBuilds{}, mapBuilds{};
+            geometryBuilds{}, mapBuilds{}, terrainCacheHits{};
         // Warm the rotating working set as well as pipeline creation.
         constexpr unsigned warm = 120;
         for (unsigned f = 0; f < warm + count; ++f) {
@@ -122,6 +122,8 @@ int main(int argc, char** argv) {
                 captures.push_back(game.renderStats().captureMs);
                 submissions.push_back(submitMs);
                 simulations.push_back(simMs);
+                terrain.push_back(game.renderStats().work.terrainLodMs);
+                lighting.push_back(game.renderStats().work.lightSamplesMs);
                 polygons += game.lastScenePolygonCount();
                 draws += surface->submissionStats().draws;
                 binds += surface->submissionStats().samplerBinds;
@@ -130,6 +132,7 @@ int main(int argc, char** argv) {
                 textureBytes += surface->submissionStats().textureUploadBytes;
                 geometryBuilds += game.renderStats().work.interiorGeometryBuilds;
                 mapBuilds += game.renderStats().work.interiorLightMapBuilds;
+                terrainCacheHits += game.renderStats().work.terrainMeshCacheHits;
             }
         }
         require(polygons > 0, "no world rendered");
@@ -141,6 +144,7 @@ int main(int argc, char** argv) {
             ppm.write(reinterpret_cast<const char*>(pixels.data() + i), 3);
         const auto textures = surface->textureCacheStats();
         const auto resources = surface->resourceStats();
+        const auto archives = game.resources().archiveMemoryStats();
         std::ofstream out(output);
         out << "{\"mission\":\"" << argv[2] << "\",\"mode\":\"" << mode << "\",\"driver\":\""
             << surface->driver() << "\",\"frames\":" << count << ",\"load_ms\":" << loadMs << ',';
@@ -153,6 +157,10 @@ int main(int argc, char** argv) {
         distribution(out, "submit_ms", submissions);
         out << ',';
         distribution(out, "simulation_ms", simulations);
+        out << ',';
+        distribution(out, "terrain_lod_ms", terrain);
+        out << ',';
+        distribution(out, "light_samples_ms", lighting);
         out << ",\"mean_polygons\":" << double(polygons) / count
             << ",\"mean_draws\":" << double(draws) / count
             << ",\"mean_binds\":" << double(binds) / count << ",\"textures\":" << textures.textures
@@ -175,7 +183,10 @@ int main(int argc, char** argv) {
             << ",\"mean_mesh_upload_bytes\":" << double(meshBytes) / count
             << ",\"mean_texture_upload_bytes\":" << double(textureBytes) / count
             << ",\"geometry_builds\":" << geometryBuilds << ",\"map_builds\":" << mapBuilds
-            << "}\n";
+            << ",\"terrain_selection_cache_hits\":" << terrainCacheHits
+            << ",\"archive_mapped_bytes\":" << archives.mappedBytes
+            << ",\"archive_owned_bytes\":" << archives.ownedBufferBytes
+            << ",\"archive_decode_staging_bytes\":" << archives.decodeStagingBytes << "}\n";
         // Optional acceptance work is deliberately outside all timing samples.
         if (std::getenv("OPENT1_VALIDATE_RENDER")) {
             gfx::HardwareBatch snapshot;
@@ -188,13 +199,14 @@ int main(int argc, char** argv) {
             require(surface->trimCaches(), "cache trim failed");
             game.trimRenderCaches();
             require(surface->readback(after) && before == after, "trim changed published frame");
-            require(surface->render(snapshot, frame) && surface->readback(after),"trimmed batch submission failed");
+            require(surface->render(snapshot, frame) && surface->readback(after),
+                    "trimmed batch submission failed");
             unsigned trimError{};
             for (std::size_t i = 0; i < before.size(); ++i)
-                trimError = std::max(trimError,unsigned(std::abs(int(before[i])-int(after[i]))));
+                trimError = std::max(trimError, unsigned(std::abs(int(before[i]) - int(after[i]))));
             std::cout << "Trim readback maximum channel error: " << trimError << '\n';
             // A fresh page layout may change normalized UV rounding by a color level.
-            require(trimError <= 2,"immutable batch did not survive trimming");
+            require(trimError <= 2, "immutable batch did not survive trimming");
             require(game.renderFrame(surface->software()) && game.lastScenePolygonCount() > 0,
                     "software compatibility frame failed");
             bool transitioned{};
@@ -216,7 +228,8 @@ int main(int argc, char** argv) {
             std::ofstream validation(output.string() + ".validation.json");
             validation << "{\"trim_preserved_frame\":true,\"batch_survived_trim\":true,\"software_"
                           "rendered\":true,\"transition_rendered\":"
-                       << (transitioned ? "true" : "false") << ",\"trim_max_channel_error\":" << trimError << "}\n";
+                       << (transitioned ? "true" : "false")
+                       << ",\"trim_max_channel_error\":" << trimError << "}\n";
         }
         game.shutdown();
         std::cout << "Saved " << output.string() << '\n';

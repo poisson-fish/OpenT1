@@ -129,6 +129,30 @@ struct TsShape {
 };
 
 // Explicit registrations; Bitmap loaders must also be registered to resolve maps.
+inline std::size_t resourceResidentBytes(const TsMaterial& v) {
+    return sizeof(v) + opent1::detail::allocationBytes(v.mapFile);
+}
+
+inline std::size_t resourceResidentBytes(const TsMaterialList& v) {
+    return sizeof(v) + opent1::detail::allocationBytes(v.materials);
+}
+
+inline std::size_t resourceResidentBytes(const TsMesh& v) {
+    using opent1::detail::allocationBytes;
+    return sizeof(v) + allocationBytes(v.vertices) + allocationBytes(v.textureVertices) +
+           allocationBytes(v.faces) + allocationBytes(v.frames);
+}
+
+inline std::size_t resourceResidentBytes(const TsShape& v) {
+    using opent1::detail::allocationBytes;
+    return sizeof(v) + allocationBytes(v.nodes) + allocationBytes(v.sequences) +
+           allocationBytes(v.subSequences) + allocationBytes(v.keyframes) +
+           allocationBytes(v.transforms) + allocationBytes(v.names) + allocationBytes(v.objects) +
+           allocationBytes(v.details) + allocationBytes(v.transitions) +
+           allocationBytes(v.triggers) + allocationBytes(v.meshes) +
+           (v.materials ? resourceResidentBytes(*v.materials) - sizeof(TsMaterialList) : 0);
+}
+
 // Original authored threshold policy. -1 means too small to draw; nullopt means
 // invalid input. Zero-sized sentinel details stop before utility hierarchies.
 [[nodiscard]] std::optional<Int32> selectTsDetail(const TsShape&, Flt32 projectedSize);

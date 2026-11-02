@@ -1,5 +1,6 @@
 #pragma once
 #include <opent1/core/stream_io.hpp>
+#include <opent1/core/memory_size.hpp>
 #include <chrono>
 #include <atomic>
 #include <filesystem>
@@ -24,6 +25,7 @@ namespace detail {
 struct ResourcePayload {
     virtual ~ResourcePayload() = default;
     virtual void* pointer() noexcept = 0;
+    virtual std::pair<std::size_t, bool> memory() const = 0;
 };
 
 template <class T> struct TypedPayload final : ResourcePayload {
@@ -33,10 +35,26 @@ template <class T> struct TypedPayload final : ResourcePayload {
         return value.get();
     }
 
+    std::pair<std::size_t, bool> memory() const override {
+        if constexpr (requires(const T& v) { resourceResidentBytes(v); })
+            return {resourceResidentBytes(*value), true};
+        else
+            return {sizeof(T), std::is_trivially_copyable_v<T>};
+    }
+
     std::unique_ptr<T> value;
 };
 
+struct ResourceMemoryLedger {
+    std::size_t bytes{}, peak{};
+};
+
 struct ResourceState {
+    ~ResourceState() {
+        if (memoryLedger)
+            memoryLedger->bytes -= accountedBytes;
+    }
+
     const UInt64 revision = [] {
         static std::atomic<UInt64> next{1};
         return next.fetch_add(1, std::memory_order_relaxed);
@@ -47,6 +65,8 @@ struct ResourceState {
     std::string name;
     std::chrono::steady_clock::time_point released{std::chrono::steady_clock::now()};
     std::chrono::milliseconds timeout{0};
+    std::shared_ptr<ResourceMemoryLedger> memoryLedger;
+    std::size_t accountedBytes{};
 };
 }
 class ResourceManager;
@@ -127,6 +147,10 @@ struct RawData {
     std::vector<std::byte> bytes;
 };
 
+inline std::size_t resourceResidentBytes(const RawData& value) {
+    return sizeof(value) + value.bytes.capacity();
+}
+
 struct ResourceMatch {
     UInt64 cursor{};
     std::string name;
@@ -140,6 +164,21 @@ struct ResourceMatch {
 // Loaders may load dependencies; cycles fail. Loaders must not mutate paths/mounts.
 class ResourceManager {
 public:
+    struct ResidencyStats {
+        std::size_t decodedBytes{}, liveBytes{}, unusedBytes{}, addedBytes{}, peakBytes{};
+        std::size_t entries{}, incompleteEntries{}, budgetBytes{}, overBudgetBytes{};
+        std::size_t decodeStagingBytes{}, peakDecodeStagingBytes{};
+        std::size_t decodeStagingBudgetBytes{};
+        UInt64 budgetEvictions{};
+    };
+
+    // Soft decoded-source budget. Added objects and externally owned snapshots
+    // stay valid; an oversized live mission reports debt instead of losing data.
+    [[nodiscard]] ResidencyStats residencyStats() const;
+    void setResidencyBudget(std::size_t);
+    void setDecodeStagingBudget(std::size_t);
+    std::size_t trimResidency(); // discard least-recently released reloadable entries
+
     struct ArchiveMemoryStats {
         UInt64 mappedBytes{}, ownedBufferBytes{}, decodeStagingBytes{};
     };

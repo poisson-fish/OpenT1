@@ -156,4 +156,22 @@ struct BitmapFont {
 // Bitmap: .bmp/.dib/.pbm/.png (legacy alias, not PNG decoding); array: .pba;
 // font: .pft. Palettes remain separately registered.
 bool registerBitmapFontLoaders(ResourceManager&);
+
+inline std::size_t resourceResidentBytes(const Bitmap& v) {
+    return sizeof(v) + opent1::detail::allocationBytes(v.pixels) +
+           (v.palette ? resourceResidentBytes(*v.palette) - sizeof(Palette) : 0);
+}
+
+inline std::size_t resourceResidentBytes(const BitmapArray& v) {
+    using opent1::detail::allocationBytes;
+    return sizeof(v) + allocationBytes(v.bitmaps) + allocationBytes(v.indexRemap) +
+           allocationBytes(v.userData);
+}
+
+inline std::size_t resourceResidentBytes(const BitmapFont& v) {
+    using opent1::detail::allocationBytes;
+    return sizeof(v) + allocationBytes(v.lookup) + allocationBytes(v.characters) +
+           resourceResidentBytes(v.sheets) - sizeof(BitmapArray) +
+           (v.palette ? resourceResidentBytes(*v.palette) - sizeof(Palette) : 0);
+}
 } // namespace opent1::gfx

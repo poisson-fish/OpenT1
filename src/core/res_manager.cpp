@@ -4,6 +4,7 @@
 #include <opent1/core/vol_stream.hpp>
 #include <map>
 #include <set>
+#include <unordered_map>
 
 namespace opent1 {
 namespace {
@@ -174,6 +175,25 @@ struct ResourceManager::Impl {
     std::map<UInt32, Factory> loaders;
     std::set<std::string, std::less<>> loading;
     std::map<std::string, std::shared_ptr<detail::ResourceState>, std::less<>> cache, added;
+    std::vector<std::weak_ptr<detail::ResourceState>> states;
+    std::size_t budget{256U * 1024U * 1024U};
+    std::shared_ptr<detail::ResourceMemoryLedger> ledger =
+        std::make_shared<detail::ResourceMemoryLedger>();
+    std::size_t decodeStaging{}, peakDecodeStaging{};
+    std::size_t decodeStagingBudget{128U * 1024U * 1024U};
+    UInt64 budgetEvictions{};
+
+    void track(const std::shared_ptr<detail::ResourceState>& state) {
+        if (states.size() % 128 == 0)
+            std::erase_if(states, [](const auto& value) {
+                return value.expired();
+            });
+        states.push_back(state);
+        state->accountedBytes = state->payload->memory().first;
+        state->memoryLedger = ledger;
+        ledger->bytes += state->accountedBytes;
+        ledger->peak = std::max(ledger->peak, ledger->bytes);
+    }
 
     auto volumeFor(std::string_view key) const {
         return std::ranges::find_if(volumes, [&](const auto& v) {
@@ -538,9 +558,12 @@ bool ResourceManager::addErased(std::string_view name,
     state->type = type;
     state->payload = std::move(payload);
     state->timeout = timeout;
+    impl_->track(state);
     impl_->added.emplace(*key, std::move(state));
     impl_->matches.insert(impl_->matches.begin(),
                           {"object:" + *key, std::string(name), false, impl_->nextCursor++});
+    if (impl_->ledger->bytes > impl_->budget)
+        trimResidency();
     return true;
 }
 
@@ -598,9 +621,28 @@ std::shared_ptr<detail::ResourceState> ResourceManager::loadErased(std::string_v
     } guard{impl_->loading, *key};
 
     std::vector<std::byte> bytes;
+    const auto inputBytes = getSize(*key);
+    if (!inputBytes || *inputBytes > impl_->decodeStagingBudget -
+                                         std::min(impl_->decodeStaging, impl_->decodeStagingBudget))
+        return {};
     if (!read(*key, bytes)) {
         return {};
     }
+    if (bytes.capacity() >
+        impl_->decodeStagingBudget - std::min(impl_->decodeStaging, impl_->decodeStagingBudget))
+        return {};
+
+    struct DecodeStaging {
+        Impl& impl;
+        std::size_t bytes;
+
+        ~DecodeStaging() {
+            impl.decodeStaging -= bytes;
+        }
+    } staging{*impl_, bytes.capacity()};
+
+    impl_->decodeStaging += bytes.capacity();
+    impl_->peakDecodeStaging = std::max(impl_->peakDecodeStaging, impl_->decodeStaging);
     MemRWStream stream{std::span<const std::byte>(bytes)};
     auto payload = factory->second.load(stream, static_cast<UInt32>(bytes.size()));
     if (!payload || stream.getStatus() != STRM_OK) {
@@ -617,9 +659,97 @@ std::shared_ptr<detail::ResourceState> ResourceManager::loadErased(std::string_v
             state->volumeRevision = (*volume)->revision;
     }
     impl_->cache.emplace(*key, state);
+    impl_->track(state);
     if (immutableVolume)
         immutableVolume->decoded[*key] = state;
+    if (impl_->ledger->bytes > impl_->budget)
+        trimResidency();
     return state;
+}
+
+ResourceManager::ResidencyStats ResourceManager::residencyStats() const {
+    ResidencyStats result;
+    result.budgetBytes = impl_->budget;
+    result.decodeStagingBytes = impl_->decodeStaging;
+    result.peakDecodeStagingBytes = impl_->peakDecodeStaging;
+    result.decodeStagingBudgetBytes = impl_->decodeStagingBudget;
+    result.budgetEvictions = impl_->budgetEvictions;
+    std::unordered_map<const detail::ResourceState*, std::size_t> owners;
+    std::set<const detail::ResourceState*> added;
+    for (const auto& [name, state] : impl_->cache) {
+        (void)name;
+        ++owners[state.get()];
+    }
+    for (const auto& [name, state] : impl_->added) {
+        (void)name;
+        ++owners[state.get()];
+        added.insert(state.get());
+    }
+    std::erase_if(impl_->states, [](const auto& state) {
+        return state.expired();
+    });
+    for (const auto& weak : impl_->states) {
+        const auto state = weak.lock();
+        if (!state)
+            continue;
+        const auto [bytes, complete] = state->payload->memory();
+        impl_->ledger->bytes -= state->accountedBytes;
+        impl_->ledger->bytes += bytes;
+        state->accountedBytes = bytes;
+        result.decodedBytes += bytes;
+        ++result.entries;
+        result.incompleteEntries += !complete;
+        const bool owned = added.contains(state.get());
+        if (owned)
+            result.addedBytes += bytes;
+        if (owned || std::size_t(state.use_count()) > owners[state.get()] + 1)
+            result.liveBytes += bytes;
+        else
+            result.unusedBytes += bytes;
+    }
+    impl_->ledger->peak = std::max(impl_->ledger->peak, result.decodedBytes);
+    result.peakBytes = impl_->ledger->peak;
+    result.overBudgetBytes =
+        result.decodedBytes > impl_->budget ? result.decodedBytes - impl_->budget : 0;
+    return result;
+}
+
+void ResourceManager::setResidencyBudget(std::size_t bytes) {
+    impl_->budget = bytes;
+    trimResidency();
+}
+
+void ResourceManager::setDecodeStagingBudget(std::size_t bytes) {
+    impl_->decodeStagingBudget = bytes;
+}
+
+std::size_t ResourceManager::trimResidency() {
+    std::erase_if(impl_->states, [](const auto& state) {
+        return state.expired();
+    });
+    for (const auto& weak : impl_->states)
+        if (const auto state = weak.lock()) {
+            impl_->ledger->bytes -= state->accountedBytes;
+            state->accountedBytes = state->payload->memory().first;
+            impl_->ledger->bytes += state->accountedBytes;
+        }
+    impl_->ledger->peak = std::max(impl_->ledger->peak, impl_->ledger->bytes);
+    std::size_t total{};
+    // This pressure path needs no candidate list or accounting hash table.
+    // Erasing parents can release dependency handles, so reconsider after each eviction.
+    while (impl_->ledger->bytes > impl_->budget) {
+        auto oldest = impl_->cache.end();
+        for (auto at = impl_->cache.begin(); at != impl_->cache.end(); ++at)
+            if (at->second.use_count() == 1 &&
+                (oldest == impl_->cache.end() || at->second->released < oldest->second->released))
+                oldest = at;
+        if (oldest == impl_->cache.end())
+            break;
+        impl_->cache.erase(oldest);
+        ++total;
+    }
+    impl_->budgetEvictions += total;
+    return total;
 }
 
 bool ResourceManager::evict(std::string_view name) {
@@ -650,6 +780,6 @@ std::size_t ResourceManager::purge(bool force) {
         });
         total += count;
     } while (force && count != 0);
-    return total;
+    return total + trimResidency();
 }
 } // namespace opent1

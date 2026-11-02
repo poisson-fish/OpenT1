@@ -165,6 +165,36 @@ struct InteriorLighting {
 
 bool registerInteriorLoaders(ResourceManager&);
 
+inline std::size_t resourceResidentBytes(const InteriorGeometry& v) {
+    using opent1::detail::allocationBytes;
+    return sizeof(v) + allocationBytes(v.surfaces) + allocationBytes(v.nodes) +
+           allocationBytes(v.leaves) + allocationBytes(v.bits) + allocationBytes(v.vertices) +
+           allocationBytes(v.points) + allocationBytes(v.texturePoints) + allocationBytes(v.planes);
+}
+
+inline std::size_t resourceResidentBytes(const InteriorState& v) {
+    return sizeof(v) + opent1::detail::allocationBytes(v.name);
+}
+
+inline std::size_t resourceResidentBytes(const InteriorLod& v) {
+    return sizeof(v) + opent1::detail::allocationBytes(v.geometry);
+}
+
+inline std::size_t resourceResidentBytes(const InteriorShape& v) {
+    using opent1::detail::allocationBytes;
+    return sizeof(v) + allocationBytes(v.states) + allocationBytes(v.lods) +
+           allocationBytes(v.lightFiles) + allocationBytes(v.lightStateNames) +
+           allocationBytes(v.materialList);
+}
+
+inline std::size_t resourceResidentBytes(const InteriorLighting& v) {
+    using opent1::detail::allocationBytes;
+    return sizeof(v) + allocationBytes(v.surfaces) + allocationBytes(v.states) +
+           allocationBytes(v.stateData) + allocationBytes(v.lights) + allocationBytes(v.names) +
+           allocationBytes(v.mapData) + allocationBytes(v.missionEntries) +
+           allocationBytes(v.huffmanNodes) + allocationBytes(v.huffmanLeaves);
+}
+
 struct InteriorShapeResources {
     Resource<InteriorShape> shape;
     std::vector<Resource<InteriorGeometry>> geometry; // parallel to LODs

@@ -5,7 +5,10 @@
   "notes": [
     "Ordinary executable without allocation tracking. No audio or presentation. Camera paths repeat deterministically. Final readback comparisons only at this stage.",
     "Early lighting runs overlapped brief regression testing; use later serial comparisons for performance conclusions.",
-    "Retained-interior readbacks allow GPU transform/interpolation rounding: 0-1004 changed pixels of 480000; isolated boundary pixels in RPG map1 differ up to 94/255. Review images and use OPENT1_PROJECTED_INTERIORS=1 for compatibility comparisons. Windows D3D12 and Vulkan synthetic clip/cutout/palette/gamma readbacks passed."
+    "Retained-interior readbacks allow GPU transform/interpolation rounding: 0-1004 changed pixels of 480000; isolated boundary pixels in RPG map1 differ up to 94/255. Review images and use OPENT1_PROJECTED_INTERIORS=1 for compatibility comparisons. Windows D3D12 and Vulkan synthetic clip/cutout/palette/gamma readbacks passed.",
+    "Later captures include source/archive accounting and per-frame terrain preparation distributions. Source sharing and file mappings change load/CPU memory residency; their frame timing differences are within typical run variance.",
+    "Shared terrain stitch topology and bounded BSP scratch are separately re-profiled. Terrain templates preserve all twelve readbacks exactly; no significant whole-frame improvement is claimed for these small changes.",
+    "The native allocation audit remains separate from these ordinary Release timing executables. See render-memory-after.json for requested C++ bytes, virtual file backing, GPU usage and render allocation rates."
   ],
   "stages": {
     "before": {
@@ -5667,6 +5670,3374 @@
         "geometry_builds": 0,
         "map_builds": 7125
       }
+    },
+    "archive_mappings": {
+      "base-Broadside-rotate": {
+        "mission": "Broadside",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 147.997,
+        "frame_ms": {
+          "mean": 3.29313,
+          "p95": 4.3524,
+          "p99": 4.577
+        },
+        "prepare_ms": {
+          "mean": 2.52715,
+          "p95": 3.4932,
+          "p99": 3.6552
+        },
+        "capture_ms": {
+          "mean": 1.50574,
+          "p95": 2.1867,
+          "p99": 2.2906
+        },
+        "submit_ms": {
+          "mean": 0.276672,
+          "p95": 0.3785,
+          "p99": 0.4138
+        },
+        "simulation_ms": {
+          "mean": 0.489198,
+          "p95": 0.5569,
+          "p99": 0.5985
+        },
+        "terrain_lod_ms": {
+          "mean": 0.727942,
+          "p95": 0.7833,
+          "p99": 0.817
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 1854.66,
+        "mean_draws": 448.083,
+        "mean_binds": 215.304,
+        "textures": 1144,
+        "texture_bytes": 9664112,
+        "physical_textures": 374,
+        "texture_arrays": 49,
+        "texture_array_bytes": 16712192,
+        "allocated_texture_payload_bytes": 20426940,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 2344,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 3,
+        "retained_mesh_bytes": 730788,
+        "peak_retained_mesh_bytes": 730788,
+        "mesh_uploads": 3,
+        "mean_vertex_upload_bytes": 107312,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 244324,
+        "geometry_builds": 0,
+        "map_builds": 2499,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89852983,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "base-Broadside-stationary": {
+        "mission": "Broadside",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 147.414,
+        "frame_ms": {
+          "mean": 3.65217,
+          "p95": 4.1752,
+          "p99": 4.3417
+        },
+        "prepare_ms": {
+          "mean": 2.86056,
+          "p95": 3.1898,
+          "p99": 3.3158
+        },
+        "capture_ms": {
+          "mean": 1.73859,
+          "p95": 1.8627,
+          "p99": 1.9051
+        },
+        "submit_ms": {
+          "mean": 0.268012,
+          "p95": 0.3573,
+          "p99": 0.3913
+        },
+        "simulation_ms": {
+          "mean": 0.52348,
+          "p95": 0.6315,
+          "p99": 0.6779
+        },
+        "terrain_lod_ms": {
+          "mean": 0.725282,
+          "p95": 0.7853,
+          "p99": 0.8017
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 2337,
+        "mean_draws": 568.375,
+        "mean_binds": 137,
+        "textures": 498,
+        "texture_bytes": 6017684,
+        "physical_textures": 40,
+        "texture_arrays": 34,
+        "texture_array_bytes": 15335936,
+        "allocated_texture_payload_bytes": 17055932,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 1527,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 2,
+        "retained_mesh_bytes": 714900,
+        "peak_retained_mesh_bytes": 714900,
+        "mesh_uploads": 2,
+        "mean_vertex_upload_bytes": 139392,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 78601.1,
+        "geometry_builds": 0,
+        "map_builds": 3672,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89852983,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "base-Broadside-travel": {
+        "mission": "Broadside",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 151.814,
+        "frame_ms": {
+          "mean": 4.53905,
+          "p95": 5.9672,
+          "p99": 6.3036
+        },
+        "prepare_ms": {
+          "mean": 2.88247,
+          "p95": 4.2234,
+          "p99": 4.4075
+        },
+        "capture_ms": {
+          "mean": 1.67052,
+          "p95": 2.5256,
+          "p99": 2.61
+        },
+        "submit_ms": {
+          "mean": 1.08397,
+          "p95": 2.4764,
+          "p99": 3.1287
+        },
+        "simulation_ms": {
+          "mean": 0.572458,
+          "p95": 0.7389,
+          "p99": 0.8444
+        },
+        "terrain_lod_ms": {
+          "mean": 0.905165,
+          "p95": 1.0582,
+          "p99": 1.0968
+        },
+        "light_samples_ms": {
+          "mean": 0.0002825,
+          "p95": 0.0006,
+          "p99": 0.0008
+        },
+        "mean_polygons": 1885.55,
+        "mean_draws": 454.025,
+        "mean_binds": 267.333,
+        "textures": 2108,
+        "texture_bytes": 18076940,
+        "physical_textures": 1368,
+        "texture_arrays": 46,
+        "texture_array_bytes": 16712192,
+        "allocated_texture_payload_bytes": 28836028,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 3002,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 3,
+        "retained_mesh_bytes": 730788,
+        "peak_retained_mesh_bytes": 730788,
+        "mesh_uploads": 3,
+        "mean_vertex_upload_bytes": 112373,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 265348,
+        "geometry_builds": 0,
+        "map_builds": 2380,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89852983,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "base-Raindance-rotate": {
+        "mission": "Raindance",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 143.265,
+        "frame_ms": {
+          "mean": 2.52047,
+          "p95": 3.2704,
+          "p99": 3.4596
+        },
+        "prepare_ms": {
+          "mean": 1.84724,
+          "p95": 2.4228,
+          "p99": 2.5266
+        },
+        "capture_ms": {
+          "mean": 0.824582,
+          "p95": 1.0421,
+          "p99": 1.0933
+        },
+        "submit_ms": {
+          "mean": 0.295953,
+          "p95": 0.4279,
+          "p99": 0.4939
+        },
+        "simulation_ms": {
+          "mean": 0.377158,
+          "p95": 0.455,
+          "p99": 0.4859
+        },
+        "terrain_lod_ms": {
+          "mean": 0.441996,
+          "p95": 0.4766,
+          "p99": 0.4916
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 1626.54,
+        "mean_draws": 481.083,
+        "mean_binds": 176.083,
+        "textures": 1240,
+        "texture_bytes": 11307308,
+        "physical_textures": 311,
+        "texture_arrays": 39,
+        "texture_array_bytes": 16722944,
+        "allocated_texture_payload_bytes": 20768116,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 2279,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 16,
+        "retained_mesh_bytes": 484908,
+        "peak_retained_mesh_bytes": 484908,
+        "mesh_uploads": 16,
+        "mean_vertex_upload_bytes": 103692,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 244637,
+        "geometry_builds": 0,
+        "map_builds": 1300,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89809011,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "base-Raindance-stationary": {
+        "mission": "Raindance",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 139.425,
+        "frame_ms": {
+          "mean": 2.28572,
+          "p95": 2.5005,
+          "p99": 2.5387
+        },
+        "prepare_ms": {
+          "mean": 1.68256,
+          "p95": 1.82,
+          "p99": 1.8408
+        },
+        "capture_ms": {
+          "mean": 0.774105,
+          "p95": 0.8102,
+          "p99": 0.8304
+        },
+        "submit_ms": {
+          "mean": 0.220346,
+          "p95": 0.2754,
+          "p99": 0.2886
+        },
+        "simulation_ms": {
+          "mean": 0.382657,
+          "p95": 0.4275,
+          "p99": 0.4737
+        },
+        "terrain_lod_ms": {
+          "mean": 0.42259,
+          "p95": 0.4415,
+          "p99": 0.4644
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 1594,
+        "mean_draws": 447,
+        "mean_binds": 81,
+        "textures": 408,
+        "texture_bytes": 5005364,
+        "physical_textures": 27,
+        "texture_arrays": 21,
+        "texture_array_bytes": 11425152,
+        "allocated_texture_payload_bytes": 13145148,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 523,
+        "texture_evictions": 0,
+        "vertex_capacity": 131072,
+        "staging_capacity": 8388608,
+        "retained_meshes": 6,
+        "retained_mesh_bytes": 311244,
+        "peak_retained_mesh_bytes": 311244,
+        "mesh_uploads": 6,
+        "mean_vertex_upload_bytes": 80739.6,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 78262.8,
+        "geometry_builds": 0,
+        "map_builds": 0,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89809011,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "base-Raindance-travel": {
+        "mission": "Raindance",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 143.601,
+        "frame_ms": {
+          "mean": 3.54387,
+          "p95": 4.7902,
+          "p99": 5.4277
+        },
+        "prepare_ms": {
+          "mean": 2.1187,
+          "p95": 2.6339,
+          "p99": 2.7086
+        },
+        "capture_ms": {
+          "mean": 0.952829,
+          "p95": 1.1883,
+          "p99": 1.223
+        },
+        "submit_ms": {
+          "mean": 1.0223,
+          "p95": 2.2704,
+          "p99": 2.6316
+        },
+        "simulation_ms": {
+          "mean": 0.402745,
+          "p95": 0.455,
+          "p99": 0.5203
+        },
+        "terrain_lod_ms": {
+          "mean": 0.517754,
+          "p95": 0.6035,
+          "p99": 0.654
+        },
+        "light_samples_ms": {
+          "mean": 0.000195417,
+          "p95": 0.0005,
+          "p99": 0.0007
+        },
+        "mean_polygons": 1797.4,
+        "mean_draws": 542.558,
+        "mean_binds": 246.442,
+        "textures": 2497,
+        "texture_bytes": 23237288,
+        "physical_textures": 1449,
+        "texture_arrays": 40,
+        "texture_array_bytes": 16739328,
+        "allocated_texture_payload_bytes": 33650036,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 4016,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 16,
+        "retained_mesh_bytes": 484908,
+        "peak_retained_mesh_bytes": 484908,
+        "mesh_uploads": 16,
+        "mean_vertex_upload_bytes": 111431,
+        "mean_mesh_upload_bytes": 29.6,
+        "mean_texture_upload_bytes": 268772,
+        "geometry_builds": 1,
+        "map_builds": 2016,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89809011,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap1-rotate": {
+        "mission": "rpgmap1",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 431.721,
+        "frame_ms": {
+          "mean": 9.48959,
+          "p95": 11.031,
+          "p99": 12.2175
+        },
+        "prepare_ms": {
+          "mean": 3.50504,
+          "p95": 4.4192,
+          "p99": 5.2047
+        },
+        "capture_ms": {
+          "mean": 2.11888,
+          "p95": 2.5893,
+          "p99": 2.7177
+        },
+        "submit_ms": {
+          "mean": 0.536203,
+          "p95": 0.7997,
+          "p99": 1
+        },
+        "simulation_ms": {
+          "mean": 5.44821,
+          "p95": 5.9827,
+          "p99": 7.4012
+        },
+        "terrain_lod_ms": {
+          "mean": 1.28953,
+          "p95": 1.4836,
+          "p99": 1.6091
+        },
+        "light_samples_ms": {
+          "mean": 0.000549583,
+          "p95": 0.0009,
+          "p99": 0.001
+        },
+        "mean_polygons": 3073.15,
+        "mean_draws": 999.254,
+        "mean_binds": 562.133,
+        "textures": 2482,
+        "texture_bytes": 10766448,
+        "physical_textures": 1138,
+        "texture_arrays": 56,
+        "texture_array_bytes": 16766272,
+        "allocated_texture_payload_bytes": 22047148,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 3222,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 16777216,
+        "retained_meshes": 13,
+        "retained_mesh_bytes": 677016,
+        "peak_retained_mesh_bytes": 677016,
+        "mesh_uploads": 13,
+        "mean_vertex_upload_bytes": 210590,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 2316.93,
+        "geometry_builds": 0,
+        "map_builds": 1384,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 114157019,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap1-stationary": {
+        "mission": "rpgmap1",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 430.394,
+        "frame_ms": {
+          "mean": 8.96239,
+          "p95": 10.3013,
+          "p99": 11.3706
+        },
+        "prepare_ms": {
+          "mean": 3.04555,
+          "p95": 3.7653,
+          "p99": 4.0308
+        },
+        "capture_ms": {
+          "mean": 1.18869,
+          "p95": 1.3352,
+          "p99": 1.3908
+        },
+        "submit_ms": {
+          "mean": 0.513982,
+          "p95": 0.7243,
+          "p99": 0.7932
+        },
+        "simulation_ms": {
+          "mean": 5.40272,
+          "p95": 5.9382,
+          "p99": 7.5352
+        },
+        "terrain_lod_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 5646.98,
+        "mean_draws": 1754,
+        "mean_binds": 468,
+        "textures": 1109,
+        "texture_bytes": 8098808,
+        "physical_textures": 51,
+        "texture_arrays": 42,
+        "texture_array_bytes": 16340288,
+        "allocated_texture_payload_bytes": 19625388,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 3622,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 16777216,
+        "retained_meshes": 12,
+        "retained_mesh_bytes": 675720,
+        "peak_retained_mesh_bytes": 675720,
+        "mesh_uploads": 12,
+        "mean_vertex_upload_bytes": 251278,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 8085.67,
+        "geometry_builds": 0,
+        "map_builds": 4310,
+        "terrain_selection_cache_hits": 240,
+        "archive_mapped_bytes": 114157019,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap1-travel": {
+        "mission": "rpgmap1",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 428.971,
+        "frame_ms": {
+          "mean": 11.7196,
+          "p95": 14.7054,
+          "p99": 17.6111
+        },
+        "prepare_ms": {
+          "mean": 3.71581,
+          "p95": 4.9367,
+          "p99": 5.1422
+        },
+        "capture_ms": {
+          "mean": 2.26911,
+          "p95": 2.9149,
+          "p99": 3.1043
+        },
+        "submit_ms": {
+          "mean": 1.61604,
+          "p95": 3.6673,
+          "p99": 4.6263
+        },
+        "simulation_ms": {
+          "mean": 6.38761,
+          "p95": 8.2992,
+          "p99": 9.4717
+        },
+        "terrain_lod_ms": {
+          "mean": 1.38518,
+          "p95": 1.6398,
+          "p99": 1.9372
+        },
+        "light_samples_ms": {
+          "mean": 0.000764167,
+          "p95": 0.0013,
+          "p99": 0.0015
+        },
+        "mean_polygons": 3043.28,
+        "mean_draws": 979.992,
+        "mean_binds": 600.417,
+        "textures": 4122,
+        "texture_bytes": 14511188,
+        "physical_textures": 2768,
+        "texture_arrays": 56,
+        "texture_array_bytes": 16766272,
+        "allocated_texture_payload_bytes": 25713068,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 4839,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 16777216,
+        "retained_meshes": 13,
+        "retained_mesh_bytes": 677016,
+        "peak_retained_mesh_bytes": 677016,
+        "mesh_uploads": 13,
+        "mean_vertex_upload_bytes": 205613,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 11755.1,
+        "geometry_builds": 0,
+        "map_builds": 1384,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 114157019,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap5-rotate": {
+        "mission": "rpgmap5",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 422.075,
+        "frame_ms": {
+          "mean": 9.03771,
+          "p95": 11.3738,
+          "p99": 12.3998
+        },
+        "prepare_ms": {
+          "mean": 4.53022,
+          "p95": 5.6141,
+          "p99": 6.0093
+        },
+        "capture_ms": {
+          "mean": 2.8045,
+          "p95": 3.2937,
+          "p99": 3.6676
+        },
+        "submit_ms": {
+          "mean": 0.74482,
+          "p95": 1.2657,
+          "p99": 1.5
+        },
+        "simulation_ms": {
+          "mean": 3.76254,
+          "p95": 4.1975,
+          "p99": 5.6866
+        },
+        "terrain_lod_ms": {
+          "mean": 1.49211,
+          "p95": 1.812,
+          "p99": 2.2096
+        },
+        "light_samples_ms": {
+          "mean": 0.00061625,
+          "p95": 0.001,
+          "p99": 0.0012
+        },
+        "mean_polygons": 4622.19,
+        "mean_draws": 1372.45,
+        "mean_binds": 644.033,
+        "textures": 2905,
+        "texture_bytes": 15890956,
+        "physical_textures": 1239,
+        "texture_arrays": 41,
+        "texture_array_bytes": 16771712,
+        "allocated_texture_payload_bytes": 25158040,
+        "lightmap_pages": 3,
+        "lightmap_page_bytes": 3145728,
+        "texture_uploads": 6648,
+        "texture_evictions": 0,
+        "vertex_capacity": 524288,
+        "staging_capacity": 16777216,
+        "retained_meshes": 9,
+        "retained_mesh_bytes": 1523388,
+        "peak_retained_mesh_bytes": 1523388,
+        "mesh_uploads": 9,
+        "mean_vertex_upload_bytes": 202666,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 2784.6,
+        "geometry_builds": 0,
+        "map_builds": 7594,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 136822280,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap5-stationary": {
+        "mission": "rpgmap5",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 422.799,
+        "frame_ms": {
+          "mean": 7.62457,
+          "p95": 8.795,
+          "p99": 9.1954
+        },
+        "prepare_ms": {
+          "mean": 3.41277,
+          "p95": 4.1377,
+          "p99": 4.4107
+        },
+        "capture_ms": {
+          "mean": 1.3938,
+          "p95": 1.528,
+          "p99": 1.6274
+        },
+        "submit_ms": {
+          "mean": 0.548441,
+          "p95": 0.7733,
+          "p99": 0.8221
+        },
+        "simulation_ms": {
+          "mean": 3.66324,
+          "p95": 3.9495,
+          "p99": 4.071
+        },
+        "terrain_lod_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 5923.02,
+        "mean_draws": 1898.13,
+        "mean_binds": 320.858,
+        "textures": 1372,
+        "texture_bytes": 12050636,
+        "physical_textures": 56,
+        "texture_arrays": 41,
+        "texture_array_bytes": 16771712,
+        "allocated_texture_payload_bytes": 21149080,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 8772,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 16777216,
+        "retained_meshes": 5,
+        "retained_mesh_bytes": 805044,
+        "peak_retained_mesh_bytes": 805044,
+        "mesh_uploads": 5,
+        "mean_vertex_upload_bytes": 249699,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 5842.58,
+        "geometry_builds": 0,
+        "map_builds": 9576,
+        "terrain_selection_cache_hits": 240,
+        "archive_mapped_bytes": 136822280,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap5-travel": {
+        "mission": "rpgmap5",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 417.278,
+        "frame_ms": {
+          "mean": 9.55775,
+          "p95": 11.7408,
+          "p99": 13.351
+        },
+        "prepare_ms": {
+          "mean": 4.55237,
+          "p95": 5.5489,
+          "p99": 6.8942
+        },
+        "capture_ms": {
+          "mean": 2.85975,
+          "p95": 3.5295,
+          "p99": 4.4074
+        },
+        "submit_ms": {
+          "mean": 1.31373,
+          "p95": 2.3379,
+          "p99": 3.0845
+        },
+        "simulation_ms": {
+          "mean": 3.69152,
+          "p95": 4.2937,
+          "p99": 5.3743
+        },
+        "terrain_lod_ms": {
+          "mean": 1.50677,
+          "p95": 1.8562,
+          "p99": 2.1314
+        },
+        "light_samples_ms": {
+          "mean": 0.000765833,
+          "p95": 0.0013,
+          "p99": 0.0018
+        },
+        "mean_polygons": 4583.77,
+        "mean_draws": 1318.73,
+        "mean_binds": 652.212,
+        "textures": 4225,
+        "texture_bytes": 19480684,
+        "physical_textures": 2298,
+        "texture_arrays": 41,
+        "texture_array_bytes": 16771712,
+        "allocated_texture_payload_bytes": 27987352,
+        "lightmap_pages": 3,
+        "lightmap_page_bytes": 3145728,
+        "texture_uploads": 7898,
+        "texture_evictions": 0,
+        "vertex_capacity": 524288,
+        "staging_capacity": 16777216,
+        "retained_meshes": 9,
+        "retained_mesh_bytes": 1523388,
+        "peak_retained_mesh_bytes": 1523388,
+        "mesh_uploads": 9,
+        "mean_vertex_upload_bytes": 187438,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 11535.1,
+        "geometry_builds": 0,
+        "map_builds": 7125,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 136822280,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      }
+    },
+    "shared_terrain_topology": {
+      "base-Broadside-rotate": {
+        "mission": "Broadside",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 147.063,
+        "frame_ms": {
+          "mean": 3.28632,
+          "p95": 4.2569,
+          "p99": 4.3484
+        },
+        "prepare_ms": {
+          "mean": 2.52609,
+          "p95": 3.4306,
+          "p99": 3.5163
+        },
+        "capture_ms": {
+          "mean": 1.51198,
+          "p95": 2.1644,
+          "p99": 2.2014
+        },
+        "submit_ms": {
+          "mean": 0.270337,
+          "p95": 0.345,
+          "p99": 0.389
+        },
+        "simulation_ms": {
+          "mean": 0.489797,
+          "p95": 0.5433,
+          "p99": 0.6067
+        },
+        "terrain_lod_ms": {
+          "mean": 0.731376,
+          "p95": 0.7868,
+          "p99": 0.8406
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 1854.66,
+        "mean_draws": 448.083,
+        "mean_binds": 215.304,
+        "textures": 1144,
+        "texture_bytes": 9664112,
+        "physical_textures": 374,
+        "texture_arrays": 49,
+        "texture_array_bytes": 16712192,
+        "allocated_texture_payload_bytes": 20426940,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 2344,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 3,
+        "retained_mesh_bytes": 730788,
+        "peak_retained_mesh_bytes": 730788,
+        "mesh_uploads": 3,
+        "mean_vertex_upload_bytes": 107312,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 244324,
+        "geometry_builds": 0,
+        "map_builds": 2499,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89852983,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "base-Broadside-stationary": {
+        "mission": "Broadside",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 153.513,
+        "frame_ms": {
+          "mean": 3.54469,
+          "p95": 3.9142,
+          "p99": 4.0118
+        },
+        "prepare_ms": {
+          "mean": 2.78561,
+          "p95": 3.0012,
+          "p99": 3.0775
+        },
+        "capture_ms": {
+          "mean": 1.71955,
+          "p95": 1.8124,
+          "p99": 1.8523
+        },
+        "submit_ms": {
+          "mean": 0.254515,
+          "p95": 0.3211,
+          "p99": 0.3423
+        },
+        "simulation_ms": {
+          "mean": 0.504433,
+          "p95": 0.5676,
+          "p99": 0.6069
+        },
+        "terrain_lod_ms": {
+          "mean": 0.715992,
+          "p95": 0.7547,
+          "p99": 0.7723
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 2337,
+        "mean_draws": 568.375,
+        "mean_binds": 137,
+        "textures": 498,
+        "texture_bytes": 6017684,
+        "physical_textures": 40,
+        "texture_arrays": 34,
+        "texture_array_bytes": 15335936,
+        "allocated_texture_payload_bytes": 17055932,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 1527,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 2,
+        "retained_mesh_bytes": 714900,
+        "peak_retained_mesh_bytes": 714900,
+        "mesh_uploads": 2,
+        "mean_vertex_upload_bytes": 139392,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 78601.1,
+        "geometry_builds": 0,
+        "map_builds": 3672,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89852983,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "base-Broadside-travel": {
+        "mission": "Broadside",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 150.05,
+        "frame_ms": {
+          "mean": 4.44899,
+          "p95": 5.7842,
+          "p99": 6.5154
+        },
+        "prepare_ms": {
+          "mean": 2.8578,
+          "p95": 4.1446,
+          "p99": 4.3428
+        },
+        "capture_ms": {
+          "mean": 1.65841,
+          "p95": 2.4732,
+          "p99": 2.5961
+        },
+        "submit_ms": {
+          "mean": 1.04244,
+          "p95": 2.443,
+          "p99": 2.9013
+        },
+        "simulation_ms": {
+          "mean": 0.548638,
+          "p95": 0.6221,
+          "p99": 0.6704
+        },
+        "terrain_lod_ms": {
+          "mean": 0.895966,
+          "p95": 1.0183,
+          "p99": 1.098
+        },
+        "light_samples_ms": {
+          "mean": 0.0002675,
+          "p95": 0.0006,
+          "p99": 0.0008
+        },
+        "mean_polygons": 1885.55,
+        "mean_draws": 454.025,
+        "mean_binds": 267.333,
+        "textures": 2108,
+        "texture_bytes": 18076940,
+        "physical_textures": 1368,
+        "texture_arrays": 46,
+        "texture_array_bytes": 16712192,
+        "allocated_texture_payload_bytes": 28836028,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 3002,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 3,
+        "retained_mesh_bytes": 730788,
+        "peak_retained_mesh_bytes": 730788,
+        "mesh_uploads": 3,
+        "mean_vertex_upload_bytes": 112373,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 265348,
+        "geometry_builds": 0,
+        "map_builds": 2380,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89852983,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "base-Raindance-rotate": {
+        "mission": "Raindance",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 145.105,
+        "frame_ms": {
+          "mean": 2.5837,
+          "p95": 3.3314,
+          "p99": 3.5363
+        },
+        "prepare_ms": {
+          "mean": 1.89189,
+          "p95": 2.4297,
+          "p99": 2.5851
+        },
+        "capture_ms": {
+          "mean": 0.8455,
+          "p95": 1.0708,
+          "p99": 1.1447
+        },
+        "submit_ms": {
+          "mean": 0.306705,
+          "p95": 0.4404,
+          "p99": 0.5445
+        },
+        "simulation_ms": {
+          "mean": 0.385012,
+          "p95": 0.4519,
+          "p99": 0.4985
+        },
+        "terrain_lod_ms": {
+          "mean": 0.453054,
+          "p95": 0.4945,
+          "p99": 0.5329
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 1626.54,
+        "mean_draws": 481.083,
+        "mean_binds": 176.083,
+        "textures": 1240,
+        "texture_bytes": 11307308,
+        "physical_textures": 311,
+        "texture_arrays": 39,
+        "texture_array_bytes": 16722944,
+        "allocated_texture_payload_bytes": 20768116,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 2279,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 16,
+        "retained_mesh_bytes": 484908,
+        "peak_retained_mesh_bytes": 484908,
+        "mesh_uploads": 16,
+        "mean_vertex_upload_bytes": 103692,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 244637,
+        "geometry_builds": 0,
+        "map_builds": 1300,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89809011,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "base-Raindance-stationary": {
+        "mission": "Raindance",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 148.239,
+        "frame_ms": {
+          "mean": 2.19422,
+          "p95": 2.3715,
+          "p99": 2.4484
+        },
+        "prepare_ms": {
+          "mean": 1.62926,
+          "p95": 1.7467,
+          "p99": 1.808
+        },
+        "capture_ms": {
+          "mean": 0.761863,
+          "p95": 0.7945,
+          "p99": 0.8101
+        },
+        "submit_ms": {
+          "mean": 0.195276,
+          "p95": 0.2389,
+          "p99": 0.2522
+        },
+        "simulation_ms": {
+          "mean": 0.369576,
+          "p95": 0.3979,
+          "p99": 0.4466
+        },
+        "terrain_lod_ms": {
+          "mean": 0.417771,
+          "p95": 0.4353,
+          "p99": 0.4512
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 1594,
+        "mean_draws": 447,
+        "mean_binds": 81,
+        "textures": 408,
+        "texture_bytes": 5005364,
+        "physical_textures": 27,
+        "texture_arrays": 21,
+        "texture_array_bytes": 11425152,
+        "allocated_texture_payload_bytes": 13145148,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 523,
+        "texture_evictions": 0,
+        "vertex_capacity": 131072,
+        "staging_capacity": 8388608,
+        "retained_meshes": 6,
+        "retained_mesh_bytes": 311244,
+        "peak_retained_mesh_bytes": 311244,
+        "mesh_uploads": 6,
+        "mean_vertex_upload_bytes": 80739.6,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 78262.8,
+        "geometry_builds": 0,
+        "map_builds": 0,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89809011,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "base-Raindance-travel": {
+        "mission": "Raindance",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 144.454,
+        "frame_ms": {
+          "mean": 3.63937,
+          "p95": 5.0665,
+          "p99": 5.5289
+        },
+        "prepare_ms": {
+          "mean": 2.17472,
+          "p95": 2.6722,
+          "p99": 2.7614
+        },
+        "capture_ms": {
+          "mean": 0.971315,
+          "p95": 1.2056,
+          "p99": 1.2419
+        },
+        "submit_ms": {
+          "mean": 1.05134,
+          "p95": 2.419,
+          "p99": 2.7438
+        },
+        "simulation_ms": {
+          "mean": 0.413183,
+          "p95": 0.479,
+          "p99": 0.5107
+        },
+        "terrain_lod_ms": {
+          "mean": 0.52909,
+          "p95": 0.6366,
+          "p99": 0.6757
+        },
+        "light_samples_ms": {
+          "mean": 0.00018875,
+          "p95": 0.0005,
+          "p99": 0.0006
+        },
+        "mean_polygons": 1797.4,
+        "mean_draws": 542.558,
+        "mean_binds": 246.442,
+        "textures": 2497,
+        "texture_bytes": 23237288,
+        "physical_textures": 1449,
+        "texture_arrays": 40,
+        "texture_array_bytes": 16739328,
+        "allocated_texture_payload_bytes": 33650036,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 4016,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 16,
+        "retained_mesh_bytes": 484908,
+        "peak_retained_mesh_bytes": 484908,
+        "mesh_uploads": 16,
+        "mean_vertex_upload_bytes": 111431,
+        "mean_mesh_upload_bytes": 29.6,
+        "mean_texture_upload_bytes": 268772,
+        "geometry_builds": 1,
+        "map_builds": 2016,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89809011,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap1-rotate": {
+        "mission": "rpgmap1",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 436.998,
+        "frame_ms": {
+          "mean": 9.47987,
+          "p95": 10.9741,
+          "p99": 12.3594
+        },
+        "prepare_ms": {
+          "mean": 3.51045,
+          "p95": 4.4871,
+          "p99": 5.4166
+        },
+        "capture_ms": {
+          "mean": 2.12621,
+          "p95": 2.6014,
+          "p99": 2.8656
+        },
+        "submit_ms": {
+          "mean": 0.533008,
+          "p95": 0.7453,
+          "p99": 0.993
+        },
+        "simulation_ms": {
+          "mean": 5.43631,
+          "p95": 5.9435,
+          "p99": 7.4157
+        },
+        "terrain_lod_ms": {
+          "mean": 1.29293,
+          "p95": 1.5011,
+          "p99": 1.594
+        },
+        "light_samples_ms": {
+          "mean": 0.000537083,
+          "p95": 0.0009,
+          "p99": 0.001
+        },
+        "mean_polygons": 3073.15,
+        "mean_draws": 999.254,
+        "mean_binds": 562.133,
+        "textures": 2482,
+        "texture_bytes": 10766448,
+        "physical_textures": 1138,
+        "texture_arrays": 56,
+        "texture_array_bytes": 16766272,
+        "allocated_texture_payload_bytes": 22047148,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 3222,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 16777216,
+        "retained_meshes": 13,
+        "retained_mesh_bytes": 677016,
+        "peak_retained_mesh_bytes": 677016,
+        "mesh_uploads": 13,
+        "mean_vertex_upload_bytes": 210590,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 2316.93,
+        "geometry_builds": 0,
+        "map_builds": 1384,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 114157019,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap1-stationary": {
+        "mission": "rpgmap1",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 432.068,
+        "frame_ms": {
+          "mean": 9.09117,
+          "p95": 10.4805,
+          "p99": 13.0483
+        },
+        "prepare_ms": {
+          "mean": 3.0911,
+          "p95": 3.8679,
+          "p99": 4.1697
+        },
+        "capture_ms": {
+          "mean": 1.22053,
+          "p95": 1.3736,
+          "p99": 1.7339
+        },
+        "submit_ms": {
+          "mean": 0.518867,
+          "p95": 0.7146,
+          "p99": 0.7717
+        },
+        "simulation_ms": {
+          "mean": 5.48107,
+          "p95": 6.1262,
+          "p99": 7.9651
+        },
+        "terrain_lod_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 5646.98,
+        "mean_draws": 1754,
+        "mean_binds": 468,
+        "textures": 1109,
+        "texture_bytes": 8098808,
+        "physical_textures": 51,
+        "texture_arrays": 42,
+        "texture_array_bytes": 16340288,
+        "allocated_texture_payload_bytes": 19625388,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 3622,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 16777216,
+        "retained_meshes": 12,
+        "retained_mesh_bytes": 675720,
+        "peak_retained_mesh_bytes": 675720,
+        "mesh_uploads": 12,
+        "mean_vertex_upload_bytes": 251278,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 8085.67,
+        "geometry_builds": 0,
+        "map_builds": 4310,
+        "terrain_selection_cache_hits": 240,
+        "archive_mapped_bytes": 114157019,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap1-travel": {
+        "mission": "rpgmap1",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 427.728,
+        "frame_ms": {
+          "mean": 10.5751,
+          "p95": 13.1323,
+          "p99": 16.6109
+        },
+        "prepare_ms": {
+          "mean": 3.55766,
+          "p95": 4.5737,
+          "p99": 5.3059
+        },
+        "capture_ms": {
+          "mean": 2.17289,
+          "p95": 2.7037,
+          "p99": 3.0899
+        },
+        "submit_ms": {
+          "mean": 1.47206,
+          "p95": 3.4045,
+          "p99": 4.0257
+        },
+        "simulation_ms": {
+          "mean": 5.54525,
+          "p95": 6.7819,
+          "p99": 8.1131
+        },
+        "terrain_lod_ms": {
+          "mean": 1.32949,
+          "p95": 1.6132,
+          "p99": 1.8728
+        },
+        "light_samples_ms": {
+          "mean": 0.00075375,
+          "p95": 0.0013,
+          "p99": 0.0016
+        },
+        "mean_polygons": 3043.28,
+        "mean_draws": 979.992,
+        "mean_binds": 600.417,
+        "textures": 4122,
+        "texture_bytes": 14511188,
+        "physical_textures": 2768,
+        "texture_arrays": 56,
+        "texture_array_bytes": 16766272,
+        "allocated_texture_payload_bytes": 25713068,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 4839,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 16777216,
+        "retained_meshes": 13,
+        "retained_mesh_bytes": 677016,
+        "peak_retained_mesh_bytes": 677016,
+        "mesh_uploads": 13,
+        "mean_vertex_upload_bytes": 205613,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 11755.1,
+        "geometry_builds": 0,
+        "map_builds": 1384,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 114157019,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap5-rotate": {
+        "mission": "rpgmap5",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 420.666,
+        "frame_ms": {
+          "mean": 8.86743,
+          "p95": 10.4288,
+          "p99": 11.6347
+        },
+        "prepare_ms": {
+          "mean": 4.46278,
+          "p95": 5.4114,
+          "p99": 5.9814
+        },
+        "capture_ms": {
+          "mean": 2.7691,
+          "p95": 3.2041,
+          "p99": 3.3614
+        },
+        "submit_ms": {
+          "mean": 0.72926,
+          "p95": 1.2188,
+          "p99": 1.4763
+        },
+        "simulation_ms": {
+          "mean": 3.67528,
+          "p95": 3.9195,
+          "p99": 4.356
+        },
+        "terrain_lod_ms": {
+          "mean": 1.47112,
+          "p95": 1.5942,
+          "p99": 1.7962
+        },
+        "light_samples_ms": {
+          "mean": 0.000605,
+          "p95": 0.0011,
+          "p99": 0.0012
+        },
+        "mean_polygons": 4622.19,
+        "mean_draws": 1372.45,
+        "mean_binds": 644.033,
+        "textures": 2905,
+        "texture_bytes": 15890956,
+        "physical_textures": 1239,
+        "texture_arrays": 41,
+        "texture_array_bytes": 16771712,
+        "allocated_texture_payload_bytes": 25158040,
+        "lightmap_pages": 3,
+        "lightmap_page_bytes": 3145728,
+        "texture_uploads": 6648,
+        "texture_evictions": 0,
+        "vertex_capacity": 524288,
+        "staging_capacity": 16777216,
+        "retained_meshes": 9,
+        "retained_mesh_bytes": 1523388,
+        "peak_retained_mesh_bytes": 1523388,
+        "mesh_uploads": 9,
+        "mean_vertex_upload_bytes": 202666,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 2784.6,
+        "geometry_builds": 0,
+        "map_builds": 7594,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 136822280,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap5-stationary": {
+        "mission": "rpgmap5",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 422.11,
+        "frame_ms": {
+          "mean": 7.55044,
+          "p95": 8.5698,
+          "p99": 8.8357
+        },
+        "prepare_ms": {
+          "mean": 3.36661,
+          "p95": 4.0289,
+          "p99": 4.181
+        },
+        "capture_ms": {
+          "mean": 1.38465,
+          "p95": 1.505,
+          "p99": 1.544
+        },
+        "submit_ms": {
+          "mean": 0.529342,
+          "p95": 0.724,
+          "p99": 0.7736
+        },
+        "simulation_ms": {
+          "mean": 3.65435,
+          "p95": 3.9092,
+          "p99": 4.0243
+        },
+        "terrain_lod_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 5923.02,
+        "mean_draws": 1898.13,
+        "mean_binds": 320.858,
+        "textures": 1372,
+        "texture_bytes": 12050636,
+        "physical_textures": 56,
+        "texture_arrays": 41,
+        "texture_array_bytes": 16771712,
+        "allocated_texture_payload_bytes": 21149080,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 8772,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 16777216,
+        "retained_meshes": 5,
+        "retained_mesh_bytes": 805044,
+        "peak_retained_mesh_bytes": 805044,
+        "mesh_uploads": 5,
+        "mean_vertex_upload_bytes": 249699,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 5842.58,
+        "geometry_builds": 0,
+        "map_builds": 9576,
+        "terrain_selection_cache_hits": 240,
+        "archive_mapped_bytes": 136822280,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap5-travel": {
+        "mission": "rpgmap5",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 422.228,
+        "frame_ms": {
+          "mean": 9.48983,
+          "p95": 11.043,
+          "p99": 11.8889
+        },
+        "prepare_ms": {
+          "mean": 4.51838,
+          "p95": 5.4873,
+          "p99": 5.7518
+        },
+        "capture_ms": {
+          "mean": 2.8535,
+          "p95": 3.2685,
+          "p99": 3.4349
+        },
+        "submit_ms": {
+          "mean": 1.29278,
+          "p95": 2.3278,
+          "p99": 2.9964
+        },
+        "simulation_ms": {
+          "mean": 3.67855,
+          "p95": 3.8045,
+          "p99": 4.1666
+        },
+        "terrain_lod_ms": {
+          "mean": 1.48279,
+          "p95": 1.6462,
+          "p99": 1.79
+        },
+        "light_samples_ms": {
+          "mean": 0.000789167,
+          "p95": 0.0014,
+          "p99": 0.0017
+        },
+        "mean_polygons": 4583.77,
+        "mean_draws": 1318.73,
+        "mean_binds": 652.212,
+        "textures": 4225,
+        "texture_bytes": 19480684,
+        "physical_textures": 2298,
+        "texture_arrays": 41,
+        "texture_array_bytes": 16771712,
+        "allocated_texture_payload_bytes": 27987352,
+        "lightmap_pages": 3,
+        "lightmap_page_bytes": 3145728,
+        "texture_uploads": 7898,
+        "texture_evictions": 0,
+        "vertex_capacity": 524288,
+        "staging_capacity": 16777216,
+        "retained_meshes": 9,
+        "retained_mesh_bytes": 1523388,
+        "peak_retained_mesh_bytes": 1523388,
+        "mesh_uploads": 9,
+        "mean_vertex_upload_bytes": 187438,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 11535.1,
+        "geometry_builds": 0,
+        "map_builds": 7125,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 136822280,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      }
+    },
+    "bounded_bsp_scratch": {
+      "base-Broadside-rotate": {
+        "mission": "Broadside",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 148.817,
+        "frame_ms": {
+          "mean": 3.26299,
+          "p95": 4.2012,
+          "p99": 4.2901
+        },
+        "prepare_ms": {
+          "mean": 2.50808,
+          "p95": 3.3855,
+          "p99": 3.4622
+        },
+        "capture_ms": {
+          "mean": 1.50593,
+          "p95": 2.142,
+          "p99": 2.2052
+        },
+        "submit_ms": {
+          "mean": 0.274632,
+          "p95": 0.3543,
+          "p99": 0.3768
+        },
+        "simulation_ms": {
+          "mean": 0.480185,
+          "p95": 0.5286,
+          "p99": 0.5664
+        },
+        "terrain_lod_ms": {
+          "mean": 0.727247,
+          "p95": 0.7897,
+          "p99": 0.8612
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 1854.66,
+        "mean_draws": 448.083,
+        "mean_binds": 215.304,
+        "textures": 1144,
+        "texture_bytes": 9664112,
+        "physical_textures": 374,
+        "texture_arrays": 49,
+        "texture_array_bytes": 16712192,
+        "allocated_texture_payload_bytes": 20426940,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 2344,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 3,
+        "retained_mesh_bytes": 730788,
+        "peak_retained_mesh_bytes": 730788,
+        "mesh_uploads": 3,
+        "mean_vertex_upload_bytes": 107312,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 244324,
+        "geometry_builds": 0,
+        "map_builds": 2499,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89852983,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "base-Broadside-stationary": {
+        "mission": "Broadside",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 153.535,
+        "frame_ms": {
+          "mean": 3.59298,
+          "p95": 4.0034,
+          "p99": 4.1171
+        },
+        "prepare_ms": {
+          "mean": 2.81859,
+          "p95": 3.0776,
+          "p99": 3.164
+        },
+        "capture_ms": {
+          "mean": 1.7275,
+          "p95": 1.8335,
+          "p99": 1.8746
+        },
+        "submit_ms": {
+          "mean": 0.263181,
+          "p95": 0.3391,
+          "p99": 0.368
+        },
+        "simulation_ms": {
+          "mean": 0.511106,
+          "p95": 0.5979,
+          "p99": 0.6263
+        },
+        "terrain_lod_ms": {
+          "mean": 0.72305,
+          "p95": 0.7781,
+          "p99": 0.7861
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 2337,
+        "mean_draws": 568.375,
+        "mean_binds": 137,
+        "textures": 498,
+        "texture_bytes": 6017684,
+        "physical_textures": 40,
+        "texture_arrays": 34,
+        "texture_array_bytes": 15335936,
+        "allocated_texture_payload_bytes": 17055932,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 1527,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 2,
+        "retained_mesh_bytes": 714900,
+        "peak_retained_mesh_bytes": 714900,
+        "mesh_uploads": 2,
+        "mean_vertex_upload_bytes": 139392,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 78601.1,
+        "geometry_builds": 0,
+        "map_builds": 3672,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89852983,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "base-Broadside-travel": {
+        "mission": "Broadside",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 150.333,
+        "frame_ms": {
+          "mean": 4.31276,
+          "p95": 5.595,
+          "p99": 6.3406
+        },
+        "prepare_ms": {
+          "mean": 2.76259,
+          "p95": 3.7458,
+          "p99": 3.8548
+        },
+        "capture_ms": {
+          "mean": 1.61765,
+          "p95": 2.287,
+          "p99": 2.3754
+        },
+        "submit_ms": {
+          "mean": 1.01427,
+          "p95": 2.5613,
+          "p99": 2.9828
+        },
+        "simulation_ms": {
+          "mean": 0.535776,
+          "p95": 0.5938,
+          "p99": 0.6213
+        },
+        "terrain_lod_ms": {
+          "mean": 0.8778,
+          "p95": 0.9894,
+          "p99": 1.0413
+        },
+        "light_samples_ms": {
+          "mean": 0.00029125,
+          "p95": 0.0006,
+          "p99": 0.0008
+        },
+        "mean_polygons": 1885.55,
+        "mean_draws": 454.025,
+        "mean_binds": 267.333,
+        "textures": 2108,
+        "texture_bytes": 18076940,
+        "physical_textures": 1368,
+        "texture_arrays": 46,
+        "texture_array_bytes": 16712192,
+        "allocated_texture_payload_bytes": 28836028,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 3002,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 3,
+        "retained_mesh_bytes": 730788,
+        "peak_retained_mesh_bytes": 730788,
+        "mesh_uploads": 3,
+        "mean_vertex_upload_bytes": 112373,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 265348,
+        "geometry_builds": 0,
+        "map_builds": 2380,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89852983,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "base-Raindance-rotate": {
+        "mission": "Raindance",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 142.931,
+        "frame_ms": {
+          "mean": 2.54406,
+          "p95": 3.2891,
+          "p99": 3.5678
+        },
+        "prepare_ms": {
+          "mean": 1.8684,
+          "p95": 2.4466,
+          "p99": 2.614
+        },
+        "capture_ms": {
+          "mean": 0.836314,
+          "p95": 1.0605,
+          "p99": 1.1218
+        },
+        "submit_ms": {
+          "mean": 0.299256,
+          "p95": 0.4283,
+          "p99": 0.6558
+        },
+        "simulation_ms": {
+          "mean": 0.376305,
+          "p95": 0.4391,
+          "p99": 0.5062
+        },
+        "terrain_lod_ms": {
+          "mean": 0.450728,
+          "p95": 0.4965,
+          "p99": 0.5623
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 1626.54,
+        "mean_draws": 481.083,
+        "mean_binds": 176.083,
+        "textures": 1240,
+        "texture_bytes": 11307308,
+        "physical_textures": 311,
+        "texture_arrays": 39,
+        "texture_array_bytes": 16722944,
+        "allocated_texture_payload_bytes": 20768116,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 2279,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 16,
+        "retained_mesh_bytes": 484908,
+        "peak_retained_mesh_bytes": 484908,
+        "mesh_uploads": 16,
+        "mean_vertex_upload_bytes": 103692,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 244637,
+        "geometry_builds": 0,
+        "map_builds": 1300,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89809011,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "base-Raindance-stationary": {
+        "mission": "Raindance",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 140.032,
+        "frame_ms": {
+          "mean": 2.293,
+          "p95": 2.4769,
+          "p99": 2.5602
+        },
+        "prepare_ms": {
+          "mean": 1.68517,
+          "p95": 1.8097,
+          "p99": 1.8577
+        },
+        "capture_ms": {
+          "mean": 0.775944,
+          "p95": 0.8101,
+          "p99": 0.8274
+        },
+        "submit_ms": {
+          "mean": 0.221047,
+          "p95": 0.2727,
+          "p99": 0.2893
+        },
+        "simulation_ms": {
+          "mean": 0.38668,
+          "p95": 0.4261,
+          "p99": 0.4503
+        },
+        "terrain_lod_ms": {
+          "mean": 0.423675,
+          "p95": 0.4441,
+          "p99": 0.4575
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 1594,
+        "mean_draws": 447,
+        "mean_binds": 81,
+        "textures": 408,
+        "texture_bytes": 5005364,
+        "physical_textures": 27,
+        "texture_arrays": 21,
+        "texture_array_bytes": 11425152,
+        "allocated_texture_payload_bytes": 13145148,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 523,
+        "texture_evictions": 0,
+        "vertex_capacity": 131072,
+        "staging_capacity": 8388608,
+        "retained_meshes": 6,
+        "retained_mesh_bytes": 311244,
+        "peak_retained_mesh_bytes": 311244,
+        "mesh_uploads": 6,
+        "mean_vertex_upload_bytes": 80739.6,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 78262.8,
+        "geometry_builds": 0,
+        "map_builds": 0,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89809011,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "base-Raindance-travel": {
+        "mission": "Raindance",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 142.436,
+        "frame_ms": {
+          "mean": 3.62454,
+          "p95": 5.082,
+          "p99": 5.5867
+        },
+        "prepare_ms": {
+          "mean": 2.16239,
+          "p95": 2.6556,
+          "p99": 2.7811
+        },
+        "capture_ms": {
+          "mean": 0.965537,
+          "p95": 1.2006,
+          "p99": 1.2757
+        },
+        "submit_ms": {
+          "mean": 1.05223,
+          "p95": 2.3896,
+          "p99": 2.8599
+        },
+        "simulation_ms": {
+          "mean": 0.4098,
+          "p95": 0.4689,
+          "p99": 0.5142
+        },
+        "terrain_lod_ms": {
+          "mean": 0.527541,
+          "p95": 0.6206,
+          "p99": 0.6758
+        },
+        "light_samples_ms": {
+          "mean": 0.000187917,
+          "p95": 0.0005,
+          "p99": 0.0006
+        },
+        "mean_polygons": 1797.4,
+        "mean_draws": 542.558,
+        "mean_binds": 246.442,
+        "textures": 2497,
+        "texture_bytes": 23237288,
+        "physical_textures": 1449,
+        "texture_arrays": 40,
+        "texture_array_bytes": 16739328,
+        "allocated_texture_payload_bytes": 33650036,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 4016,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 16,
+        "retained_mesh_bytes": 484908,
+        "peak_retained_mesh_bytes": 484908,
+        "mesh_uploads": 16,
+        "mean_vertex_upload_bytes": 111431,
+        "mean_mesh_upload_bytes": 29.6,
+        "mean_texture_upload_bytes": 268772,
+        "geometry_builds": 1,
+        "map_builds": 2016,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89809011,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap1-rotate": {
+        "mission": "rpgmap1",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 431.429,
+        "frame_ms": {
+          "mean": 9.9175,
+          "p95": 11.5782,
+          "p99": 13.6365
+        },
+        "prepare_ms": {
+          "mean": 3.50007,
+          "p95": 4.4528,
+          "p99": 5.5387
+        },
+        "capture_ms": {
+          "mean": 2.12453,
+          "p95": 2.6157,
+          "p99": 2.9841
+        },
+        "submit_ms": {
+          "mean": 0.53721,
+          "p95": 0.7771,
+          "p99": 1.0049
+        },
+        "simulation_ms": {
+          "mean": 5.88009,
+          "p95": 6.5194,
+          "p99": 7.8665
+        },
+        "terrain_lod_ms": {
+          "mean": 1.28428,
+          "p95": 1.4918,
+          "p99": 1.5988
+        },
+        "light_samples_ms": {
+          "mean": 0.000542083,
+          "p95": 0.0009,
+          "p99": 0.0011
+        },
+        "mean_polygons": 3073.15,
+        "mean_draws": 999.254,
+        "mean_binds": 562.133,
+        "textures": 2482,
+        "texture_bytes": 10766448,
+        "physical_textures": 1138,
+        "texture_arrays": 56,
+        "texture_array_bytes": 16766272,
+        "allocated_texture_payload_bytes": 22047148,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 3222,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 16777216,
+        "retained_meshes": 13,
+        "retained_mesh_bytes": 677016,
+        "peak_retained_mesh_bytes": 677016,
+        "mesh_uploads": 13,
+        "mean_vertex_upload_bytes": 210590,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 2316.93,
+        "geometry_builds": 0,
+        "map_builds": 1384,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 114157019,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap1-stationary": {
+        "mission": "rpgmap1",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 431.638,
+        "frame_ms": {
+          "mean": 8.92443,
+          "p95": 10.1867,
+          "p99": 11.244
+        },
+        "prepare_ms": {
+          "mean": 3.03141,
+          "p95": 3.7387,
+          "p99": 3.9466
+        },
+        "capture_ms": {
+          "mean": 1.18216,
+          "p95": 1.3354,
+          "p99": 1.3953
+        },
+        "submit_ms": {
+          "mean": 0.50844,
+          "p95": 0.7049,
+          "p99": 0.7471
+        },
+        "simulation_ms": {
+          "mean": 5.38444,
+          "p95": 5.948,
+          "p99": 7.1955
+        },
+        "terrain_lod_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 5646.98,
+        "mean_draws": 1754,
+        "mean_binds": 468,
+        "textures": 1109,
+        "texture_bytes": 8098808,
+        "physical_textures": 51,
+        "texture_arrays": 42,
+        "texture_array_bytes": 16340288,
+        "allocated_texture_payload_bytes": 19625388,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 3622,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 16777216,
+        "retained_meshes": 12,
+        "retained_mesh_bytes": 675720,
+        "peak_retained_mesh_bytes": 675720,
+        "mesh_uploads": 12,
+        "mean_vertex_upload_bytes": 251278,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 8085.67,
+        "geometry_builds": 0,
+        "map_builds": 4310,
+        "terrain_selection_cache_hits": 240,
+        "archive_mapped_bytes": 114157019,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap1-travel": {
+        "mission": "rpgmap1",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 423.018,
+        "frame_ms": {
+          "mean": 10.6675,
+          "p95": 12.4961,
+          "p99": 14.0671
+        },
+        "prepare_ms": {
+          "mean": 3.44297,
+          "p95": 4.4746,
+          "p99": 4.5789
+        },
+        "capture_ms": {
+          "mean": 2.10545,
+          "p95": 2.6288,
+          "p99": 2.6944
+        },
+        "submit_ms": {
+          "mean": 1.43082,
+          "p95": 3.1823,
+          "p99": 3.9288
+        },
+        "simulation_ms": {
+          "mean": 5.79352,
+          "p95": 6.4669,
+          "p99": 7.8558
+        },
+        "terrain_lod_ms": {
+          "mean": 1.28887,
+          "p95": 1.4361,
+          "p99": 1.5427
+        },
+        "light_samples_ms": {
+          "mean": 0.000723333,
+          "p95": 0.0013,
+          "p99": 0.0016
+        },
+        "mean_polygons": 3043.28,
+        "mean_draws": 979.992,
+        "mean_binds": 600.417,
+        "textures": 4122,
+        "texture_bytes": 14511188,
+        "physical_textures": 2768,
+        "texture_arrays": 56,
+        "texture_array_bytes": 16766272,
+        "allocated_texture_payload_bytes": 25713068,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 4839,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 16777216,
+        "retained_meshes": 13,
+        "retained_mesh_bytes": 677016,
+        "peak_retained_mesh_bytes": 677016,
+        "mesh_uploads": 13,
+        "mean_vertex_upload_bytes": 205613,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 11755.1,
+        "geometry_builds": 0,
+        "map_builds": 1384,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 114157019,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap5-rotate": {
+        "mission": "rpgmap5",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 423.906,
+        "frame_ms": {
+          "mean": 8.84545,
+          "p95": 10.0583,
+          "p99": 11.0417
+        },
+        "prepare_ms": {
+          "mean": 4.43487,
+          "p95": 5.3609,
+          "p99": 5.6976
+        },
+        "capture_ms": {
+          "mean": 2.74669,
+          "p95": 3.149,
+          "p99": 3.2556
+        },
+        "submit_ms": {
+          "mean": 0.722197,
+          "p95": 1.1168,
+          "p99": 1.4855
+        },
+        "simulation_ms": {
+          "mean": 3.68825,
+          "p95": 3.9794,
+          "p99": 4.3398
+        },
+        "terrain_lod_ms": {
+          "mean": 1.46096,
+          "p95": 1.5639,
+          "p99": 1.6511
+        },
+        "light_samples_ms": {
+          "mean": 0.000580417,
+          "p95": 0.001,
+          "p99": 0.0011
+        },
+        "mean_polygons": 4622.19,
+        "mean_draws": 1372.45,
+        "mean_binds": 644.033,
+        "textures": 2905,
+        "texture_bytes": 15890956,
+        "physical_textures": 1239,
+        "texture_arrays": 41,
+        "texture_array_bytes": 16771712,
+        "allocated_texture_payload_bytes": 25158040,
+        "lightmap_pages": 3,
+        "lightmap_page_bytes": 3145728,
+        "texture_uploads": 6648,
+        "texture_evictions": 0,
+        "vertex_capacity": 524288,
+        "staging_capacity": 16777216,
+        "retained_meshes": 9,
+        "retained_mesh_bytes": 1523388,
+        "peak_retained_mesh_bytes": 1523388,
+        "mesh_uploads": 9,
+        "mean_vertex_upload_bytes": 202666,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 2784.6,
+        "geometry_builds": 0,
+        "map_builds": 7594,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 136822280,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap5-stationary": {
+        "mission": "rpgmap5",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 418.309,
+        "frame_ms": {
+          "mean": 7.5929,
+          "p95": 8.8174,
+          "p99": 9.2008
+        },
+        "prepare_ms": {
+          "mean": 3.38808,
+          "p95": 4.0729,
+          "p99": 4.2599
+        },
+        "capture_ms": {
+          "mean": 1.40243,
+          "p95": 1.5463,
+          "p99": 1.7005
+        },
+        "submit_ms": {
+          "mean": 0.546688,
+          "p95": 0.7729,
+          "p99": 0.8199
+        },
+        "simulation_ms": {
+          "mean": 3.658,
+          "p95": 3.9469,
+          "p99": 4.3358
+        },
+        "terrain_lod_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 5923.02,
+        "mean_draws": 1898.13,
+        "mean_binds": 320.858,
+        "textures": 1372,
+        "texture_bytes": 12050636,
+        "physical_textures": 56,
+        "texture_arrays": 41,
+        "texture_array_bytes": 16771712,
+        "allocated_texture_payload_bytes": 21149080,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 8772,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 16777216,
+        "retained_meshes": 5,
+        "retained_mesh_bytes": 805044,
+        "peak_retained_mesh_bytes": 805044,
+        "mesh_uploads": 5,
+        "mean_vertex_upload_bytes": 249699,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 5842.58,
+        "geometry_builds": 0,
+        "map_builds": 9576,
+        "terrain_selection_cache_hits": 240,
+        "archive_mapped_bytes": 136822280,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap5-travel": {
+        "mission": "rpgmap5",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 418.004,
+        "frame_ms": {
+          "mean": 10.6174,
+          "p95": 13.6984,
+          "p99": 16.0568
+        },
+        "prepare_ms": {
+          "mean": 5.00435,
+          "p95": 6.9658,
+          "p99": 7.5749
+        },
+        "capture_ms": {
+          "mean": 3.11917,
+          "p95": 4.2111,
+          "p99": 4.5066
+        },
+        "submit_ms": {
+          "mean": 1.47002,
+          "p95": 2.833,
+          "p99": 3.5124
+        },
+        "simulation_ms": {
+          "mean": 4.14289,
+          "p95": 5.4696,
+          "p99": 5.8506
+        },
+        "terrain_lod_ms": {
+          "mean": 1.6299,
+          "p95": 2.0781,
+          "p99": 2.2641
+        },
+        "light_samples_ms": {
+          "mean": 0.00082625,
+          "p95": 0.0014,
+          "p99": 0.0017
+        },
+        "mean_polygons": 4583.77,
+        "mean_draws": 1318.73,
+        "mean_binds": 652.212,
+        "textures": 4225,
+        "texture_bytes": 19480684,
+        "physical_textures": 2298,
+        "texture_arrays": 41,
+        "texture_array_bytes": 16771712,
+        "allocated_texture_payload_bytes": 27987352,
+        "lightmap_pages": 3,
+        "lightmap_page_bytes": 3145728,
+        "texture_uploads": 7898,
+        "texture_evictions": 0,
+        "vertex_capacity": 524288,
+        "staging_capacity": 16777216,
+        "retained_meshes": 9,
+        "retained_mesh_bytes": 1523388,
+        "peak_retained_mesh_bytes": 1523388,
+        "mesh_uploads": 9,
+        "mean_vertex_upload_bytes": 187438,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 11535.1,
+        "geometry_builds": 0,
+        "map_builds": 7125,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 136822280,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      }
+    },
+    "bounded_bsp_scratch_repeat": {
+      "base-Broadside-rotate": {
+        "mission": "Broadside",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 149.383,
+        "frame_ms": {
+          "mean": 3.27107,
+          "p95": 4.2573,
+          "p99": 4.402
+        },
+        "prepare_ms": {
+          "mean": 2.51343,
+          "p95": 3.4466,
+          "p99": 3.5434
+        },
+        "capture_ms": {
+          "mean": 1.50231,
+          "p95": 2.1563,
+          "p99": 2.2269
+        },
+        "submit_ms": {
+          "mean": 0.271114,
+          "p95": 0.355,
+          "p99": 0.4008
+        },
+        "simulation_ms": {
+          "mean": 0.486417,
+          "p95": 0.5272,
+          "p99": 0.5926
+        },
+        "terrain_lod_ms": {
+          "mean": 0.726307,
+          "p95": 0.7737,
+          "p99": 0.815
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 1854.66,
+        "mean_draws": 448.083,
+        "mean_binds": 215.304,
+        "textures": 1144,
+        "texture_bytes": 9664112,
+        "physical_textures": 374,
+        "texture_arrays": 49,
+        "texture_array_bytes": 16712192,
+        "allocated_texture_payload_bytes": 20426940,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 2344,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 3,
+        "retained_mesh_bytes": 730788,
+        "peak_retained_mesh_bytes": 730788,
+        "mesh_uploads": 3,
+        "mean_vertex_upload_bytes": 107312,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 244324,
+        "geometry_builds": 0,
+        "map_builds": 2499,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89852983,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "base-Broadside-stationary": {
+        "mission": "Broadside",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 147.6,
+        "frame_ms": {
+          "mean": 3.73549,
+          "p95": 4.4973,
+          "p99": 4.6687
+        },
+        "prepare_ms": {
+          "mean": 2.90814,
+          "p95": 3.3555,
+          "p99": 3.5161
+        },
+        "capture_ms": {
+          "mean": 1.76525,
+          "p95": 1.9482,
+          "p99": 2.03
+        },
+        "submit_ms": {
+          "mean": 0.284095,
+          "p95": 0.4123,
+          "p99": 0.4369
+        },
+        "simulation_ms": {
+          "mean": 0.543125,
+          "p95": 0.6954,
+          "p99": 0.7982
+        },
+        "terrain_lod_ms": {
+          "mean": 0.74156,
+          "p95": 0.8358,
+          "p99": 0.8636
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 2337,
+        "mean_draws": 568.375,
+        "mean_binds": 137,
+        "textures": 498,
+        "texture_bytes": 6017684,
+        "physical_textures": 40,
+        "texture_arrays": 34,
+        "texture_array_bytes": 15335936,
+        "allocated_texture_payload_bytes": 17055932,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 1527,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 2,
+        "retained_mesh_bytes": 714900,
+        "peak_retained_mesh_bytes": 714900,
+        "mesh_uploads": 2,
+        "mean_vertex_upload_bytes": 139392,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 78601.1,
+        "geometry_builds": 0,
+        "map_builds": 3672,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89852983,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "base-Broadside-travel": {
+        "mission": "Broadside",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 152.744,
+        "frame_ms": {
+          "mean": 4.52249,
+          "p95": 6.3594,
+          "p99": 6.7845
+        },
+        "prepare_ms": {
+          "mean": 2.87743,
+          "p95": 4.5936,
+          "p99": 4.8428
+        },
+        "capture_ms": {
+          "mean": 1.66848,
+          "p95": 2.6725,
+          "p99": 2.7931
+        },
+        "submit_ms": {
+          "mean": 1.07559,
+          "p95": 2.5306,
+          "p99": 3.0848
+        },
+        "simulation_ms": {
+          "mean": 0.569343,
+          "p95": 0.7775,
+          "p99": 0.8654
+        },
+        "terrain_lod_ms": {
+          "mean": 0.901114,
+          "p95": 1.0224,
+          "p99": 1.0765
+        },
+        "light_samples_ms": {
+          "mean": 0.000287083,
+          "p95": 0.0007,
+          "p99": 0.0008
+        },
+        "mean_polygons": 1885.55,
+        "mean_draws": 454.025,
+        "mean_binds": 267.333,
+        "textures": 2108,
+        "texture_bytes": 18076940,
+        "physical_textures": 1368,
+        "texture_arrays": 46,
+        "texture_array_bytes": 16712192,
+        "allocated_texture_payload_bytes": 28836028,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 3002,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 3,
+        "retained_mesh_bytes": 730788,
+        "peak_retained_mesh_bytes": 730788,
+        "mesh_uploads": 3,
+        "mean_vertex_upload_bytes": 112373,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 265348,
+        "geometry_builds": 0,
+        "map_builds": 2380,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89852983,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "base-Raindance-rotate": {
+        "mission": "Raindance",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 143.623,
+        "frame_ms": {
+          "mean": 2.53237,
+          "p95": 3.3529,
+          "p99": 3.5267
+        },
+        "prepare_ms": {
+          "mean": 1.85331,
+          "p95": 2.4911,
+          "p99": 2.5803
+        },
+        "capture_ms": {
+          "mean": 0.824806,
+          "p95": 1.0512,
+          "p99": 1.0971
+        },
+        "submit_ms": {
+          "mean": 0.299555,
+          "p95": 0.4483,
+          "p99": 0.521
+        },
+        "simulation_ms": {
+          "mean": 0.379398,
+          "p95": 0.4495,
+          "p99": 0.4991
+        },
+        "terrain_lod_ms": {
+          "mean": 0.443076,
+          "p95": 0.4823,
+          "p99": 0.4974
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 1626.54,
+        "mean_draws": 481.083,
+        "mean_binds": 176.083,
+        "textures": 1240,
+        "texture_bytes": 11307308,
+        "physical_textures": 311,
+        "texture_arrays": 39,
+        "texture_array_bytes": 16722944,
+        "allocated_texture_payload_bytes": 20768116,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 2279,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 16,
+        "retained_mesh_bytes": 484908,
+        "peak_retained_mesh_bytes": 484908,
+        "mesh_uploads": 16,
+        "mean_vertex_upload_bytes": 103692,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 244637,
+        "geometry_builds": 0,
+        "map_builds": 1300,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89809011,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "base-Raindance-stationary": {
+        "mission": "Raindance",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 145.169,
+        "frame_ms": {
+          "mean": 2.33856,
+          "p95": 2.5463,
+          "p99": 2.612
+        },
+        "prepare_ms": {
+          "mean": 1.71276,
+          "p95": 1.8421,
+          "p99": 1.8859
+        },
+        "capture_ms": {
+          "mean": 0.788034,
+          "p95": 0.8324,
+          "p99": 0.8463
+        },
+        "submit_ms": {
+          "mean": 0.229332,
+          "p95": 0.2787,
+          "p99": 0.3062
+        },
+        "simulation_ms": {
+          "mean": 0.396369,
+          "p95": 0.4462,
+          "p99": 0.4799
+        },
+        "terrain_lod_ms": {
+          "mean": 0.432382,
+          "p95": 0.4577,
+          "p99": 0.4862
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 1594,
+        "mean_draws": 447,
+        "mean_binds": 81,
+        "textures": 408,
+        "texture_bytes": 5005364,
+        "physical_textures": 27,
+        "texture_arrays": 21,
+        "texture_array_bytes": 11425152,
+        "allocated_texture_payload_bytes": 13145148,
+        "lightmap_pages": 1,
+        "lightmap_page_bytes": 1048576,
+        "texture_uploads": 523,
+        "texture_evictions": 0,
+        "vertex_capacity": 131072,
+        "staging_capacity": 8388608,
+        "retained_meshes": 6,
+        "retained_mesh_bytes": 311244,
+        "peak_retained_mesh_bytes": 311244,
+        "mesh_uploads": 6,
+        "mean_vertex_upload_bytes": 80739.6,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 78262.8,
+        "geometry_builds": 0,
+        "map_builds": 0,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89809011,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "base-Raindance-travel": {
+        "mission": "Raindance",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 141.536,
+        "frame_ms": {
+          "mean": 3.61202,
+          "p95": 5.0251,
+          "p99": 5.8105
+        },
+        "prepare_ms": {
+          "mean": 2.15281,
+          "p95": 2.6718,
+          "p99": 2.7946
+        },
+        "capture_ms": {
+          "mean": 0.961911,
+          "p95": 1.2048,
+          "p99": 1.2613
+        },
+        "submit_ms": {
+          "mean": 1.04579,
+          "p95": 2.2862,
+          "p99": 3.001
+        },
+        "simulation_ms": {
+          "mean": 0.413308,
+          "p95": 0.481,
+          "p99": 0.5547
+        },
+        "terrain_lod_ms": {
+          "mean": 0.524998,
+          "p95": 0.6178,
+          "p99": 0.6721
+        },
+        "light_samples_ms": {
+          "mean": 0.000191667,
+          "p95": 0.0004,
+          "p99": 0.0007
+        },
+        "mean_polygons": 1797.4,
+        "mean_draws": 542.558,
+        "mean_binds": 246.442,
+        "textures": 2497,
+        "texture_bytes": 23237288,
+        "physical_textures": 1449,
+        "texture_arrays": 40,
+        "texture_array_bytes": 16739328,
+        "allocated_texture_payload_bytes": 33650036,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 4016,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 8388608,
+        "retained_meshes": 16,
+        "retained_mesh_bytes": 484908,
+        "peak_retained_mesh_bytes": 484908,
+        "mesh_uploads": 16,
+        "mean_vertex_upload_bytes": 111431,
+        "mean_mesh_upload_bytes": 29.6,
+        "mean_texture_upload_bytes": 268772,
+        "geometry_builds": 1,
+        "map_builds": 2016,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 89809011,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap1-rotate": {
+        "mission": "rpgmap1",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 437.576,
+        "frame_ms": {
+          "mean": 9.52166,
+          "p95": 11.5846,
+          "p99": 13.8202
+        },
+        "prepare_ms": {
+          "mean": 3.51879,
+          "p95": 4.5307,
+          "p99": 5.3228
+        },
+        "capture_ms": {
+          "mean": 2.13319,
+          "p95": 2.7326,
+          "p99": 3.0656
+        },
+        "submit_ms": {
+          "mean": 0.541088,
+          "p95": 0.8002,
+          "p99": 0.8831
+        },
+        "simulation_ms": {
+          "mean": 5.46166,
+          "p95": 6.1896,
+          "p99": 7.8979
+        },
+        "terrain_lod_ms": {
+          "mean": 1.29553,
+          "p95": 1.4861,
+          "p99": 1.8362
+        },
+        "light_samples_ms": {
+          "mean": 0.000561667,
+          "p95": 0.001,
+          "p99": 0.0012
+        },
+        "mean_polygons": 3073.15,
+        "mean_draws": 999.254,
+        "mean_binds": 562.133,
+        "textures": 2482,
+        "texture_bytes": 10766448,
+        "physical_textures": 1138,
+        "texture_arrays": 56,
+        "texture_array_bytes": 16766272,
+        "allocated_texture_payload_bytes": 22047148,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 3222,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 16777216,
+        "retained_meshes": 13,
+        "retained_mesh_bytes": 677016,
+        "peak_retained_mesh_bytes": 677016,
+        "mesh_uploads": 13,
+        "mean_vertex_upload_bytes": 210590,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 2316.93,
+        "geometry_builds": 0,
+        "map_builds": 1384,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 114157019,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap1-stationary": {
+        "mission": "rpgmap1",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 431.55,
+        "frame_ms": {
+          "mean": 8.88607,
+          "p95": 10.2695,
+          "p99": 10.9337
+        },
+        "prepare_ms": {
+          "mean": 3.00839,
+          "p95": 3.7913,
+          "p99": 3.9726
+        },
+        "capture_ms": {
+          "mean": 1.18333,
+          "p95": 1.3562,
+          "p99": 1.3953
+        },
+        "submit_ms": {
+          "mean": 0.502154,
+          "p95": 0.7141,
+          "p99": 0.8055
+        },
+        "simulation_ms": {
+          "mean": 5.37539,
+          "p95": 5.8712,
+          "p99": 7.4487
+        },
+        "terrain_lod_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 5646.98,
+        "mean_draws": 1754,
+        "mean_binds": 468,
+        "textures": 1109,
+        "texture_bytes": 8098808,
+        "physical_textures": 51,
+        "texture_arrays": 42,
+        "texture_array_bytes": 16340288,
+        "allocated_texture_payload_bytes": 19625388,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 3622,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 16777216,
+        "retained_meshes": 12,
+        "retained_mesh_bytes": 675720,
+        "peak_retained_mesh_bytes": 675720,
+        "mesh_uploads": 12,
+        "mean_vertex_upload_bytes": 251278,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 8085.67,
+        "geometry_builds": 0,
+        "map_builds": 4310,
+        "terrain_selection_cache_hits": 240,
+        "archive_mapped_bytes": 114157019,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap1-travel": {
+        "mission": "rpgmap1",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 425.988,
+        "frame_ms": {
+          "mean": 10.3362,
+          "p95": 12.1394,
+          "p99": 13.3122
+        },
+        "prepare_ms": {
+          "mean": 3.45608,
+          "p95": 4.505,
+          "p99": 4.5482
+        },
+        "capture_ms": {
+          "mean": 2.11081,
+          "p95": 2.622,
+          "p99": 2.6736
+        },
+        "submit_ms": {
+          "mean": 1.43626,
+          "p95": 3.3997,
+          "p99": 3.9227
+        },
+        "simulation_ms": {
+          "mean": 5.44372,
+          "p95": 5.9838,
+          "p99": 7.5159
+        },
+        "terrain_lod_ms": {
+          "mean": 1.29207,
+          "p95": 1.4266,
+          "p99": 1.5674
+        },
+        "light_samples_ms": {
+          "mean": 0.000751667,
+          "p95": 0.0013,
+          "p99": 0.0015
+        },
+        "mean_polygons": 3043.28,
+        "mean_draws": 979.992,
+        "mean_binds": 600.417,
+        "textures": 4122,
+        "texture_bytes": 14511188,
+        "physical_textures": 2768,
+        "texture_arrays": 56,
+        "texture_array_bytes": 16766272,
+        "allocated_texture_payload_bytes": 25713068,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 4839,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 16777216,
+        "retained_meshes": 13,
+        "retained_mesh_bytes": 677016,
+        "peak_retained_mesh_bytes": 677016,
+        "mesh_uploads": 13,
+        "mean_vertex_upload_bytes": 205613,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 11755.1,
+        "geometry_builds": 0,
+        "map_builds": 1384,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 114157019,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap5-rotate": {
+        "mission": "rpgmap5",
+        "mode": "rotate",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 420.144,
+        "frame_ms": {
+          "mean": 8.86074,
+          "p95": 10.1204,
+          "p99": 11.7403
+        },
+        "prepare_ms": {
+          "mean": 4.46473,
+          "p95": 5.3585,
+          "p99": 5.7423
+        },
+        "capture_ms": {
+          "mean": 2.76195,
+          "p95": 3.1939,
+          "p99": 3.3836
+        },
+        "submit_ms": {
+          "mean": 0.73149,
+          "p95": 1.1761,
+          "p99": 1.4341
+        },
+        "simulation_ms": {
+          "mean": 3.6644,
+          "p95": 4.0562,
+          "p99": 4.3705
+        },
+        "terrain_lod_ms": {
+          "mean": 1.46798,
+          "p95": 1.5894,
+          "p99": 1.7159
+        },
+        "light_samples_ms": {
+          "mean": 0.0006075,
+          "p95": 0.001,
+          "p99": 0.0011
+        },
+        "mean_polygons": 4622.19,
+        "mean_draws": 1372.45,
+        "mean_binds": 644.033,
+        "textures": 2905,
+        "texture_bytes": 15890956,
+        "physical_textures": 1239,
+        "texture_arrays": 41,
+        "texture_array_bytes": 16771712,
+        "allocated_texture_payload_bytes": 25158040,
+        "lightmap_pages": 3,
+        "lightmap_page_bytes": 3145728,
+        "texture_uploads": 6648,
+        "texture_evictions": 0,
+        "vertex_capacity": 524288,
+        "staging_capacity": 16777216,
+        "retained_meshes": 9,
+        "retained_mesh_bytes": 1523388,
+        "peak_retained_mesh_bytes": 1523388,
+        "mesh_uploads": 9,
+        "mean_vertex_upload_bytes": 202666,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 2784.6,
+        "geometry_builds": 0,
+        "map_builds": 7594,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 136822280,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap5-stationary": {
+        "mission": "rpgmap5",
+        "mode": "stationary",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 418.499,
+        "frame_ms": {
+          "mean": 7.714,
+          "p95": 9.0854,
+          "p99": 10.4188
+        },
+        "prepare_ms": {
+          "mean": 3.4186,
+          "p95": 4.1695,
+          "p99": 4.4602
+        },
+        "capture_ms": {
+          "mean": 1.40933,
+          "p95": 1.5718,
+          "p99": 1.9733
+        },
+        "submit_ms": {
+          "mean": 0.543061,
+          "p95": 0.7504,
+          "p99": 0.8085
+        },
+        "simulation_ms": {
+          "mean": 3.7522,
+          "p95": 4.2995,
+          "p99": 5.2808
+        },
+        "terrain_lod_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "light_samples_ms": {
+          "mean": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "mean_polygons": 5923.02,
+        "mean_draws": 1898.13,
+        "mean_binds": 320.858,
+        "textures": 1372,
+        "texture_bytes": 12050636,
+        "physical_textures": 56,
+        "texture_arrays": 41,
+        "texture_array_bytes": 16771712,
+        "allocated_texture_payload_bytes": 21149080,
+        "lightmap_pages": 2,
+        "lightmap_page_bytes": 2097152,
+        "texture_uploads": 8772,
+        "texture_evictions": 0,
+        "vertex_capacity": 262144,
+        "staging_capacity": 16777216,
+        "retained_meshes": 5,
+        "retained_mesh_bytes": 805044,
+        "peak_retained_mesh_bytes": 805044,
+        "mesh_uploads": 5,
+        "mean_vertex_upload_bytes": 249699,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 5842.58,
+        "geometry_builds": 0,
+        "map_builds": 9576,
+        "terrain_selection_cache_hits": 240,
+        "archive_mapped_bytes": 136822280,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      },
+      "rpg-rpgmap5-travel": {
+        "mission": "rpgmap5",
+        "mode": "travel",
+        "driver": "direct3d12",
+        "frames": 240,
+        "load_ms": 420.08,
+        "frame_ms": {
+          "mean": 9.62629,
+          "p95": 11.6432,
+          "p99": 13.3493
+        },
+        "prepare_ms": {
+          "mean": 4.57379,
+          "p95": 5.9278,
+          "p99": 6.7489
+        },
+        "capture_ms": {
+          "mean": 2.86579,
+          "p95": 3.5673,
+          "p99": 3.9038
+        },
+        "submit_ms": {
+          "mean": 1.30961,
+          "p95": 2.4327,
+          "p99": 2.9782
+        },
+        "simulation_ms": {
+          "mean": 3.74277,
+          "p95": 4.5127,
+          "p99": 5.4437
+        },
+        "terrain_lod_ms": {
+          "mean": 1.50596,
+          "p95": 1.8686,
+          "p99": 2.0178
+        },
+        "light_samples_ms": {
+          "mean": 0.000818333,
+          "p95": 0.0014,
+          "p99": 0.0017
+        },
+        "mean_polygons": 4583.77,
+        "mean_draws": 1318.73,
+        "mean_binds": 652.212,
+        "textures": 4225,
+        "texture_bytes": 19480684,
+        "physical_textures": 2298,
+        "texture_arrays": 41,
+        "texture_array_bytes": 16771712,
+        "allocated_texture_payload_bytes": 27987352,
+        "lightmap_pages": 3,
+        "lightmap_page_bytes": 3145728,
+        "texture_uploads": 7898,
+        "texture_evictions": 0,
+        "vertex_capacity": 524288,
+        "staging_capacity": 16777216,
+        "retained_meshes": 9,
+        "retained_mesh_bytes": 1523388,
+        "peak_retained_mesh_bytes": 1523388,
+        "mesh_uploads": 9,
+        "mean_vertex_upload_bytes": 187438,
+        "mean_mesh_upload_bytes": 0,
+        "mean_texture_upload_bytes": 11535.1,
+        "geometry_builds": 0,
+        "map_builds": 7125,
+        "terrain_selection_cache_hits": 0,
+        "archive_mapped_bytes": 136822280,
+        "archive_owned_bytes": 0,
+        "archive_decode_staging_bytes": 0
+      }
     }
   },
   "readbacks": {
@@ -6169,6 +9540,453 @@
         "max_channel_error": 0,
         "mean_channel_error": 0.0
       }
+    },
+    "shared_terrain_topology": {
+      "base-Broadside-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Broadside-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Broadside-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Raindance-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Raindance-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Raindance-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap1-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap1-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap1-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap5-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap5-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap5-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      }
+    },
+    "bounded_bsp_scratch": {
+      "base-Broadside-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Broadside-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Broadside-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Raindance-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Raindance-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Raindance-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap1-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap1-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap1-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap5-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap5-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap5-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      }
+    },
+    "bounded_bsp_scratch_repeat": {
+      "base-Broadside-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Broadside-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Broadside-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Raindance-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Raindance-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Raindance-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap1-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap1-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap1-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap5-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap5-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap5-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      }
+    }
+  },
+  "capture_provenance": {
+    "archive_mappings": {
+      "captured_utc": "2026-11-02T17:28:08.255346+00:00",
+      "executable_sha256": "9c862700a110af399f325cde6376b191d5c505e583d296ea1ff954c87a400fa4",
+      "git_revision": "f568cecef29a7ad3f23f684476f1896202bbd849",
+      "git_status": [
+        " M CMakeLists.txt",
+        " M README.md",
+        " M include/opent1/core/res_manager.hpp",
+        " M src/core/res_manager.cpp",
+        " M tests/core/resource_test.cpp",
+        " M tools/render_benchmark.cpp",
+        " M tools/run_render_benchmarks.py",
+        "?? docs/data/render-memory-baseline.json",
+        "?? docs/render-improvements.md",
+        "?? tools/memory_audit.cpp",
+        "?? tools/run_memory_audit.py",
+        "?? tools/summarize_memory_audit.py"
+      ],
+      "frames": 240,
+      "warmup_frames": 120,
+      "driver": "direct3d12",
+      "projected_interiors": false,
+      "instrumented_allocations": false
+    },
+    "shared_terrain_topology": {
+      "captured_utc": "2026-11-02T17:30:16.681069+00:00",
+      "executable_sha256": "9c862700a110af399f325cde6376b191d5c505e583d296ea1ff954c87a400fa4",
+      "git_revision": "f568cecef29a7ad3f23f684476f1896202bbd849",
+      "git_status": [
+        " M CMakeLists.txt",
+        " M README.md",
+        " M include/opent1/core/res_manager.hpp",
+        " M src/core/res_manager.cpp",
+        " M src/world/terrain_lod.cpp",
+        " M tests/core/resource_test.cpp",
+        " M tools/render_benchmark.cpp",
+        " M tools/run_render_benchmarks.py",
+        "?? docs/data/render-memory-baseline.json",
+        "?? docs/render-improvements.md",
+        "?? tools/memory_audit.cpp",
+        "?? tools/run_memory_audit.py",
+        "?? tools/summarize_memory_audit.py"
+      ],
+      "frames": 240,
+      "warmup_frames": 120,
+      "driver": "direct3d12",
+      "projected_interiors": false,
+      "instrumented_allocations": false
+    },
+    "bounded_bsp_scratch": {
+      "captured_utc": "2026-11-02T17:36:04.715074+00:00",
+      "executable_sha256": "9c862700a110af399f325cde6376b191d5c505e583d296ea1ff954c87a400fa4",
+      "git_revision": "ec9540229e8c816f098540771ff1ef36f0018608",
+      "git_status": [
+        " M CMakeLists.txt",
+        " M README.md",
+        " M include/opent1/core/res_manager.hpp",
+        " M src/core/res_manager.cpp",
+        " M tests/core/resource_test.cpp",
+        "?? docs/data/render-memory-after.json",
+        "?? docs/data/render-memory-baseline.json",
+        "?? docs/render-improvements.md",
+        "?? tools/memory_audit.cpp",
+        "?? tools/run_memory_audit.py",
+        "?? tools/summarize_memory_audit.py"
+      ],
+      "frames": 240,
+      "warmup_frames": 120,
+      "driver": "direct3d12",
+      "projected_interiors": false,
+      "instrumented_allocations": false
+    },
+    "bounded_bsp_scratch_repeat": {
+      "captured_utc": "2026-11-02T17:39:47.026618+00:00",
+      "executable_sha256": "9c862700a110af399f325cde6376b191d5c505e583d296ea1ff954c87a400fa4",
+      "git_revision": "ec9540229e8c816f098540771ff1ef36f0018608",
+      "git_status": [
+        " M CMakeLists.txt",
+        " M README.md",
+        " M include/opent1/core/res_manager.hpp",
+        " M src/core/res_manager.cpp",
+        " M tests/core/resource_test.cpp",
+        "?? docs/data/render-memory-after.json",
+        "?? docs/data/render-memory-baseline.json",
+        "?? docs/render-improvements.md",
+        "?? tools/memory_audit.cpp",
+        "?? tools/run_memory_audit.py",
+        "?? tools/summarize_memory_audit.py"
+      ],
+      "frames": 240,
+      "warmup_frames": 120,
+      "driver": "direct3d12",
+      "projected_interiors": false,
+      "instrumented_allocations": false
+    }
+  },
+  "final_serial_capture_summary": {
+    "base-Broadside-rotate": {
+      "mean_of_two_run_means_ms": 3.26703,
+      "run_mean_range_ms": [
+        3.26299,
+        3.27107
+      ],
+      "maximum_run_p95_ms": 4.2573,
+      "maximum_run_p99_ms": 4.402
+    },
+    "base-Broadside-stationary": {
+      "mean_of_two_run_means_ms": 3.6642349999999997,
+      "run_mean_range_ms": [
+        3.59298,
+        3.73549
+      ],
+      "maximum_run_p95_ms": 4.4973,
+      "maximum_run_p99_ms": 4.6687
+    },
+    "base-Broadside-travel": {
+      "mean_of_two_run_means_ms": 4.417625,
+      "run_mean_range_ms": [
+        4.31276,
+        4.52249
+      ],
+      "maximum_run_p95_ms": 6.3594,
+      "maximum_run_p99_ms": 6.7845
+    },
+    "base-Raindance-rotate": {
+      "mean_of_two_run_means_ms": 2.538215,
+      "run_mean_range_ms": [
+        2.53237,
+        2.54406
+      ],
+      "maximum_run_p95_ms": 3.3529,
+      "maximum_run_p99_ms": 3.5678,
+      "original_mean_ms": 3.47367,
+      "mean_change_percent": -26.929875319186902
+    },
+    "base-Raindance-stationary": {
+      "mean_of_two_run_means_ms": 2.31578,
+      "run_mean_range_ms": [
+        2.293,
+        2.33856
+      ],
+      "maximum_run_p95_ms": 2.5463,
+      "maximum_run_p99_ms": 2.612,
+      "original_mean_ms": 2.3314,
+      "mean_change_percent": -0.6699837007806408
+    },
+    "base-Raindance-travel": {
+      "mean_of_two_run_means_ms": 3.61828,
+      "run_mean_range_ms": [
+        3.61202,
+        3.62454
+      ],
+      "maximum_run_p95_ms": 5.082,
+      "maximum_run_p99_ms": 5.8105,
+      "original_mean_ms": 5.03985,
+      "mean_change_percent": -28.2065934502019
+    },
+    "rpg-rpgmap1-rotate": {
+      "mean_of_two_run_means_ms": 9.71958,
+      "run_mean_range_ms": [
+        9.52166,
+        9.9175
+      ],
+      "maximum_run_p95_ms": 11.5846,
+      "maximum_run_p99_ms": 13.8202,
+      "original_mean_ms": 13.4532,
+      "mean_change_percent": -27.752653643742754
+    },
+    "rpg-rpgmap1-stationary": {
+      "mean_of_two_run_means_ms": 8.905249999999999,
+      "run_mean_range_ms": [
+        8.88607,
+        8.92443
+      ],
+      "maximum_run_p95_ms": 10.2695,
+      "maximum_run_p99_ms": 11.244,
+      "original_mean_ms": 15.0648,
+      "mean_change_percent": -40.88703467686263
+    },
+    "rpg-rpgmap1-travel": {
+      "mean_of_two_run_means_ms": 10.501850000000001,
+      "run_mean_range_ms": [
+        10.3362,
+        10.6675
+      ],
+      "maximum_run_p95_ms": 12.4961,
+      "maximum_run_p99_ms": 14.0671,
+      "original_mean_ms": 13.1683,
+      "mean_change_percent": -20.249007085197025
+    },
+    "rpg-rpgmap5-rotate": {
+      "mean_of_two_run_means_ms": 8.853095,
+      "run_mean_range_ms": [
+        8.84545,
+        8.86074
+      ],
+      "maximum_run_p95_ms": 10.1204,
+      "maximum_run_p99_ms": 11.7403,
+      "original_mean_ms": 12.6589,
+      "mean_change_percent": -30.06426308763005
+    },
+    "rpg-rpgmap5-stationary": {
+      "mean_of_two_run_means_ms": 7.65345,
+      "run_mean_range_ms": [
+        7.5929,
+        7.714
+      ],
+      "maximum_run_p95_ms": 9.0854,
+      "maximum_run_p99_ms": 10.4188,
+      "original_mean_ms": 12.8853,
+      "mean_change_percent": -40.603245558892695
+    },
+    "rpg-rpgmap5-travel": {
+      "mean_of_two_run_means_ms": 10.121845,
+      "run_mean_range_ms": [
+        9.62629,
+        10.6174
+      ],
+      "maximum_run_p95_ms": 13.6984,
+      "maximum_run_p99_ms": 16.0568,
+      "original_mean_ms": 13.6135,
+      "mean_change_percent": -25.648473941308257
     }
   }
 }

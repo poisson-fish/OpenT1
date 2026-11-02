@@ -678,7 +678,7 @@ void AIObj::fireAtLaserOwner(PlayerMove* pm, Int32 playerId) {
     }
     auto* manager = player_->getManager();
     auto* players = PlayerManager::get(manager);
-    auto* client = players ? players->findClient(playerId) : nullptr;
+    auto* client = players ? players->findBaseRep(playerId) : nullptr;
     auto* owner = client ? dynamic_cast<Player*>(client->ownedObject) : nullptr;
     if (!owner) {
         return;

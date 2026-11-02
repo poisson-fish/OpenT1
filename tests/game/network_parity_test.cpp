@@ -32,10 +32,19 @@ void localProfileDelivery() {
     CHECK(app.init());
     auto& plugin = app.fearPlugin();
     auto& console = app.console();
-    CHECK(plugin.createServerWorld({}, true));
+    CHECK(plugin.createServerWorld({}, false));
+    auto* players = plugin.serverGlobals().playerManager;
+    CHECK(!players->findClient(2049));
+    CHECK(players->getNumClients() == 0 && players->getNumBaseReps() == 0);
+    const auto bot = players->aiAdded("Mission startup bot", "male1", "base", true);
+    CHECK(bot == 2049);
+    CHECK(!players->findClient(bot));
+    CHECK(players->findBaseRep(bot) && !players->findBaseRep(bot)->isClientRep());
+    console.setVariable("PCFG::Name", "LocalProfile");
     console.setVariable("PCFG::Info", "dummy RPG password \"quoted\" \\ value");
     console.setVariable("PCFG::RealName", "Profile Name");
-    CHECK(console.evaluate(R"(
+    CHECK(console
+              .evaluate(R"(
         function Server::onClientConnect(%client) {
             $profileConnectCount++;
             $profileConnectWorld = getManagerId();
@@ -57,33 +66,51 @@ void localProfileDelivery() {
             $Client::info[%client, 5] = %info;
         }
         function dataFinished() {
-            $profileAtDataFinished = $Client::info[2049, 5];
+            $profileAtDataFinished = $Client::info[$profileSender, 5];
         }
-    )").ok());
+    )")
+              .ok());
     // connect(LOOPBACK) must run the same script handshake as a remote join,
     // before datablock completion can trigger RPG's initial mission drop.
     CHECK(console.evaluate("connect(\"LOOPBACK:28001\");").value == "True");
+    const auto localId = Int32(plugin.clientGlobals().manager->getId());
+    CHECK(localId == 2050);
+    CHECK(players->findClient(localId)->name == "LocalProfile");
+    CHECK(players->findClient(localId)->isClientRep());
+    CHECK(players->findClient(localId)->playerPSC == plugin.serverGlobals().playerPSC);
+    CHECK(players->findBaseRep(bot)->name == "Mission startup bot");
+    CHECK(!players->findBaseRep(bot)->isClientRep());
+    CHECK(players->getNumClients() == 1 && players->getNumBaseReps() == 2);
     CHECK(console.getVariable("profileConnectCount") == "1");
     CHECK(console.getVariable("profileAcceptedCount") == "1");
     CHECK(console.getVariable("profileAcceptedMessage") == "Accepted");
     CHECK(console.getVariable("profileConnectWorld") ==
           std::to_string(plugin.serverGlobals().manager->getId()));
-    CHECK(console.getVariable("profileAcceptedWorld") == "2049");
+    CHECK(console.getVariable("profileAcceptedWorld") == std::to_string(localId));
     CHECK(console.getVariable("profileAddress") == "LOOPBACK:28001");
-    CHECK(console.getVariable("profileSender") == "2049");
+    CHECK(console.getVariable("profileSender") == std::to_string(localId));
     CHECK(console.getVariable("profileName") == "Profile Name");
     CHECK(console.getVariable("profileAtDataFinished") == console.getVariable("PCFG::Info"));
+    CHECK(plugin.focusServer());
+    CHECK(console.evaluate("PlayerData LocalProfileArmor { mass = 9; };").ok());
+    CHECK(plugin.spawnPlayer("LocalProfileArmor", {0, 0, 100}, {}));
+    CHECK(players->findClient(localId)->ownedObject);
+    CHECK(players->findClient(localId)->ownedObject->getOwnerClient() == localId);
+    CHECK(!plugin.spawnPlayer("LocalProfileArmor", {}, {}, bot));
     CHECK(console.execute("localConnect").value == "True");
     CHECK(console.getVariable("profileConnectCount") == "1");
     CHECK(console.getVariable("profileAcceptedCount") == "1");
     // Rehosting creates a new server-side client even when the client world
     // and loopback address survive. It must send the current profile again.
-    CHECK(plugin.createServerWorld({}, true));
+    CHECK(plugin.createServerWorld({}, false));
     console.setVariable("PCFG::Info", "");
     CHECK(console.execute("localConnect").value == "True");
     CHECK(console.getVariable("profileConnectCount") == "2");
     CHECK(console.getVariable("profileAcceptedCount") == "2");
     CHECK(console.getVariable("profileAtDataFinished").empty());
+    CHECK(plugin.clientGlobals().manager->getId() == 2049);
+    CHECK(plugin.clientGlobals().playerManager->findClient(2049));
+    CHECK(!plugin.clientGlobals().playerManager->findBaseRep(bot + 1));
 }
 
 void localObserverMenuState() {
@@ -210,18 +237,21 @@ void localScriptKick() {
     CHECK(app.init());
     auto& plugin = app.fearPlugin();
     CHECK(plugin.createServerWorld({}, true));
+    CHECK(plugin.serverGlobals().playerManager->aiAdded("Startup NPC", "male1", "base", true) ==
+          2049);
     CHECK(app.console().execute("localConnect").value == "True");
+    CHECK(plugin.clientGlobals().manager->getId() == 2050);
     CHECK(app.console()
               .evaluate(R"(
         function Server::onClientDisconnect(%id) { $droppedClient = %id; }
         function onConnection(%state) { $connectionState = %state; }
-        schedule("Net::kick(2049, \"Dummy profile rejection\");", 0);
+        schedule("Net::kick(2050, \"Dummy profile rejection\");", 0);
     )")
               .ok());
     CHECK(app.stepFrame(0));
     CHECK(!plugin.isConnected() && !plugin.serverGlobals().manager && plugin.clientGlobals().manager);
     CHECK(app.console().getVariable("ConnectedToServer") == "false");
-    CHECK(app.console().getVariable("droppedClient") == "2049");
+    CHECK(app.console().getVariable("droppedClient") == "2050");
     CHECK(app.console().getVariable("connectionState") == "Dropped");
     CHECK(app.console().getVariable("errorString") == "Dummy profile rejection");
 }
@@ -1084,6 +1114,113 @@ void ownershipBacklinks() {
     CHECK(!players->findClient(2050)->controlObject && !players->findClient(2050)->ownedObject);
 }
 
+void remoteJoinWithStartupBots() {
+    FearGameApp serverApp, clientApp;
+    CHECK(serverApp.init() && clientApp.init());
+    auto& serverPlugin = serverApp.fearPlugin();
+    auto& clientPlugin = clientApp.fearPlugin();
+    CHECK(serverPlugin.createServerWorld({}, true));
+    CHECK(serverApp.console()
+              .evaluate(R"(
+        function Server::onClientConnect(%id) { $HumanConnections++; $HumanId = %id; }
+        PlayerData NetworkBotArmor { mass = 9; boxWidth = 0.5; boxDepth = 0.5; boxNormalHeight = 2.3; };
+        AI::spawn(StartupBot, NetworkBotArmor, "0 2 100", "0 0 0", RemoteHuman);
+    )")
+              .ok());
+    auto& sg = serverPlugin.serverGlobals();
+    const auto* startupBot = sg.aiManager->findAI("StartupBot");
+    sg.playerManager->teamAdded("Players", "base");
+    sg.playerManager->teamAdded("Enemies", "base");
+    CHECK(startupBot && startupBot->id == 2049);
+    CHECK(sg.playerManager->getNumClients() == 0);
+    CHECK(serverApp.console().getVariable("HumanConnections").empty());
+    CHECK(clientApp.console()
+              .evaluate(R"(
+        function onClientJoin(%id) { $HumanJoins++; }
+        function onClientDrop(%id) { $HumanDrops++; }
+    )")
+              .ok());
+    clientApp.console().setVariable("PCFG::Name", "RemoteHuman");
+    const auto endpoint = net::parseIPv4Address(sg.csDelegate->delegate()->localAddress());
+    CHECK(endpoint);
+    const std::array<std::string, 1> address{"IP:127.0.0.1:" + std::to_string(endpoint->port)};
+    CHECK(clientApp.console().execute("connect", address).value == "True");
+    int frame = 0;
+    const auto advance = [&] {
+        const auto time = frame++ * .032;
+        CHECK(serverApp.stepFrame(time, false));
+        CHECK(clientApp.stepFrame(time, false));
+    };
+    for (; frame < 64;)
+        advance();
+    auto& cg = clientPlugin.clientGlobals();
+    CHECK(clientPlugin.isConnected() && cg.manager->getId() == 2050);
+    CHECK(serverApp.console().getVariable("HumanConnections") == "1");
+    CHECK(serverApp.console().getVariable("HumanId") == "2050");
+    CHECK(sg.playerManager->findClient(2050)->name == "RemoteHuman");
+    CHECK(!sg.playerManager->findClient(2049) && !cg.playerManager->findClient(2049));
+    CHECK(cg.playerManager->findBaseRep(2049));
+    CHECK(cg.playerManager->getNumClients() == 1 && cg.playerManager->getNumBaseReps() == 2);
+    CHECK(clientApp.console().getVariable("HumanJoins") == "1");
+    CHECK(serverApp.console()
+              .evaluate(R"(
+        AI::spawn(LateBot, NetworkBotArmor, "0 4 100");
+    )")
+              .ok());
+    auto* late = sg.aiManager->findAI("LateBot");
+    CHECK(late);
+    const auto lateId = late->id;
+    sg.playerManager->serverClientTeamChange(lateId, 1);
+    for (const auto end = frame + 16; frame < end;)
+        advance();
+    CHECK(cg.playerManager->findBaseRep(lateId));
+    CHECK(cg.playerManager->findBaseRep(lateId)->team == 1);
+    CHECK(!cg.playerManager->findClient(lateId));
+    CHECK(clientApp.console().getVariable("HumanJoins") == "1");
+    CHECK(sg.aiManager->remove("LateBot", true));
+    for (const auto end = frame + 16; frame < end;)
+        advance();
+    CHECK(!cg.playerManager->findBaseRep(lateId));
+    CHECK(clientApp.console().getVariable("HumanDrops").empty());
+    CHECK(sg.aiManager->remove("StartupBot", true));
+    for (const auto end = frame + 16; frame < end;)
+        advance();
+    CHECK(!cg.playerManager->findBaseRep(2049));
+    CHECK(cg.playerManager->findClient(2050) && sg.playerManager->findClient(2050));
+    CHECK(clientApp.console().getVariable("HumanDrops").empty());
+
+    // Reuse the former AI slot for a connection, then for an AI again while
+    // the first client stays connected and receives the ordered roster events.
+    FearGameApp replacementApp;
+    CHECK(replacementApp.init());
+    replacementApp.console().setVariable("PCFG::Name", "ReplacementHuman");
+    CHECK(replacementApp.console().execute("connect", address).value == "True");
+    for (const auto end = frame + 32; frame < end;) {
+        advance();
+        CHECK(replacementApp.stepFrame((frame - 1) * .032, false));
+    }
+    CHECK(replacementApp.fearPlugin().clientGlobals().manager->getId() == 2049);
+    CHECK(cg.playerManager->findClient(2049));
+    CHECK(cg.playerManager->findClient(2049)->name == "ReplacementHuman");
+    CHECK(cg.playerManager->getNumClients() == 2);
+    CHECK(clientApp.console().getVariable("HumanJoins") == "2");
+    CHECK(sg.playerManager->findClient(2049)->playerPSC);
+    CHECK(replacementApp.console().execute("disconnect").value == "True");
+    for (const auto end = frame + 16; frame < end;)
+        advance();
+    CHECK(!cg.playerManager->findBaseRep(2049));
+    CHECK(clientApp.console().getVariable("HumanDrops") == "1");
+    CHECK(serverApp.console().evaluate(
+        "AI::spawn(ReusedStartupBot, NetworkBotArmor, \"0 2 100\");").ok());
+    CHECK(sg.aiManager->findAI("ReusedStartupBot")->id == 2049);
+    for (const auto end = frame + 16; frame < end;)
+        advance();
+    CHECK(cg.playerManager->findBaseRep(2049) && !cg.playerManager->findClient(2049));
+    CHECK(cg.playerManager->getNumClients() == 1 && cg.playerManager->getNumBaseReps() == 2);
+    CHECK(clientApp.console().getVariable("HumanJoins") == "2");
+    CHECK(clientApp.console().getVariable("HumanDrops") == "1");
+}
+
 void addressedJoin() {
     auto transports = net::makeLoopTransportPair();
     const auto clientAddress = transports.second->localAddress();
@@ -1132,6 +1269,7 @@ void liveServerBrowser() {
     CHECK(players->clientAdded("Buddy One", "male1", "base", true, 2049) == 2049);
     players->setClientScoreHeading("Player\tScore\tPing");
     players->setClientScore(2049, "%n\t7\t%p", 7);
+    CHECK(players->aiAdded("Hidden browser NPC", "male1", "base", true) > 0);
     auto* server = add<FearCSDelegate>(serverWorld.manager(),
                                        true,
                                        std::shared_ptr<BanList>{},
@@ -1286,6 +1424,7 @@ int opent1_test_game_network_parity() {
     nativeServerFraming();
     recorderLayout();
     ownershipBacklinks();
+    remoteJoinWithStartupBots();
     addressedJoin();
     hostnameConnection();
     return 0;

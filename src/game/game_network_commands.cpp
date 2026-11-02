@@ -54,7 +54,7 @@ void FearPlugin::installNetworkCommands(Console& console) {
             auto* speaker = sg_.playerManager->findClient(integer(args[1]));
             auto* profile = dynamic_cast<SoundProfileData*>(
                 sg_.dbm->lookupDataBlock(0, DataBlockManager::SoundProfileDataType));
-            if (!speaker || !speaker->loginStatus || !speaker->ownedObject || !profile) {
+            if (!speaker || !speaker->ownedObject || !profile) {
                 return "True";
             }
             for (auto* client = sg_.playerManager->getClientList(); client;
@@ -69,7 +69,7 @@ void FearPlugin::installNetworkCommands(Console& console) {
                 event->flags = sim::SimEvent::Guaranteed;
                 if (client->packetStream) {
                     (void)client->packetStream->sendRemoteEvent(std::move(event));
-                } else if (client->id == 2049 && cg_.playerManager) {
+                } else if (client->id == localClientId_ && cg_.playerManager) {
                     (void)cg_.playerManager->processEvent(*event);
                 }
             }
@@ -110,9 +110,6 @@ void FearPlugin::installNetworkCommands(Console& console) {
                           std::to_string(players->getNumClients()) + " clients");
                 for (auto* rep = players->getClientList(); rep;
                      rep = static_cast<PlayerManager::ClientRep*>(rep->nextClient)) {
-                    if (!rep->loginStatus) {
-                        continue;
-                    }
                     con.print(std::to_string(rep->id) +
                               (server
                                    ? " (" +
@@ -173,7 +170,7 @@ void FearPlugin::installNetworkCommands(Console& console) {
                            if (client && client->packetStream) {
                                return client->packetStream->transportAddress();
                            }
-                           return client && client->id == 2049 &&
+                           return client && client->id == localClientId_ &&
                                           connectAddress_ == "LOOPBACK:28001"
                                       ? connectAddress_
                                       : std::string{};
@@ -228,7 +225,7 @@ void FearPlugin::installNetworkCommands(Console& console) {
                            }
                            for (auto* rep = sg_.playerManager->getClientList(); rep;
                                 rep = static_cast<PlayerManager::ClientRep*>(rep->nextClient)) {
-                               if (rep->loginStatus && index-- == 0) {
+                               if (index-- == 0) {
                                    return std::to_string(rep->id);
                                }
                            }
@@ -240,11 +237,8 @@ void FearPlugin::installNetworkCommands(Console& console) {
                            if (args.size() != 2 || !cg_.playerManager) {
                                return "0";
                            }
-                           for (auto* rep = cg_.playerManager->getBaseRepList(); rep;
+                           for (auto* rep = cg_.playerManager->getClientList(); rep;
                                 rep = rep->nextClient) {
-                               if (!rep->loginStatus) {
-                                   continue;
-                               }
                                if (rep->name.size() == args[1].size() &&
                                    std::equal(rep->name.begin(),
                                               rep->name.end(),

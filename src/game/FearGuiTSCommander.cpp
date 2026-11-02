@@ -423,7 +423,7 @@ void TSCommander::refreshTargets(const PlayerPSC& psc,
         }
         if (i < 128) {
             target.playerId = 2048 + Int32(i);
-            if (const auto* player = players.findClient(target.playerId)) {
+            if (const auto* player = players.findBaseRep(target.playerId)) {
                 target.name = player->name;
                 target.selected = player->selected;
                 target.command = player->curCommand;

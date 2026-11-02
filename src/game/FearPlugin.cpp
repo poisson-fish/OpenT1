@@ -180,7 +180,7 @@ void addLocalPlayer(PlayerManager& players, Console& console, Int32 clientId) {
     }
     const auto clientId = parseIntSv(nameOrId);
     if (auto* players = dynamic_cast<PlayerManager*>(mgr->findObject(PlayerManagerId))) {
-        if (const auto* client = players->findClient(clientId); client && client->ownedObject) {
+        if (const auto* client = players->findBaseRep(clientId); client && client->ownedObject) {
             return client->ownedObject;
         }
     }
@@ -997,6 +997,7 @@ bool FearPlugin::createClientWorld() {
 }
 
 void FearPlugin::destroyServerWorld() {
+    localClientId_ = 0;
     pendingLocalKick_.reset();
     if (scriptPlugin_) {
         scriptPlugin_->clearClients();
@@ -1012,6 +1013,7 @@ void FearPlugin::destroyServerWorld() {
 }
 
 void FearPlugin::destroyClientWorld() {
+    localClientId_ = 0;
     connectAddress_.clear();
     pendingLocalKick_.reset();
     serverToClientGhosts_.clear();
@@ -1050,6 +1052,15 @@ std::optional<sim::SimObjectId> FearPlugin::spawnPlayer(std::string_view armorNa
                                                         Int32 clientId,
                                                         Int32 teamId) {
     if (!sg_.manager || !sg_.dbm) {
+        return std::nullopt;
+    }
+    if (!clientId) {
+        clientId = localClientId_ ? localClientId_
+                                 : sg_.playerManager ? sg_.playerManager->getFreeId() : 0;
+    }
+    const auto* representative =
+        sg_.playerManager ? sg_.playerManager->findBaseRep(clientId) : nullptr;
+    if (!clientId || (representative && !representative->isClientRep())) {
         return std::nullopt;
     }
 
@@ -1263,16 +1274,16 @@ std::size_t FearPlugin::syncLoopbackState(bool deliverMoves) {
 
         for (auto* srvRep = sg_.playerManager->getBaseRepList(); srvRep != nullptr;
              srvRep = srvRep->nextClient) {
-            const auto* srvClient = sg_.playerManager->findClient(srvRep->id);
+            const auto* srvClient = static_cast<const PlayerManager::ClientRep*>(srvRep);
             if (!cg_.playerManager->findBaseRep(srvRep->id)) {
                 PlayerAddEvent pEv;
                 pEv.id = srvRep->id;
-                pEv.isBaseRepType = !srvClient || !srvClient->loginStatus;
+                pEv.isBaseRepType = srvRep->isBaseRepType;
                 pEv.name = srvRep->name;
                 pEv.skinBase = srvRep->skinBase;
-                pEv.voiceBase = srvClient ? srvClient->voiceBase : std::string("male1");
-                pEv.gender = (srvClient && srvClient->gender == "FEMALE") ? 0 : 1;
-                pEv.commanderId = srvClient ? srvClient->commanderId : -1;
+                pEv.voiceBase = srvClient->voiceBase;
+                pEv.gender = srvClient->gender == "FEMALE" ? 0 : 1;
+                pEv.commanderId = srvClient->commanderId;
                 pEv.team = srvRep->team;
                 std::array<std::byte, 1024> pBuf{};
                 BitStream pwbs(std::span<std::byte>(pBuf.data(), pBuf.size()));
@@ -1289,12 +1300,8 @@ std::size_t FearPlugin::syncLoopbackState(bool deliverMoves) {
                 cliRep->score = srvRep->score;
                 cliRep->scoreString = srvRep->scoreString;
                 cliRep->scoreSortValue = srvRep->scoreSortValue;
-            }
-            if (srvClient) {
-                if (auto* cliClient = cg_.playerManager->findClient(srvRep->id)) {
-                    cliClient->ping = srvClient->ping;
-                    cliClient->packetLoss = srvClient->packetLoss;
-                }
+                cliRep->ping = srvClient->ping;
+                cliRep->packetLoss = srvClient->packetLoss;
             }
         }
     }
@@ -1529,6 +1536,7 @@ void FearPlugin::stepServerSimulation() {
                             addedPl->setPos(startPos);
                         }
                         ai->setPlayer(addedPl);
+                        addedPl->setOwnerClient(ai->id);
                         sg_.aiManager->deleteNotify(*addedPl);
                     }
                 }
@@ -1971,15 +1979,13 @@ void FearPlugin::init(Console& console, sim::SimManager* manager) {
                 }
                 auto* client =
                     command == "Client::getFirst"
-                        ? manager->getBaseRepList()
-                        : (args.size() >= 2 ? manager->findBaseRep(parseIntSv(args[1])) : nullptr);
+                        ? manager->getClientList()
+                        : (args.size() >= 2 ? (command == "Client::getNext"
+                                                   ? manager->findClient(parseIntSv(args[1]))
+                                                   : manager->findBaseRep(parseIntSv(args[1])))
+                                            : nullptr);
                 if (command == "Client::getNext") {
-                    client = client && client->loginStatus ? client->nextClient : nullptr;
-                }
-                if (command == "Client::getFirst" || command == "Client::getNext") {
-                    while (client && !client->loginStatus) {
-                        client = client->nextClient;
-                    }
+                    client = client ? client->nextClient : nullptr;
                 }
                 if (!client) {
                     return "-1";
@@ -2142,43 +2148,57 @@ void FearPlugin::init(Console& console, sim::SimManager* manager) {
             if ((!cg_.world || !cg_.playerPSC) && !createClientWorld()) {
                 return "False";
             }
+            if (!sg_.manager || !sg_.playerManager) {
+                return "False";
+            }
             const bool connecting = connectAddress_ != "LOOPBACK:28001" ||
-                                    (sg_.playerManager && !sg_.playerManager->findClient(2049));
+                                    !sg_.playerManager->findClient(localClientId_);
+            if (connecting) {
+                localClientId_ = sg_.playerManager->getFreeId();
+                if (!localClientId_) {
+                    return "False";
+                }
+                // Match the accepted remote connection: the new roster may
+                // reuse an old AI ID for a player (or the reverse).
+                cg_.playerManager->reset();
+                cg_.dbm->reset();
+                dataFinishedFlag_ = false;
+            }
             connectAddress_ = "LOOPBACK:28001";
             game_.console().setVariable("Server::Address", connectAddress_);
             game_.console().setVariable("ConnectedToServer", "true");
             if (cg_.manager) {
-                (void)cg_.manager->setNetworkId(2049);
+                (void)cg_.manager->setNetworkId(localClientId_);
             }
             if (sg_.playerManager) {
                 sg_.playerManager->onLocalEvent = [this](std::unique_ptr<sim::SimEvent> event) {
-                    if (event && event->address.managerId == 2049 &&
+                    if (event && event->address.managerId == UInt32(localClientId_) &&
                         connectAddress_ == "LOOPBACK:28001" && cg_.playerManager) {
                         (void)cg_.playerManager->processEvent(*event);
                     }
                 };
             }
-            if (sg_.manager && !sg_.manager->findObject(2049)) {
+            if (!sg_.manager->findObject(localClientId_)) {
                 auto client = std::make_unique<sim::SimObject>();
-                client->setId(2049);
+                client->setId(localClientId_);
                 client->assignName("LocalClient");
                 if (!sg_.manager->addObject(std::move(client))) {
                     return "False";
                 }
             }
-            if (sg_.playerManager && !sg_.playerManager->findClient(2049)) {
-                addLocalPlayer(*sg_.playerManager, game_.console(), 2049);
-                if (auto* cl = sg_.playerManager->findClient(2049)) {
+            if (!sg_.playerManager->findClient(localClientId_)) {
+                addLocalPlayer(*sg_.playerManager, game_.console(), localClientId_);
+                if (auto* cl = sg_.playerManager->findClient(localClientId_)) {
                     cl->playerPSC = sg_.playerPSC;
                 }
-                sg_.playerManager->serverClientTeamChange(2049, 0);
+                sg_.playerManager->serverClientTeamChange(localClientId_, 0);
             }
             if (scriptPlugin_) {
-                auto& clRep = scriptPlugin_->ensureClient(2049);
+                auto& clRep = scriptPlugin_->ensureClient(localClientId_);
                 if (clRep.observerCameraId == 0 && sg_.manager) {
                     auto* cleanup =
                         dynamic_cast<sim::SimGroup*>(sg_.manager->findObject("MissionCleanup"));
-                    auto obsCam = std::make_unique<ObserverCamera>(2049);
+                    auto obsCam = std::make_unique<ObserverCamera>(localClientId_);
                     if (auto* addedCam = sg_.manager->addObject(std::move(obsCam), cleanup)) {
                         clRep.observerCameraId = addedCam->getId();
                     }
@@ -2191,7 +2211,7 @@ void FearPlugin::init(Console& console, sim::SimManager* manager) {
                 // Both must precede datablock completion and mission drop.
                 game_.withWorld(sim::WorldType::Server, [&] {
                     if (game_.console().isFunction("Server::onClientConnect")) {
-                        const std::array<std::string, 1> args{"2049"};
+                        const std::array<std::string, 1> args{std::to_string(localClientId_)};
                         (void)game_.console().execute("Server::onClientConnect", args);
                     }
                 });
@@ -2234,7 +2254,7 @@ void FearPlugin::init(Console& console, sim::SimManager* manager) {
             const std::string_view reason =
                 (argv.size() >= 3) ? std::string_view(argv[2])
                                    : std::string_view("You were kicked from the server.");
-            if (peerId == 2049 && connectAddress_ == "LOOPBACK:28001") {
+            if (peerId == UInt32(localClientId_) && connectAddress_ == "LOOPBACK:28001") {
                 // The hosted client has no PacketStream. Retire its worlds
                 // after the frame, outside a running script/manager dispatch.
                 pendingLocalKick_ = std::string(reason);
@@ -2766,7 +2786,7 @@ void FearPlugin::init(Console& console, sim::SimManager* manager) {
                                return "-1";
                            }
                            if (const auto* cl =
-                                   sg_.playerManager->findClient(parseIntSv(argv[1]))) {
+                                   sg_.playerManager->findBaseRep(parseIntSv(argv[1]))) {
                                if (cl->ownedObject) {
                                    return std::to_string(cl->ownedObject->getId());
                                }

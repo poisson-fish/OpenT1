@@ -109,9 +109,7 @@ void ScoreListCtrl::rebuildScores(const PlayerManager& pm) {
         std::vector<const PlayerManager::ClientRep*> sortedClients{};
         for (const auto* cl = pm.getClientList(); cl != nullptr;
              cl = static_cast<const PlayerManager::ClientRep*>(cl->nextClient)) {
-            if (cl->loginStatus) {
-                sortedClients.push_back(cl);
-            }
+            sortedClients.push_back(cl);
         }
         std::stable_sort(
             sortedClients.begin(), sortedClients.end(), [](const auto* a, const auto* b) {

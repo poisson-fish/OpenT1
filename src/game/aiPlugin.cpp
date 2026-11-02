@@ -257,10 +257,8 @@ AIPlugin::handleCommand(Console& console, Int32 id, std::span<const std::string>
                 return "false";
             }
             const auto* players = PlayerManager::get(manager_);
-            const auto* rep = players ? players->findClient(dir.playerId) : nullptr;
-            const auto* followedAi = aiMgr->findByPlayerId(dir.playerId);
-            if (!(rep && dynamic_cast<Player*>(rep->ownedObject)) &&
-                !(followedAi && followedAi->player())) {
+            const auto* rep = players ? players->findBaseRep(dir.playerId) : nullptr;
+            if (!rep || !dynamic_cast<Player*>(rep->ownedObject)) {
                 return "false";
             }
             for (AIObj* ai : list) {

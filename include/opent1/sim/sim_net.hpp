@@ -470,6 +470,9 @@ public:
     // for the duration of the callback. No game-global server/browser state.
     std::function<bool(std::span<const std::byte>)> acceptRequest;
     std::function<bool(std::string_view, std::span<const std::byte>)> acceptAddressedRequest;
+    // Game-specific IDs can share a pool with non-connection representatives.
+    // The returned slot is committed synchronously by configureStream.
+    std::function<SimObjectId()> selectClientId;
     std::function<void(PacketStream&)> configureStream;
     std::function<void(const net::Event&)> onConnection;
     std::function<void(std::string_view, std::span<const std::byte>)> onRawPacket;

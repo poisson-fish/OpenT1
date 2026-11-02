@@ -265,14 +265,22 @@ net::Result CSDelegate::process(UInt32 now) {
                 if (!allowed) {
                     (void)session_.reject(event.connection, {}, now);
                 } else {
-                    const auto candidates = std::views::iota(SimObjectId{2049}, SimObjectId{3072});
-                    const auto slot = std::ranges::find_if(candidates, [&](auto id) {
-                        return !getManager()->findObject(id);
-                    });
-                    if (slot == candidates.end()) {
+                    SimObjectId peer{};
+                    if (selectClientId) {
+                        peer = selectClientId();
+                    } else {
+                        const auto candidates =
+                            std::views::iota(SimObjectId{2049}, SimObjectId{3072});
+                        const auto slot = std::ranges::find_if(candidates, [&](auto id) {
+                            return !getManager()->findObject(id);
+                        });
+                        if (slot != candidates.end()) {
+                            peer = *slot;
+                        }
+                    }
+                    if (peer <= 2048 || peer >= 3072 || getManager()->findObject(peer)) {
                         (void)session_.reject(event.connection, {}, now);
                     } else {
-                        const auto peer = *slot;
                         auto* ps = createStream(event.connection, peer);
                         if (!ps || isRemoved()) {
                             (void)session_.reject(event.connection, {}, now);

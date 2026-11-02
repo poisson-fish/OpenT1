@@ -63,13 +63,27 @@ void rosterSkinsAndZoom() {
     CHECK(app.console().execute("localConnect").value == "True");
     auto& globals = app.fearPlugin().serverGlobals();
     auto* players = globals.playerManager;
+    auto* clientPlayers = app.fearPlugin().clientGlobals().playerManager;
     const auto bot = players->aiAdded("Hidden enemy", "male2", "base", true);
     players->setClientSkin(bot, "robeblue");
-    CHECK(players->getPlayerSkinBase(bot) == "robeblue");
+    // Vanilla Client::setSkin only changes connected clients. AI appearance
+    // follows its representative's team, not a broader script setter.
+    CHECK(players->getPlayerSkinBase(bot) == "base");
     app.fearPlugin().syncLoopbackState(false);
-    CHECK(app.fearPlugin().clientGlobals().playerManager->getPlayerSkinBase(bot) == "robeblue");
-    players->setClientSkin(bot, "rpgleather");
-    CHECK(app.fearPlugin().clientGlobals().playerManager->getPlayerSkinBase(bot) == "rpgleather");
+    CHECK(clientPlayers->getPlayerSkinBase(bot) == "base");
+    players->setClientSkin(2049, "storm");
+    CHECK(players->getPlayerSkinBase(2049) == "storm");
+    CHECK(clientPlayers->getPlayerSkinBase(2049) == "storm");
+    players->setTeamSkin(0, "teamblue");
+    players->teamAdded("Other team", "teamred");
+    const auto otherTeam = players->getNumTeams() - 1;
+    app.fearPlugin().syncLoopbackState(false);
+    players->serverClientTeamChange(bot, 0);
+    CHECK(players->getPlayerSkinBase(bot) == "teamblue");
+    CHECK(clientPlayers->getPlayerSkinBase(bot) == "teamblue");
+    players->setClientSkin(bot, "ignored");
+    CHECK(players->getPlayerSkinBase(bot) == "teamblue");
+    CHECK(clientPlayers->getPlayerSkinBase(bot) == "teamblue");
     players->setClientScoreHeading("Player");
     ScoreListCtrl scores;
     scores.rebuildScores(*players);
@@ -80,14 +94,24 @@ void rosterSkinsAndZoom() {
         return line.id == 2049;
     }));
 
-    players->setTeamSkin(0, "rpgbase");
     auto owned = std::make_unique<Item>();
     auto* item = dynamic_cast<Item*>(globals.manager->addObject(std::move(owned)));
     CHECK(item);
     item->setTeam(0);
-    CHECK(item->getSkinBase() == "rpgbase");
+    CHECK(item->getSkinBase() == "teamblue");
     item->setOwnerClient(bot);
-    CHECK(item->getSkinBase() == "rpgleather");
+    CHECK(item->getSkinBase() == "teamblue");
+    players->serverClientTeamChange(bot, otherTeam);
+    CHECK(players->getPlayerSkinBase(bot) == "teamred");
+    CHECK(clientPlayers->getPlayerSkinBase(bot) == "teamred");
+    CHECK(item->getTeam() == otherTeam && item->getSkinBase() == "teamred");
+    // Receiving a native skin event is distinct from the script setter and
+    // accepts any BaseRep, including AI; a server never applies this event.
+    PlayerSkinEvent skinEvent(bot, "eventskin");
+    CHECK(!players->processEvent(skinEvent));
+    CHECK(clientPlayers->processEvent(skinEvent));
+    CHECK(clientPlayers->getPlayerSkinBase(bot) == "eventskin");
+    CHECK(players->getPlayerSkinBase(bot) == "teamred");
 
     CHECK(app.fearPlugin().focusServer());
     CHECK(app.console()
@@ -373,6 +397,67 @@ void installedRpgRegressions() {
     std::printf("RPG town markers and skins, ferries, inventory keys, death packs and caster "
                 "damage verified.\n");
 }
+
+void installedRpgMap1Rendering() {
+    const auto* assets = std::getenv("OPENT1_TEST_ASSETS");
+    if (!assets || !std::filesystem::exists(std::filesystem::path(assets) / "RPG/scripts.vol"))
+        return;
+    FearGameApp::Config config;
+    config.assetRoot = assets;
+    config.writeRoot = std::filesystem::temp_directory_path() /
+                       std::format("opent1-rpgmap1-{}",
+                                   std::chrono::steady_clock::now().time_since_epoch().count());
+
+    struct Cleanup {
+        std::filesystem::path path;
+
+        ~Cleanup() {
+            std::error_code ec;
+            std::filesystem::remove_all(path, ec);
+        }
+    } cleanup{config.writeRoot};
+
+    FearGameApp app(config);
+    CHECK(app.init(std::array<std::string_view, 2>{"-mod", "RPG"}));
+    auto& console = app.console();
+    console.setVariable("Server::Port", "0");
+    console.setVariable("Server::Heartbeats", "false");
+    console.setVariable("PCFG::Name", "MapOneRegression");
+    console.setVariable("PCFG::Script", "");
+    console.setVariable("PCFG::Info", "regression-password");
+    CHECK(app.loadMission("rpgmap1"));
+    for (int frame = 0; frame < 8; ++frame)
+        CHECK(app.stepFrame(frame * .032));
+    const auto& server = app.fearPlugin().serverGlobals();
+    const auto& client = app.fearPlugin().clientGlobals();
+    const auto localId = Int32(client.manager->getId());
+    CHECK(localId > 2049);
+    const auto* local = server.playerManager->findClient(localId);
+    CHECK(local && local->name == "MapOneRegression" && local->isClientRep());
+    CHECK(local->playerPSC == server.playerPSC);
+    CHECK(server.playerManager->getNumBaseReps() > server.playerManager->getNumClients());
+    CHECK(server.playerPSC->getControlObject());
+    CHECK(client.playerPSC->getControlObject());
+    auto surface = gfx::SoftwareSurface::create(320, 240);
+    CHECK(surface);
+    CHECK(app.renderFrame(*surface));
+    CHECK(app.lastSceneSurfaceCount() > 0 && app.lastScenePolygonCount() > 0);
+    gfx::HardwareBatch hardware;
+    CHECK(app.renderFrame(*surface, &hardware));
+    CHECK(app.lastSceneSurfaceCount() > 0 && app.lastScenePolygonCount() > 0);
+    CHECK(!hardware.draws().empty());
+    CHECK(app.fearPlugin().focusServer());
+    CHECK(console
+              .evaluate(std::format("processMenupickgroup({0}, 3); processMenupickclass({0}, 1);",
+                                    localId))
+              .ok());
+    CHECK(dynamic_cast<Player*>(local->ownedObject));
+    for (int frame = 8; frame < 16; ++frame)
+        CHECK(app.stepFrame(frame * .032));
+    CHECK(dynamic_cast<Player*>(client.playerPSC->getControlObject()));
+    CHECK(app.renderFrame(*surface, &hardware));
+    CHECK(app.lastScenePolygonCount() > 0 && !hardware.draws().empty());
+}
 }
 
 int opent1_test_rpg_roster_skins_zoom() {
@@ -391,7 +476,14 @@ int opent1_test_installed_rpg_regressions() {
     return opent1::test::run(installedRpgRegressions);
 }
 
+int opent1_test_installed_rpgmap1_rendering() {
+    return opent1::test::run(installedRpgMap1Rendering);
+}
+
 OPENT1_REGISTER_TEST("game", "rpg_roster_skins_zoom", opent1_test_rpg_roster_skins_zoom);
 OPENT1_REGISTER_TEST("game", "rpg_item_world_collision", opent1_test_rpg_item_world_collision);
 OPENT1_REGISTER_TEST("game", "rpg_ferry_waypoints", opent1_test_rpg_ferry_waypoints);
 OPENT1_REGISTER_TEST("trpg", "installed_rpg_regressions", opent1_test_installed_rpg_regressions);
+OPENT1_REGISTER_TEST("trpg",
+                     "installed_rpgmap1_rendering",
+                     opent1_test_installed_rpgmap1_rendering);

@@ -132,7 +132,7 @@ public:
 
     // Configures a newly accepted server or client PacketStream with EventManager,
     // GhostManager, DataBlockManager sync, and SimPathManager sync.
-    bool attachStreamServices(sim::network::PacketStream& stream, sim::SimObjectId peerId = 2049);
+    bool attachStreamServices(sim::network::PacketStream& stream, sim::SimObjectId peerId);
 
     bool kick(sim::SimObjectId playerId,
               std::string_view reason = "You were kicked from the server.",

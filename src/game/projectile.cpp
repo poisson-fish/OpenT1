@@ -340,7 +340,7 @@ bool Projectile::onAdd() {
                     if (m_shooterClientId_ != 0) {
                         if (auto* pPM = PlayerManager::get(getManager())) {
                             if (auto* pCR = pPM->findBaseRep(m_shooterClientId_)) {
-                                m_shooterClientLoginId_ = pCR->loginStatus;
+                                m_shooterClientLoginId_ = pCR->loginId;
                             } else {
                                 m_shooterClientLoginId_ = 0xFFFFFFFFu;
                             }
@@ -789,7 +789,7 @@ Int32 Projectile::getDamageId() const noexcept {
     }
     if (auto* pPM = PlayerManager::get(getManager())) {
         if (const auto* pCR = pPM->findClient(m_shooterClientId_)) {
-            if (pCR->loginStatus == m_shooterClientLoginId_) {
+            if (pCR->loginId == m_shooterClientLoginId_) {
                 return m_shooterClientId_;
             }
         }

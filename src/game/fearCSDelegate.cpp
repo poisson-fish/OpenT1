@@ -158,6 +158,12 @@ bool FearCSDelegate::onAdd() {
                 joiningIdentity_ = std::move(identity);
                 return true;
             };
+            if (isServer_) {
+                delegate_->selectClientId = [this] {
+                    auto* players = PlayerManager::get(getManager());
+                    return players ? UInt32(players->getFreeId()) : 0u;
+                };
+            }
             delegate_->configureStream = [this](auto& stream) {
                 if (!attachStreamServices(stream, stream.getId())) {
                     throw std::runtime_error("Cannot attach game stream services");

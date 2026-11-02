@@ -709,7 +709,7 @@ bool PlayerPSC::writePacket(BitStream& bstream, UInt32& key) {
     const auto targetAt = [&](UInt32 target) -> GameBase* {
         if (target < 128) {
             auto* client =
-                players ? players->findClient(static_cast<Int32>(2048 + target)) : nullptr;
+                players ? players->findBaseRep(static_cast<Int32>(2048 + target)) : nullptr;
             return client ? client->ownedObject : nullptr;
         }
         return sensors ? sensors->target(static_cast<Int32>(target - 128)).obj : nullptr;
@@ -728,7 +728,7 @@ bool PlayerPSC::writePacket(BitStream& bstream, UInt32& key) {
                 const auto target = (cursor + i) & 255;
                 auto* obj = targetAt(target);
                 auto* client = players && target < 128
-                                   ? players->findClient(static_cast<Int32>(2048 + target))
+                                   ? players->findBaseRep(static_cast<Int32>(2048 + target))
                                    : nullptr;
                 bool present = center && center->extent.x > 0 && center->extent.y > 0 && blocks &&
                                obj && (visible(obj) || client == me);

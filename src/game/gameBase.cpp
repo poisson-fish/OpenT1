@@ -729,10 +729,13 @@ void GameBase::setOwnerClient(Int32 clientId) {
         return;
     }
     if (auto* players = PlayerManager::get(getManager())) {
-        if (auto* old = players->findClient(ownerClientId_); old && old->ownedObject == this) {
+        if (auto* old = players->findBaseRep(ownerClientId_); old && old->ownedObject == this) {
             old->ownedObject = nullptr;
         }
-        if (auto* next = players->findClient(clientId)) {
+        if (auto* next = players->findBaseRep(clientId)) {
+            if (next->ownedObject && next->ownedObject != this) {
+                next->ownedObject->setOwnerClient(0);
+            }
             next->ownedObject = this;
         }
     }

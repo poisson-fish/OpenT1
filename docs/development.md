@@ -118,11 +118,11 @@ exercise the affected GPU backends before distributing a shader change.
 
 ## Test suite
 
-The full build registers 45 standard C++ cases in one executable and 12 subsystem suites:
+The full build registers 50 standard C++ cases in one executable and 12 subsystem suites:
 core, math, console, network, simulation, graphics, world, GUI, game, video,
 and optional audio/platform.
 CTest also runs an application smoke check, for 13 CTest checks in total.
-Headless builds register 43 standard C++ cases in 10 subsystem suites plus the smoke
+Headless builds register 47 standard C++ cases in 10 subsystem suites plus the smoke
 check, for 11 CTest checks. They omit the audio and platform cases. Default
 checks use the bundled fixtures and do not need a game installation, Python,
 or an external reference executable.
@@ -189,14 +189,19 @@ a loot chest through player collision, checks repeated enemy-zone scans, and
 submits chat twice through the installed GUI. A second case checks town NPC
 positions and rendered skins, server/client ferry movement, inventory reentry
 through the installed key bindings and Escape, thrown loot collection, visible
-enemy death packs, and an AI caster completing a damaging spell. Both use the
-same asset variable and temporary write directories:
+enemy death packs, and an AI caster completing a damaging spell. A third case
+hosts `rpgmap1` with its startup NPCs, verifies the local player's identity and
+camera, renders software and hardware frames, and completes character creation.
+These cases use the same asset variable and temporary write directories:
 
 ```powershell
 .\build\x64-debug\tests\opent1_tests.exe --suite trpg
 ```
 
-The ordinary `game` suite covers bot join announcements and teams, script weapon
+The ordinary `game` suite covers silent bot connection joins/drops, vanilla bot
+team callbacks, shared representative-pool exhaustion and reuse, native/script
+ownership transfers, ownership-based AI targeting/following, projectile/mine
+attribution across ID reuse, and script weapon
 callbacks and fallback lookup, pitched melee traces, crouch collision bounds,
 uphill acceleration and turn timing, the jump arc, and grounded prediction during smoothing.
 It also covers message recipients, sound-only chat, reopened chat and history

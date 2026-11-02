@@ -66,7 +66,7 @@ void FearPlugin::processPendingLocalDisconnect() {
     }
     game_.withWorld(sim::WorldType::Server, [&] {
         if (game_.console().isFunction("Server::onClientDisconnect")) {
-            const std::array<std::string, 1> args{"2049"};
+            const std::array<std::string, 1> args{std::to_string(localClientId_)};
             (void)game_.console().execute("Server::onClientDisconnect", args);
         }
     });
@@ -124,7 +124,7 @@ bool FearPlugin::configureRemoteStream(sim::network::PacketStream& stream) {
             }
             std::string name = identity->name;
             const auto sameName = [&](std::string_view candidate) {
-                for (auto* rep = sg_.playerManager->getBaseRepList(); rep; rep = rep->nextClient) {
+                for (auto* rep = sg_.playerManager->getClientList(); rep; rep = rep->nextClient) {
                     if (rep->name.size() == candidate.size() &&
                         std::equal(rep->name.begin(),
                                    rep->name.end(),
@@ -173,7 +173,7 @@ bool FearPlugin::configureRemoteStream(sim::network::PacketStream& stream) {
             auto event = std::make_unique<PlayerAddEvent>();
             event->flags = sim::SimEvent::Guaranteed | sim::SimEvent::Ordered;
             event->id = source.id;
-            event->isBaseRepType = !source.loginStatus;
+            event->isBaseRepType = source.isBaseRepType;
             event->name = source.name;
             event->skinBase = source.skinBase;
             event->voiceBase = source.voiceBase;
@@ -183,10 +183,7 @@ bool FearPlugin::configureRemoteStream(sim::network::PacketStream& stream) {
             return destination.sendRemoteEvent(std::move(event));
         };
         for (auto* rep = sg_.playerManager->getBaseRepList(); rep; rep = rep->nextClient) {
-            auto* other = sg_.playerManager->findClient(rep->id);
-            if (!other) {
-                continue;
-            }
+            auto* other = static_cast<PlayerManager::ClientRep*>(rep);
             if (!publish(*other, stream)) {
                 return false;
             }
@@ -250,13 +247,14 @@ void FearPlugin::installRemoteCommands(Console& console) {
         0,
         "startGhosting",
         [this](Console&, Int32, std::span<const std::string> args) -> std::string {
-            if (args.size() == 2 && integer(args[1]) == 2049 &&
+            if (args.size() == 2 && integer(args[1]) == localClientId_ &&
                 connectAddress_ == "LOOPBACK:28001" && sg_.manager) {
                 // The hosted client has no PacketStream to send CGADone.
                 // Complete the same mission-drop handshake after the script
                 // finishes publishing the new mission.
                 if (auto* scheduler = sg_.manager->findObject(sim::ConsoleSchedulerId)) {
-                    return sim::SimConsoleEvent::schedule(*scheduler, "remoteCGADone(2049);", 0.f)
+                    return sim::SimConsoleEvent::schedule(
+                               *scheduler, std::format("remoteCGADone({});", localClientId_), 0.f)
                                ? "True"
                                : "False";
                 }

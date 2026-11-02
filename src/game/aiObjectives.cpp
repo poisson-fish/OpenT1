@@ -353,19 +353,8 @@ void AIObj::findTargets() {
         return;
     }
     const auto resolve = [&](Int32 targetId) -> Player* {
-        if (auto* ai = aiManager_->findByPlayerId(targetId); ai && ai->player()) {
-            return ai->player();
-        }
         auto* rep = players->findBaseRep(targetId);
-        if (auto* client = dynamic_cast<PlayerManager::ClientRep*>(rep)) {
-            return dynamic_cast<Player*>(client->ownedObject ? client->ownedObject
-                                         : client->playerPSC ? client->playerPSC->getControlObject()
-                                                             : nullptr);
-        }
-        if (auto* ai = dynamic_cast<AIObj*>(rep)) {
-            return ai->player();
-        }
-        return nullptr;
+        return rep ? dynamic_cast<Player*>(rep->ownedObject) : nullptr;
     };
     std::vector<Int32> ids;
     if (automaticTargets_) {
@@ -511,14 +500,9 @@ void AIObj::updateDirectives(SimTime dt, PlayerMove& pm) {
         } else if (directive.orderMask & FollowDirective) {
             Player* follow = nullptr;
             if (aiManager_) {
-                if (auto* ai = aiManager_->findByPlayerId(directive.playerId)) {
-                    follow = ai->player();
-                }
-                if (!follow) {
-                    if (auto* players = PlayerManager::get(aiManager_->getManager())) {
-                        if (auto* client = players->findClient(directive.playerId)) {
-                            follow = dynamic_cast<Player*>(client->ownedObject);
-                        }
+                if (auto* players = PlayerManager::get(aiManager_->getManager())) {
+                    if (auto* rep = players->findBaseRep(directive.playerId)) {
+                        follow = dynamic_cast<Player*>(rep->ownedObject);
                     }
                 }
             }
@@ -655,11 +639,8 @@ void AIObj::updateDirectives(SimTime dt, PlayerMove& pm) {
         }
         auto* manager = aiManager_->getManager();
         auto* players = PlayerManager::get(manager);
-        auto* rep = players ? players->findClient(seekFlag_) : nullptr;
+        auto* rep = players ? players->findBaseRep(seekFlag_) : nullptr;
         auto* target = rep ? dynamic_cast<Player*>(rep->ownedObject) : nullptr;
-        if (auto* ai = aiManager_->findByPlayerId(seekFlag_)) {
-            target = ai->player();
-        }
         if (!target || target->isDead()) {
             return {};
         }

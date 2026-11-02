@@ -334,13 +334,10 @@ void Item::throwObject(GameBase* object, Flt32 speed, bool careless) {
     } else {
         setOwnerId(object->getId());
         throwerClientId_ = object->getControlClient();
-        if (throwerClientId_ == 0) {
-            throwerClientId_ = object->getLastOwnerClient();
-        }
         if (throwerClientId_ != 0 && getManager()) {
             if (auto* pPM = PlayerManager::get(getManager())) {
                 if (const auto* pCR = pPM->findBaseRep(throwerClientId_)) {
-                    throwerClientLoginId_ = pCR->loginStatus;
+                    throwerClientLoginId_ = pCR->loginId;
                 } else {
                     throwerClientLoginId_ = 0xFFFFFFFFu;
                 }

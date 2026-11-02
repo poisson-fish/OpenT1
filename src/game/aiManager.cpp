@@ -89,32 +89,29 @@ bool AIManager::add(std::string_view aiName,
                     std::string_view markerName,
                     Int32 teamId,
                     std::string_view skinBase) {
-    if (aiName.empty() || findAI(aiName) != nullptr) {
+    auto* mgr = getManager();
+    auto* players = PlayerManager::get(mgr);
+    if (!players || aiName.empty() || findAI(aiName) != nullptr) {
         return false;
     }
 
     auto ai = std::make_unique<AIObj>(this);
-    ai->id = nextAiClientId_++;
+    ai->id = players->aiAdded(aiName, "male1", skinBase, true);
+    if (!ai->id) {
+        return false;
+    }
     ai->name.assign(aiName.data(), aiName.size());
     ai->team = teamId;
     ai->skinBase.assign(skinBase.data(), skinBase.size());
 
-    if (auto* mgr = getManager()) {
-        if (!markerName.empty()) {
-            if (auto* m = dynamic_cast<Marker*>(mgr->findObject(markerName))) {
-                ai->setMarker(m);
-                deleteNotify(*m);
-                ai->setCurDest(m->getLinearPosition());
-            }
-        }
-        if (auto* pm = dynamic_cast<PlayerManager*>(mgr->findObject(PlayerManagerId))) {
-            const Int32 pmId = pm->aiAdded(aiName, "male1", skinBase, true);
-            if (pmId > 0) {
-                ai->id = pmId;
-                pm->serverClientTeamChange(pmId, teamId);
-            }
+    if (!markerName.empty()) {
+        if (auto* m = dynamic_cast<Marker*>(mgr->findObject(markerName))) {
+            ai->setMarker(m);
+            deleteNotify(*m);
+            ai->setCurDest(m->getLinearPosition());
         }
     }
+    players->serverClientTeamChange(ai->id, teamId);
 
     aiList_.push_back(std::move(ai));
     return true;

@@ -28,7 +28,7 @@ Player* player(sim::SimManager* manager, PlayerManager* clients, std::string_vie
         return object;
     }
     if (clients) {
-        if (auto* client = clients->findClient(integer(text)); client && client->ownedObject) {
+        if (auto* client = clients->findBaseRep(integer(text)); client && client->ownedObject) {
             return dynamic_cast<Player*>(client->ownedObject);
         }
     }
@@ -44,7 +44,7 @@ GameBase* gameObject(sim::SimManager* manager, PlayerManager* clients, std::stri
     }
     const auto id = integer(text);
     if (clients && id >= 2049 && id <= 2176) {
-        if (auto* client = clients->findClient(id)) {
+        if (auto* client = clients->findBaseRep(id)) {
             return client->ownedObject;
         }
     }
@@ -323,24 +323,17 @@ void FearPlugin::installGameplayCommands(Console& console) {
                        "Client::setOwnedObject",
                        [this](Console&, Int32, std::span<const std::string> args) -> std::string {
                            auto* client = args.size() == 3 && sg_.playerManager
-                                              ? sg_.playerManager->findClient(integer(args[1]))
+                                              ? sg_.playerManager->findBaseRep(integer(args[1]))
                                               : nullptr;
                            if (!client) {
                                return "false";
                            }
                            auto* object = gameObject(sg_.manager, sg_.playerManager, args[2]);
-                           if (client->ownedObject && client->ownedObject != object) {
+                           if (object) {
+                               object->setOwnerClient(client->id);
+                           } else if (client->ownedObject) {
                                client->ownedObject->setOwnerClient(0);
                            }
-                           if (object) {
-                               if (auto* previous =
-                                       sg_.playerManager->findClient(object->getOwnerClient());
-                                   previous && previous->ownedObject == object) {
-                                   previous->ownedObject = nullptr;
-                               }
-                               object->setOwnerClient(client->id);
-                           }
-                           client->ownedObject = object;
                            return "true";
                        });
     console.addCommand(0,
@@ -906,11 +899,14 @@ void FearPlugin::installGameplayCommands(Console& console) {
         0,
         "Client::sendMessage",
         [this](Console&, Int32, std::span<const std::string> args) -> std::string {
-            const auto* client = (args.size() == 4 || args.size() == 5) && sg_.playerManager
-                                     ? sg_.playerManager->findClient(integer(args[1]))
-                                     : nullptr;
-            if (!client) {
+            if ((args.size() != 4 && args.size() != 5) || !sg_.playerManager) {
                 return "False";
+            }
+            const auto* client = sg_.playerManager->findClient(integer(args[1]));
+            if (!client) {
+                // Vanilla accepts the command and silently ignores a target
+                // that has no connected ClientRep, including AI.
+                return "True";
             }
             auto event = std::make_unique<PlayerSayEvent>();
             event->flags = sim::SimEvent::Guaranteed | sim::SimEvent::Ordered;
@@ -922,7 +918,7 @@ void FearPlugin::installGameplayCommands(Console& console) {
                 return client->packetStream->sendRemoteEvent(std::move(event)) ? "True" : "False";
             }
             if (cg_.playerManager && cg_.manager &&
-                client->id == static_cast<Int32>(cg_.manager->getId()) && client->loginStatus) {
+                client->id == static_cast<Int32>(cg_.manager->getId())) {
                 game_.withWorld(sim::WorldType::Client, [&] {
                     (void)cg_.playerManager->processEvent(*event);
                 });
@@ -950,8 +946,9 @@ void FearPlugin::installGameplayCommands(Console& console) {
                 return "False";
             }
             const auto peer = integer(args[1]);
-            if (connectAddress_ == "LOOPBACK:28001" && (peer == 2048 || peer == 2049)) {
-                std::vector<std::string> parameters{peer == 2048 ? "2049" : "2048"};
+            if (connectAddress_ == "LOOPBACK:28001" && (peer == 2048 || peer == localClientId_)) {
+                std::vector<std::string> parameters{peer == 2048 ? std::to_string(localClientId_)
+                                                                 : "2048"};
                 parameters.insert(parameters.end(), args.begin() + 3, args.end());
                 bool success = false;
                 game_.withWorld(peer == 2048 ? sim::WorldType::Server : sim::WorldType::Client,
@@ -1092,7 +1089,7 @@ void FearPlugin::installGameplayCommands(Console& console) {
                        [this](Console&, Int32, std::span<const std::string> args) -> std::string {
                            const auto* client =
                                args.size() == 2 && sg_.playerManager
-                                   ? sg_.playerManager->findClient(integer(args[1]))
+                                   ? sg_.playerManager->findBaseRep(integer(args[1]))
                                    : nullptr;
                            // Scripts concatenate this native spelling into race/model names.
                            return client ? (client->gender == "FEMALE" ? "Female" : "Male") : "";

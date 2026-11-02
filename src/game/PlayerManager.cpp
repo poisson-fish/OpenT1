@@ -66,11 +66,13 @@ void PlayerManager::BaseRep::resetBase() noexcept {
     skinBase.clear();
     nextClient = nullptr;
     prevClient = nullptr;
-    loginStatus = 0;
+    isBaseRepType = false;
+    loginId = 0;
 }
 
 void PlayerManager::ClientRep::clean() noexcept {
     resetBase();
+    nextClient = nullptr;
     playerSequence = 0;
     ping = 0;
     packetLoss = 0.0f;
@@ -540,6 +542,7 @@ void PlayerManager::reset() {
     numClients_ = 0;
     numBaseReps_ = 0;
     clientLink_ = nullptr;
+    baseRepLink_ = nullptr;
     teamScoreHeading_.clear();
     clientScoreHeading_.clear();
 
@@ -660,6 +663,16 @@ const PlayerManager::TeamRep* PlayerManager::findTeam(std::string_view teamName)
 }
 
 PlayerManager::ClientRep* PlayerManager::findClient(Int32 clientId) noexcept {
+    auto* rep = findBaseRep(clientId);
+    return rep && rep->isClientRep() ? rep : nullptr;
+}
+
+const PlayerManager::ClientRep* PlayerManager::findClient(Int32 clientId) const noexcept {
+    const auto* rep = findBaseRep(clientId);
+    return rep && rep->isClientRep() ? rep : nullptr;
+}
+
+PlayerManager::ClientRep* PlayerManager::findBaseRep(Int32 clientId) noexcept {
     if (clientId < BaseClientId + 1 || clientId >= BaseClientId + MaxClients) {
         return nullptr;
     }
@@ -670,7 +683,7 @@ PlayerManager::ClientRep* PlayerManager::findClient(Int32 clientId) noexcept {
     return p;
 }
 
-const PlayerManager::ClientRep* PlayerManager::findClient(Int32 clientId) const noexcept {
+const PlayerManager::ClientRep* PlayerManager::findBaseRep(Int32 clientId) const noexcept {
     if (clientId < BaseClientId + 1 || clientId >= BaseClientId + MaxClients) {
         return nullptr;
     }
@@ -681,90 +694,73 @@ const PlayerManager::ClientRep* PlayerManager::findClient(Int32 clientId) const 
     return p;
 }
 
-PlayerManager::BaseRep* PlayerManager::findBaseRep(Int32 id) noexcept {
-    return findClient(id);
-}
-
-const PlayerManager::BaseRep* PlayerManager::findBaseRep(Int32 id) const noexcept {
-    return findClient(id);
-}
-
-Int32 PlayerManager::getFreeId() noexcept {
-    ClientRep* ret = freeList_;
-    if (!ret) {
-        return 0;
-    }
-    freeList_ = static_cast<ClientRep*>(freeList_->nextClient);
-    ret->id = static_cast<Int32>(ret - clientList_.data()) + BaseClientId;
-    ret->nextClient = nullptr;
-    return ret->id;
+Int32 PlayerManager::getFreeId() const noexcept {
+    return freeList_ ? static_cast<Int32>(freeList_ - clientList_.data()) + BaseClientId : 0;
 }
 
 void PlayerManager::linkClientRep(ClientRep* cr) noexcept {
-    cr->nextClient = clientLink_;
-    cr->prevClient = nullptr;
-    if (clientLink_) {
-        clientLink_->prevClient = cr;
+    if (cr->isClientRep()) {
+        cr->nextClient = clientLink_;
+        clientLink_ = cr;
+        ++numClients_;
     }
-    clientLink_ = cr;
+    cr->BaseRep::nextClient = baseRepLink_;
+    cr->prevClient = nullptr;
+    if (baseRepLink_) {
+        baseRepLink_->prevClient = cr;
+    }
+    baseRepLink_ = cr;
+    ++numBaseReps_;
 }
 
 void PlayerManager::unlinkClientRep(ClientRep* cr) noexcept {
-    if (cr->nextClient) {
-        cr->nextClient->prevClient = cr->prevClient;
+    if (cr->isClientRep()) {
+        for (auto** link = &clientLink_; *link; link = &(*link)->nextClient) {
+            if (*link == cr) {
+                *link = cr->nextClient;
+                --numClients_;
+                break;
+            }
+        }
+    }
+    if (cr->BaseRep::nextClient) {
+        cr->BaseRep::nextClient->prevClient = cr->prevClient;
     }
     if (cr->prevClient) {
-        cr->prevClient->nextClient = cr->nextClient;
+        cr->prevClient->nextClient = cr->BaseRep::nextClient;
     } else {
-        clientLink_ = cr->nextClient;
+        baseRepLink_ = cr->BaseRep::nextClient;
     }
+    --numBaseReps_;
     cr->nextClient = nullptr;
+    cr->BaseRep::nextClient = nullptr;
     cr->prevClient = nullptr;
 }
 
-Int32 PlayerManager::clientAdded(std::string_view name,
-                                 std::string_view voiceBase,
-                                 std::string_view skinBase,
-                                 bool gender,
-                                 Int32 explicitClientId) {
-    Int32 cid = explicitClientId;
-    ClientRep* cr = nullptr;
-    if (cid == 0) {
-        cid = getFreeId();
-        if (cid == 0) {
-            return 0;
-        }
-        cr = &clientList_[static_cast<std::size_t>(cid - BaseClientId)];
-    } else {
-        if (cid < BaseClientId + 1 || cid >= BaseClientId + MaxClients) {
-            return 0;
-        }
-        cr = &clientList_[static_cast<std::size_t>(cid - BaseClientId)];
-        if (cr->id != 0) {
-            return cr->id;
-        }
-        // Remove from freeList_ if present
-        ClientRep* prev = nullptr;
-        ClientRep* walk = freeList_;
-        while (walk) {
-            if (walk == cr) {
-                if (prev) {
-                    prev->nextClient = walk->nextClient;
-                } else {
-                    freeList_ = static_cast<ClientRep*>(walk->nextClient);
-                }
-                break;
-            }
-            prev = walk;
-            walk = static_cast<ClientRep*>(walk->nextClient);
-        }
-        cr->clean();
-        cr->id = cid;
+Int32 PlayerManager::addRep(std::string_view name,
+                            std::string_view voiceBase,
+                            std::string_view skinBase,
+                            bool gender,
+                            Int32 explicitClientId,
+                            bool isBaseRepType) {
+    const Int32 cid = explicitClientId ? explicitClientId : getFreeId();
+    if (cid < BaseClientId + 1 || cid >= BaseClientId + MaxClients) {
+        return 0;
     }
-
-    linkClientRep(cr);
-    ++numClients_;
-    ++numBaseReps_;
+    auto* cr = &clientList_[static_cast<std::size_t>(cid - BaseClientId)];
+    if (cr->id != 0) {
+        return cr->isBaseRepType == isBaseRepType ? cr->id : 0;
+    }
+    for (auto** link = &freeList_; *link; link = &(*link)->nextClient) {
+        if (*link == cr) {
+            *link = cr->nextClient;
+            break;
+        }
+    }
+    cr->clean();
+    cr->id = cid;
+    cr->isBaseRepType = isBaseRepType;
+    cr->loginId = nextLoginId_++;
 
     cr->selected = false;
     cr->expanded = true;
@@ -785,12 +781,11 @@ Int32 PlayerManager::clientAdded(std::string_view name,
     cr->playerPSC = nullptr;
     cr->commandStatus = ClientRep::None;
     cr->curRadioChannel = 0;
-    cr->listenChannels = 1;
+    cr->listenChannels = 0;
     cr->positionUpdateTime = 0;
     cr->curCommander = -1;
     cr->commanderId = -1;
-    cr->team = 0;
-    cr->loginStatus = 1;
+    cr->team = -1;
 
     // The connection parser limits the chosen base name to 16 bytes; duplicate
     // name suffixes are added afterwards and must survive replication.
@@ -803,35 +798,59 @@ Int32 PlayerManager::clientAdded(std::string_view name,
         cr->voiceBase = gender ? "male1" : "female1";
     }
 
+    linkClientRep(cr);
     buildCommandTrees();
     return cr->id;
+}
+
+Int32 PlayerManager::clientAdded(std::string_view name,
+                                 std::string_view voiceBase,
+                                 std::string_view skinBase,
+                                 bool gender,
+                                 Int32 explicitClientId) {
+    return addRep(name, voiceBase, skinBase, gender, explicitClientId, false);
 }
 
 Int32 PlayerManager::aiAdded(std::string_view name,
                              std::string_view voiceBase,
                              std::string_view skinBase,
-                             bool gender) {
-    const Int32 cid = clientAdded(name, voiceBase, skinBase, gender, 0);
-    if (cid == 0) {
-        return 0;
-    }
-    if (ClientRep* cr = findClient(cid)) {
-        cr->loginStatus = 0;
-        if (numClients_ > 0) {
-            --numClients_;
+                             bool gender,
+                             Int32 explicitClientId) {
+    const bool existed = explicitClientId && findBaseRep(explicitClientId);
+    const auto id = addRep(name, voiceBase, skinBase, gender, explicitClientId, true);
+    if (isServer_ && id && !existed) {
+        const auto* rep = findBaseRep(id);
+        for (auto* receiver = getClientList(); receiver; receiver = receiver->nextClient) {
+            auto event = std::make_unique<PlayerAddEvent>();
+            event->id = id;
+            event->isBaseRepType = true;
+            event->name = rep->name;
+            event->skinBase = rep->skinBase;
+            event->voiceBase = rep->voiceBase;
+            event->gender = gender;
+            event->team = rep->team;
+            event->commanderId = rep->commanderId;
+            sendPlayerEvent(*receiver, std::move(event));
         }
     }
-    return cid;
+    return id;
 }
 
 void PlayerManager::clientDropped(Int32 clientId) {
-    ClientRep* dropClient = findClient(clientId);
+    ClientRep* dropClient = findBaseRep(clientId);
     if (!dropClient) {
         return;
     }
+    if (isServer_) {
+        for (auto* receiver = getClientList(); receiver; receiver = receiver->nextClient) {
+            if (receiver != dropClient) {
+                sendPlayerEvent(*receiver, std::make_unique<PlayerRemoveEvent>(clientId));
+            }
+        }
+    }
     unlinkClientRep(dropClient);
 
-    for (BaseRep* walk = clientLink_; walk != nullptr; walk = walk->nextClient) {
+    for (BaseRep* walk = baseRepLink_; walk != nullptr; walk = walk->nextClient) {
         auto* cl = static_cast<ClientRep*>(walk);
         if (cl->commanderId == clientId) {
             cl->commanderId = -1;
@@ -841,13 +860,6 @@ void PlayerManager::clientDropped(Int32 clientId) {
             cl->curCommandTarget = -1;
             cl->curCommandString.clear();
         }
-    }
-
-    if (dropClient->loginStatus != 0 && numClients_ > 0) {
-        --numClients_;
-    }
-    if (numBaseReps_ > 0) {
-        --numBaseReps_;
     }
 
     dropClient->clean();
@@ -858,25 +870,27 @@ void PlayerManager::clientDropped(Int32 clientId) {
 }
 
 void PlayerManager::serverClientTeamChange(Int32 clientId, Int32 teamId) {
-    ClientRep* theClient = findClient(clientId);
-    if (!theClient) {
+    if (!isServer_ || teamId < -1 || teamId >= numTeams_) {
+        return;
+    }
+    ClientRep* theClient = findBaseRep(clientId);
+    if (!theClient || theClient->team == teamId) {
         return;
     }
     theClient->team = teamId;
-    theClient->commanderId = -1;
-    theClient->curCommand = -1;
-    theClient->curCommandTarget = -1;
-    theClient->curCommandString.clear();
+    if (const auto* team = findTeam(teamId)) {
+        theClient->skinBase = team->skinBase;
+    }
+    theClient->lastCommandSequence = 0;
+    theClient->lastObjectiveSequence = 0;
+    if (theClient->isClientRep()) {
+        clientGuiModeChanged(clientId, theClient->curGuiMode, theClient->curGuiMode);
+    }
 
-    for (BaseRep* walk = clientLink_; walk != nullptr; walk = walk->nextClient) {
-        auto* cl = static_cast<ClientRep*>(walk);
+    for (auto* cl = getClientList(); cl; cl = cl->nextClient) {
+        sendPlayerEvent(*cl, std::make_unique<PlayerTeamChangeEvent>(clientId, teamId));
         if (cl->commanderId == clientId) {
-            cl->commanderId = -1;
-        }
-        if (cl->curCommand != -1 && cl->curCommandTarget == clientId - BaseClientId) {
-            cl->curCommand = -1;
-            cl->curCommandTarget = -1;
-            cl->curCommandString.clear();
+            cl->commanderId = theClient->commanderId;
         }
     }
 
@@ -884,6 +898,7 @@ void PlayerManager::serverClientTeamChange(Int32 clientId, Int32 teamId) {
         theClient->ownedObject->setTeam(teamId);
     }
 
+    theClient->commanderId = -1;
     buildCommandTrees();
 }
 
@@ -903,7 +918,7 @@ void PlayerManager::setTeamScore(Int32 teamId, std::string_view scoreString, Int
 }
 
 void PlayerManager::setClientScore(Int32 clientId, std::string_view scoreString, Int32 sortValue) {
-    if (BaseRep* br = findBaseRep(clientId)) {
+    if (BaseRep* br = findClient(clientId)) {
         br->scoreString = truncateTo(scoreString, 255);
         br->scoreSortValue = sortValue;
     }
@@ -1004,7 +1019,7 @@ void PlayerManager::setTeamObjective(Int32 teamId, Int32 objNum, std::string_vie
     if (isServer_) {
         for (auto* receiver = getClientList(); receiver;
              receiver = static_cast<ClientRep*>(receiver->nextClient)) {
-            if (receiver->loginStatus && receiver->team == teamId && receiver->curGuiMode == 3) {
+            if (receiver->team == teamId && receiver->curGuiMode == 3) {
                 sendPlayerEvent(*receiver, std::make_unique<TeamObjectiveEvent>(objNum, obj.text));
                 receiver->lastObjectiveSequence = curObjectiveSeq_;
             }
@@ -1034,7 +1049,7 @@ void PlayerManager::buildCommandTrees() noexcept {
         tm.firstCommander = nullptr;
     }
 
-    for (BaseRep* bwalk = clientLink_; bwalk != nullptr; bwalk = bwalk->nextClient) {
+    for (BaseRep* bwalk = baseRepLink_; bwalk != nullptr; bwalk = bwalk->nextClient) {
         auto* walk = static_cast<ClientRep*>(bwalk);
         walk->commander = findClient(walk->commanderId);
         if (walk->commander && walk->commander->team != walk->team) {
@@ -1103,7 +1118,7 @@ void PlayerManager::sendCommand(ClientRep& receiver,
 }
 
 bool PlayerManager::isInCommandChain(Int32 peonId, Int32 cmdrId) noexcept {
-    auto* walk = findClient(peonId);
+    auto* walk = findBaseRep(peonId);
     for (Int32 count = 0; walk && count < MaxClients; ++count) {
         if (walk->commanderId == cmdrId) {
             return true;
@@ -1114,7 +1129,7 @@ bool PlayerManager::isInCommandChain(Int32 peonId, Int32 cmdrId) noexcept {
 }
 
 void PlayerManager::setCommander(Int32 peonId, Int32 cmdrId) noexcept {
-    auto* peon = findClient(peonId);
+    auto* peon = findBaseRep(peonId);
     auto* cmdr = findClient(cmdrId);
     if (!peon ||
         (cmdr && (cmdr == peon || cmdr->team != peon->team || isInCommandChain(cmdrId, peonId)))) {
@@ -1128,7 +1143,7 @@ void PlayerManager::selectCommander(Int32 peonId, Int32 cmdrId) {
     if (!isServer_ || peonId == cmdrId) {
         return;
     }
-    auto* peon = findClient(peonId);
+    auto* peon = findBaseRep(peonId);
     if (!peon) {
         return;
     }
@@ -1139,16 +1154,14 @@ void PlayerManager::selectCommander(Int32 peonId, Int32 cmdrId) {
     }
     for (auto* receiver = getClientList(); receiver;
          receiver = static_cast<ClientRep*>(receiver->nextClient)) {
-        if (receiver->loginStatus) {
-            sendPlayerEvent(*receiver,
-                            std::make_unique<PlayerSelectCmdrEvent>(
-                                peonId, peon->commanderId < 0 ? 0 : peon->commanderId));
-        }
+        sendPlayerEvent(*receiver,
+                        std::make_unique<PlayerSelectCmdrEvent>(
+                            peonId, peon->commanderId < 0 ? 0 : peon->commanderId));
     }
 }
 
 void PlayerManager::selectCommander(Int32 cmdrId) {
-    for (auto* base = clientLink_; base; base = base->nextClient) {
+    for (auto* base = baseRepLink_; base; base = base->nextClient) {
         if (base->selected) {
             selectCommander(base->id, cmdrId);
         }
@@ -1165,9 +1178,9 @@ void PlayerManager::issueCommand(Int32 cmdrId,
         return;
     }
     auto* cmdr = findClient(cmdrId);
-    auto* target = findClient(targId);
+    auto* target = findBaseRep(targId);
     ++curCommandSequence_;
-    if (!target || (cmdrId && (!cmdr || !cmdr->loginStatus || cmdr->team != target->team))) {
+    if (!target || (cmdrId && (!cmdr || cmdr->team != target->team))) {
         return;
     }
     if (!(cmdrId == targId || !cmdrId || isInCommandChain(targId, cmdrId) ||
@@ -1182,7 +1195,7 @@ void PlayerManager::issueCommand(Int32 cmdrId,
     target->wayPoint = wayPoint;
     target->curCommandString = truncateTo(commandString, 255);
     target->commandStatus = cmdrId && cmdrId != targId ? CMD_RECEIVED : CMD_ACKNOWLEDGED;
-    if (!target->loginStatus) {
+    if (!target->isClientRep()) {
         if (objectIndex != -1) {
             return;
         }
@@ -1202,7 +1215,7 @@ void PlayerManager::issueCommand(Int32 cmdrId,
                                                   std::to_string(target->curCommandSequence)};
             (void)boundConsole_->execute("AI::onCommand", args);
             // Script callbacks may delete or reassign the recipient.
-            target = findClient(targId);
+            target = findBaseRep(targId);
             if (!target) {
                 return;
             }
@@ -1210,9 +1223,6 @@ void PlayerManager::issueCommand(Int32 cmdrId,
     }
     for (auto* receiver = getClientList(); receiver;
          receiver = static_cast<ClientRep*>(receiver->nextClient)) {
-        if (!receiver->loginStatus) {
-            continue;
-        }
         if (receiver->curGuiMode == PlayerPSC::CommandGuiMode) {
             receiver->lastCommandSequence = curCommandSequence_;
         }
@@ -1231,7 +1241,7 @@ bool PlayerManager::commandStatusReport(Int32 peonId, Int32 status, std::string_
         return false;
     }
     auto* peon = findClient(peonId);
-    if (!peon || !peon->loginStatus) {
+    if (!peon) {
         return false;
     }
     ++curCommandSequence_;
@@ -1248,9 +1258,6 @@ bool PlayerManager::commandStatusReport(Int32 peonId, Int32 status, std::string_
     }
     for (auto* receiver = getClientList(); receiver;
          receiver = static_cast<ClientRep*>(receiver->nextClient)) {
-        if (!receiver->loginStatus) {
-            continue;
-        }
         if (receiver->curGuiMode == PlayerPSC::CommandGuiMode) {
             receiver->lastCommandSequence = curCommandSequence_;
         }
@@ -1328,8 +1335,8 @@ void PlayerManager::clientGuiModeChanged(Int32 clientId, UInt32 newGuiMode, UInt
         return;
     }
     if (isServer_ && newGuiMode == PlayerPSC::CommandGuiMode) {
-        for (auto* target = getClientList(); target;
-             target = static_cast<ClientRep*>(target->nextClient)) {
+        for (auto* base = getBaseRepList(); base; base = base->nextClient) {
+            auto* target = static_cast<ClientRep*>(base);
             if (target != client && target->team == client->team &&
                 (client->lastCommandSequence < target->curCommandSequence ||
                  target->curCommandTarget != -1)) {
@@ -1356,12 +1363,11 @@ void PlayerManager::clientGuiModeChanged(Int32 clientId, UInt32 newGuiMode, UInt
 
 void PlayerManager::sendPingPackets() {
     auto evTemplate = std::make_unique<PingPLEvent>();
-    for (BaseRep* pwalk = clientLink_; pwalk != nullptr; pwalk = pwalk->nextClient) {
+    for (ClientRep* pwalk = clientLink_; pwalk != nullptr; pwalk = pwalk->nextClient) {
         const auto* pcl = static_cast<const ClientRep*>(pwalk);
         evTemplate->entries.push_back(PingPLEvent::Entry{pcl->id, pcl->ping, pcl->packetLoss});
     }
-    for (BaseRep* walk = clientLink_; walk != nullptr; walk = walk->nextClient) {
-        auto* cl = static_cast<ClientRep*>(walk);
+    for (ClientRep* cl = clientLink_; cl != nullptr; cl = cl->nextClient) {
         if (!cl->eventManager || cl->sendScores == 0) {
             continue;
         }
@@ -1553,8 +1559,16 @@ bool PlayerManager::processEvent(const sim::SimEvent& event) {
             return false;
         }
         case PlayerSkinEventType: {
+            if (isServer_) {
+                return false;
+            }
             if (const auto* ev = dynamic_cast<const PlayerSkinEvent*>(&event)) {
-                setClientSkin(ev->clientId, ev->skinBase);
+                if (auto* rep = findBaseRep(ev->clientId)) {
+                    rep->skinBase = ev->skinBase;
+                    if (auto* body = dynamic_cast<ShapeBase*>(rep->ownedObject)) {
+                        body->reSkin(true);
+                    }
+                }
                 return true;
             }
             return false;
@@ -1566,16 +1580,18 @@ bool PlayerManager::processEvent(const sim::SimEvent& event) {
             if (const auto* ev = dynamic_cast<const PlayerAddEvent*>(&event)) {
                 const bool joined = findBaseRep(ev->id) == nullptr;
                 const Int32 cid =
-                    clientAdded(ev->name, ev->voiceBase, ev->skinBase, ev->gender != 0, ev->id);
-                if (ClientRep* cl = findClient(cid)) {
+                    ev->isBaseRepType
+                        ? aiAdded(ev->name, ev->voiceBase, ev->skinBase, ev->gender != 0, ev->id)
+                        : clientAdded(
+                              ev->name, ev->voiceBase, ev->skinBase, ev->gender != 0, ev->id);
+                if (!cid) {
+                    return false;
+                }
+                if (ClientRep* cl = findBaseRep(cid)) {
                     cl->team = ev->team;
                     cl->commanderId = ev->commanderId;
-                    cl->loginStatus = ev->isBaseRepType ? 0u : 1u;
-                    if (joined && ev->isBaseRepType) {
-                        --numClients_;
-                    }
                     buildCommandTrees();
-                    if (joined && cl->loginStatus) {
+                    if (joined && cl->isClientRep()) {
                         if (boundConsole_ && boundConsole_->isFunction("onClientJoin")) {
                             const std::array<std::string, 1> args{std::to_string(cid)};
                             (void)boundConsole_->execute("onClientJoin", args);
@@ -1616,7 +1632,7 @@ bool PlayerManager::processEvent(const sim::SimEvent& event) {
                 return false;
             }
             if (const auto* ev = dynamic_cast<const PlayerRemoveEvent*>(&event)) {
-                if (const auto* client = findClient(ev->id); client && client->loginStatus) {
+                if (const auto* client = findClient(ev->id)) {
                     const auto name = client->name;
                     if (boundConsole_ && boundConsole_->isFunction("onClientDrop")) {
                         const std::array<std::string, 1> args{std::to_string(ev->id)};
@@ -1635,21 +1651,38 @@ bool PlayerManager::processEvent(const sim::SimEvent& event) {
                 return false;
             }
             if (const auto* ev = dynamic_cast<const PlayerTeamChangeEvent*>(&event)) {
-                serverClientTeamChange(ev->playerId, ev->teamId);
-                if (const auto* client = findClient(ev->playerId); client && client->loginStatus) {
-                    const auto name = client->name;
+                if (auto* rep = findBaseRep(ev->playerId)) {
+                    rep->team = ev->teamId;
+                    for (auto* client = getClientList(); client; client = client->nextClient) {
+                        if (client->commanderId == rep->id) {
+                            client->commanderId = rep->commanderId;
+                        }
+                    }
+                    rep->commanderId = -1;
+                    const auto name = rep->name;
                     if (boundConsole_ && boundConsole_->isFunction("onClientChangeTeam")) {
                         const std::array<std::string, 2> args{std::to_string(ev->playerId),
                                                               std::to_string(ev->teamId)};
                         (void)boundConsole_->execute("onClientChangeTeam", args);
                     }
                     const auto* team = findTeam(ev->teamId);
-                    displayCommandMessage(nullptr,
-                                          FearGuiChatDisplay::MSG_System,
-                                          name + (ev->teamId == -1 ? " is no longer on a team."
-                                                  : team && getNumTeams() > 1
-                                                      ? " joined team " + team->name + "."
-                                                      : " joined the fray."));
+                    if (ev->teamId != -1 && team) {
+                        if (auto* current = findBaseRep(ev->playerId)) {
+                            current->skinBase = team->skinBase;
+                            if (auto* body = dynamic_cast<ShapeBase*>(current->ownedObject)) {
+                                body->reSkin(true);
+                            }
+                        }
+                    }
+                    if (ev->teamId == -1 || team) {
+                        displayCommandMessage(nullptr,
+                                              FearGuiChatDisplay::MSG_System,
+                                              name + (ev->teamId == -1 ? " is no longer on a team."
+                                                      : getNumTeams() > 1
+                                                          ? " joined team " + team->name + "."
+                                                          : " joined the fray."));
+                    }
+                    buildCommandTrees();
                 }
                 return true;
             }
@@ -1675,7 +1708,7 @@ bool PlayerManager::processEvent(const sim::SimEvent& event) {
                 return false;
             }
             if (const auto* ev = dynamic_cast<const PlayerSelectCmdrEvent*>(&event)) {
-                auto* peon = findClient(ev->peon);
+                auto* peon = findBaseRep(ev->peon);
                 auto* commander = findClient(ev->cmdr);
                 if (!peon) {
                     return true;
@@ -1707,7 +1740,7 @@ bool PlayerManager::processEvent(const sim::SimEvent& event) {
                 if (ev->hasMessage && ev->sendMessageString) {
                     lastCommandMessage_ = ev->message;
                 }
-                auto* target = findClient(ev->target);
+                auto* target = findBaseRep(ev->target);
                 if (!target) {
                     return true;
                 }

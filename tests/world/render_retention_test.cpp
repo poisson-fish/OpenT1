@@ -119,12 +119,16 @@ int retainedInteriorLighting() {
     return test::run([] {
         ResourceManager manager;
         auto shape = std::make_unique<world::InteriorShape>();
-        shape->lods.resize(1);
+        shape->states = {{"default", 0, 2}};
+        shape->lods = {{100, 0, 0, ""}, {0, 1, 0, ""}};
         shape->lightStateNames.resize(1);
         auto geometry = std::make_unique<world::InteriorGeometry>();
         geometry->points = {{-1, 0, -1}, {1, 0, -1}, {0, 0, 1}};
         geometry->texturePoints = {{0, 0}, {1, 0}, {.5f, 1}};
         geometry->vertices = {{0, 0}, {1, 1}, {2, 2}};
+        geometry->planes = {{0, 1, 0, 0}};
+        geometry->textureScale = 1;
+        geometry->bounds = {{-1, -1, -1}, {1, 1, 1}};
         world::InteriorSurface surface;
         surface.vertexCount = 3;
         geometry->surfaces = {surface, surface};
@@ -132,13 +136,24 @@ int retainedInteriorLighting() {
         lighting->mapSlots = 1;
         lighting->mapData = {std::byte{255}};
         lighting->surfaces = {{0x80000000U, 1, 0, 1, 1, 0, 0}, {0x80000fffU, 0, 0, 1, 1, 0, 0}};
+        lighting->states = {{{}, 0, 1, 0}, {{0xff00, 0xff00, 0xff00, 0xff00}, 0, 1, 0}};
+        lighting->stateData = {{0, 0, 0}};
+        lighting->lights = {{7, -1, 2, 0, 0, 0}};
+        auto lowGeometry = std::make_unique<world::InteriorGeometry>(*geometry);
+        lowGeometry->surfaces.resize(1);
+        auto lowLighting = std::make_unique<world::InteriorLighting>(*lighting);
+        lowLighting->surfaces.resize(1);
         CHECK(manager.add("retain.dis", std::move(shape)));
         CHECK(manager.add("retain.dig", std::move(geometry)));
         CHECK(manager.add("retain.dil", std::move(lighting)));
+        CHECK(manager.add("retain-low.dig", std::move(lowGeometry)));
+        CHECK(manager.add("retain-low.dil", std::move(lowLighting)));
         world::InteriorShapeResources resources;
         resources.shape = manager.load<world::InteriorShape>("retain.dis");
         resources.geometry.push_back(manager.load<world::InteriorGeometry>("retain.dig"));
+        resources.geometry.push_back(manager.load<world::InteriorGeometry>("retain-low.dig"));
         resources.lighting.push_back(manager.load<world::InteriorLighting>("retain.dil"));
+        resources.lighting.push_back(manager.load<world::InteriorLighting>("retain-low.dil"));
         world::TsMaterialResources::Data materialData;
         materialData.list.materials.resize(1);
         materialData.list.materials[0].flags = 2;
@@ -189,6 +204,52 @@ int retainedInteriorLighting() {
         options.slots = std::span<const world::InteriorLightSlot>{};
         CHECK(!world::WorldSurfaceMesh::interior(resources, 0, 0, true, options));
         CHECK(first->triangleCount() == 2); // a failed update leaves published geometry intact
+
+        sim::SimSceneLighting scene;
+        sim::SimLight sun;
+        sun.type = sim::SimLight::Type::Directional;
+        sun.direction = {1, 0, 0}; // parallel to the surface, leaving its animated map unchanged
+        sun.intensity = {1, 1, 1};
+        scene.lights.push_back(sun);
+        const auto sceneHandle = std::make_shared<const sim::SimSceneLighting>(scene);
+        sim::SimSceneLighting ambient;
+        ambient.ambient = {.2f, .2f, .2f};
+        const auto ambientHandle = std::make_shared<const sim::SimSceneLighting>(ambient);
+        for (const bool ambientOnly : {false, true}) {
+            world::SimInteriorSurface provider(resources);
+            provider.setVisibilityEnabled(false);
+            CHECK(provider.setAutomaticDetail(0));
+            const auto capture = [&](bool lit, bool lowDetail = false) {
+                world::WorldSurfaceQuery query;
+                if (lit) {
+                    query.lighting = sceneHandle;
+                } else if (ambientOnly) {
+                    query.lighting = ambientHandle;
+                }
+                if (lowDetail) {
+                    query.camera.emplace();
+                    query.camera->worldToCamera = TMat3F(EulerF{}, {0, 100, 0});
+                    query.camera->focal = {100, 100};
+                }
+                CHECK(provider.processQuery(query));
+                test::check(!query.failed && query.image,
+                            std::format("interior capture lit={} lowDetail={} ambientOnly={}",
+                                        lit, lowDetail, ambientOnly));
+                return query.image->mesh;
+            };
+            const auto old = capture(true);
+            CHECK((*old->interiorMaps)[0]->samples[0] == 0);
+            CHECK(provider.setLightState(7, 1));
+            CHECK((*capture(false)->interiorMaps)[0]->samples[0] == 0xffff);
+            const auto updated = capture(true);
+            CHECK((*updated->interiorMaps)[0]->samples[0] == 0xffff);
+            CHECK((*old->interiorMaps)[0]->samples[0] == 0); // old frames keep their maps
+            CHECK(capture(false, true)->triangleCount() == 1);
+            CHECK(capture(true, true)->triangleCount() == 1);
+            CHECK(capture(false)->triangleCount() == 2);
+            CHECK(capture(true)->triangleCount() == 2);
+            CHECK((*updated->interiorMaps)[0]->samples[0] == 0xffff);
+        }
     });
 }
 

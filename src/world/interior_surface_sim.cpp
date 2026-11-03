@@ -296,6 +296,10 @@ bool SimInteriorSurface::processQuery(sim::SimQuery& query) {
         }
     }
     const bool baseChanged = candidate.base != base;
+    if (baseChanged) {
+        candidate.scene.reset();
+        candidate.lighting.reset();
+    }
     candidate.base = base;
     candidate.lod = lod;
     candidate.slots = slots;

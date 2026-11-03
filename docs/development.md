@@ -153,6 +153,14 @@ should use their working directory or a uniquely named temporary directory.
 CTest gives each subsystem a separate working directory so suites can run
 concurrently.
 
+The diagnostic Python tools have asset-free regression tests using only the
+Python standard library. CI runs these separately from CTest; Python is not
+required for a normal C++ build:
+
+```powershell
+python -m unittest discover -s tests/tools -v
+```
+
 Gameplay regressions include target filtering, impact delivery, player animation
 audio, looping weapon audio, target names and health fractions, mission clock
 resets, and projectile velocity inheritance. An optional acceptance case uses an

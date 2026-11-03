@@ -20,11 +20,15 @@ def main():
     parser.add_argument('reference', type=Path)
     parser.add_argument('candidate', type=Path)
     args = parser.parse_args()
+    sources = sorted(args.reference.glob('*.json.ppm'))
+    if not sources:
+        parser.error(f'No reference readbacks found in {args.reference}')
+    missing = [source.name for source in sources if not (args.candidate / source.name).is_file()]
+    if missing:
+        parser.error('Missing candidate readbacks: ' + ', '.join(missing))
     results = {}
-    for source in sorted(args.reference.glob('*.json.ppm')):
+    for source in sources:
         candidate = args.candidate / source.name
-        if not candidate.exists():
-            continue
         a = source.read_bytes().split(b'\n', 3)[3]
         b = candidate.read_bytes().split(b'\n', 3)[3]
         if len(a) != len(b) or len(a) != 800 * 600 * 3:

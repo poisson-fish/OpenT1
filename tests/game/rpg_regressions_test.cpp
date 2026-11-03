@@ -165,7 +165,10 @@ void ferryWaypoints() {
     CHECK(app.console()
               .evaluate(R"(
         MoveableData RegressionFerry { speed = 10; displace = false; blockForward = false; blockBackward = false; };
-        function RegressionFerry::onNewPath(%this) { $FerryNewPaths++; }
+        function RegressionFerry::onNewPath(%this) {
+            $FerryNewPaths++;
+            Moveable::moveToWaypoint(%this, 1);
+        }
         function RegressionFerry::onWaypoint(%this) { $FerryArrived = GameBase::getPosition(%this); }
     )")
               .ok());
@@ -187,7 +190,11 @@ void ferryWaypoints() {
     auto* ferry = dynamic_cast<Moveable*>(globals.manager->addObject(std::move(owned), group));
     CHECK(ferry);
     CHECK(app.console().getVariable("FerryNewPaths") == "1");
-    CHECK(ferry->moveToWaypoint(1));
+    CHECK(ferry->targetWaypoint() == 1 && ferry->getMoveState() == Moveable::ForwardState);
+    // Rediscovering the same path must preserve the callback's destination.
+    ferry->onGroupAdd();
+    CHECK(app.console().getVariable("FerryNewPaths") == "1");
+    CHECK(ferry->targetWaypoint() == 1 && ferry->getMoveState() == Moveable::ForwardState);
     ferry->serverProcess(1000);
     CHECK(std::abs(ferry->getWaypointPosition() - .5f) < .001f);
     CHECK((ferry->getPos() - Point3F{20, 20, 30}).len() < .001f);
@@ -203,6 +210,26 @@ void ferryWaypoints() {
     CHECK(ferry->setWaypoint(.5f));
     CHECK((ferry->getPos() - Point3F{10, 20, 30}).len() < .001f);
     CHECK(!ferry->setWaypoint(-1));
+
+    // Loading the moveable before its sibling path follows the same callback path.
+    auto* lateGroup =
+        dynamic_cast<sim::SimGroup*>(globals.manager->addObject(std::make_unique<sim::SimGroup>()));
+    CHECK(lateGroup);
+    auto lateOwned = std::make_unique<Moveable>();
+    lateOwned->bindDataBlockManager(globals.dbm);
+    lateOwned->setDatFileName("RegressionFerry");
+    auto* lateFerry =
+        dynamic_cast<Moveable*>(globals.manager->addObject(std::move(lateOwned), lateGroup));
+    CHECK(lateFerry && lateFerry->pathId() == Moveable::UndefinedPathId);
+    auto latePath = std::make_unique<world::SimPath>();
+    CHECK(latePath->setState(state));
+    auto* published =
+        dynamic_cast<world::SimPath*>(globals.manager->addObject(std::move(latePath), lateGroup));
+    CHECK(published && published->publish());
+    lateFerry->serverProcess(1000);
+    CHECK(app.console().getVariable("FerryNewPaths") == "2");
+    CHECK(lateFerry->targetWaypoint() == 1 && lateFerry->getMoveState() == Moveable::ForwardState);
+    CHECK((lateFerry->getPos() - Point3F{20, 20, 30}).len() < .001f);
 }
 
 void installedRpgRegressions() {

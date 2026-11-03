@@ -649,6 +649,14 @@ target_link_libraries(opent1 PRIVATE opent1_game)
 if(OPENT1_BUILD_PLATFORM)
     add_executable(opent1_render_benchmark EXCLUDE_FROM_ALL tools/render_benchmark.cpp)
     target_link_libraries(opent1_render_benchmark PRIVATE opent1_game opent1_gfx_sdl)
+    if(WIN32 AND TARGET SDL3::SDL3-shared)
+        add_custom_command(
+            TARGET opent1_render_benchmark
+            POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared>
+                    $<TARGET_FILE_DIR:opent1_render_benchmark>
+        )
+    endif()
 endif()
 # Explicit diagnostic target: allocation tracking is confined to this executable.
 add_executable(opent1_memory_audit EXCLUDE_FROM_ALL tools/memory_audit.cpp src/audio/wave.cpp)

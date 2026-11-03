@@ -53,7 +53,6 @@ bool Moveable::onAdd() {
     if (!isGhost()) {
         addToSet(MoveableSetId);
         setPathId(findPathId());
-        setWaypointPosition(0);
     } else if (pathId_ != UndefinedPathId) {
         buildMovementVector(currentWaypoint_, moveState_ == BackwardState);
         updatePosition(true);
@@ -70,7 +69,6 @@ void Moveable::onGroupAdd() {
     Parent::onGroupAdd();
     if (!isGhost()) {
         setPathId(findPathId());
-        setWaypointPosition(0);
     }
 }
 
@@ -112,9 +110,8 @@ void Moveable::setPathId(Int32 pid) {
     }
     waypointCount_ = 0;
     if (!isGhost() && pathId_ != UndefinedPathId && pathId_ != previous) {
-        if (currentWaypoint_ == UndefinedWaypoint) {
-            setWaypointPosition(0);
-        }
+        // Finish setup before scripts choose a destination or start movement.
+        setWaypointPosition(0);
         if (auto* con = resolveConsole()) {
             const auto callback = scriptName("onNewPath");
             if (!callback.empty()) {

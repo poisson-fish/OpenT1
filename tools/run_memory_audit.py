@@ -44,7 +44,7 @@ def main():
                 code = "timeout"
         case = {"label": label, "returncode": code,
                 "seconds": round(time.monotonic() - started, 3)}
-        if output.exists():
+        if code == 0 and output.exists():
             records = read_records(output)
             case["snapshots"] = [r for r in records if r["kind"] == "snapshot"]
             case["gpu"] = [r for r in records if r["kind"] == "gpu"]

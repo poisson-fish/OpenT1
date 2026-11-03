@@ -88,6 +88,14 @@ def main():
     parser.add_argument("--date", required=True)
     args = parser.parse_args()
     cases = json.loads((args.input / "runs.json").read_text())
+    catalogs = {}
+    for case in cases:
+        if case["label"].endswith("-catalog"):
+            label = case["label"].removesuffix("-catalog")
+            if case["returncode"] == 0:
+                catalogs[label] = catalog(args.input / (case["label"] + ".jsonl"))
+            else:
+                catalogs[label] = mission(case, args.input)
     missions = [mission(c, args.input) for c in cases if not c["label"].endswith("-catalog")]
     base = [r for r in missions if r["label"].startswith("base-") and not r["label"].endswith("-gpu")]
     success = [r for r in base if r["returncode"] == 0]
@@ -96,10 +104,11 @@ def main():
         "schema_version": 1, "date": args.date, "units": "bytes",
         "measurement_host": "Windows x64, MSVC Release; GPU cases use D3D12 / RTX 5090",
         "scope": "Installed catalogs include custom maps, shadowed sources and alternate LOD/light states. Catalog sums are not simultaneous residency. Mission runs include local server/client; audio playback and video playback are not initialized.",
-        "catalogs": {label: catalog(args.input / (label + "-catalog.jsonl")) for label in ("base", "rpg")},
+        "catalogs": catalogs,
         "base_missions": {"attempted": len(base), "loaded": len(success),
-                          "minimum_cpp_warm_bytes": min(values), "median_cpp_warm_bytes": statistics.median(values),
-                          "maximum_cpp_warm_bytes": max(values)},
+                          "minimum_cpp_warm_bytes": min(values) if values else None,
+                          "median_cpp_warm_bytes": statistics.median(values) if values else None,
+                          "maximum_cpp_warm_bytes": max(values) if values else None},
         "missions": missions,
         "provenance": json.loads((args.input / "provenance.json").read_text()),
     }

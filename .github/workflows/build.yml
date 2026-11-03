@@ -99,3 +99,5 @@ jobs:
         run: cmake --build build/ci --parallel 3
       - name: Test
         run: ctest --test-dir build/ci --output-on-failure --no-tests=error --parallel 3
+      - name: Test diagnostic Python tools
+        run: python -m unittest discover -s tests/tools -v

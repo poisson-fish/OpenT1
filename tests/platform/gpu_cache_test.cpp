@@ -654,7 +654,7 @@ void shapeReadbacks(platform::SdlWindow& window) {
     std::vector<std::byte> earlierPixels;
     for (const UInt32 shading : {0x100U, 0x200U, 0x400U})
         for (const UInt32 alpha : {0U, 0x1000U, 0x2000U})
-            for (const auto [type, pointMode] :
+            for (const auto& [type, pointMode] :
                  std::array{std::pair{world::TsLight::Type::Directional, 0},
                             std::pair{world::TsLight::Type::DirectionalNonlinear, 0},
                             std::pair{world::TsLight::Type::DirectionalWrap, 0},

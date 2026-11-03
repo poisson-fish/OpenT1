@@ -41,6 +41,7 @@ add_executable(
     game/rpg_paths_test.cpp
     game/rpg_regressions_test.cpp
     game/compatibility_test.cpp
+    game/shell_controls_test.cpp
     game/model_rendering_test.cpp
     game/weather_test.cpp
     game/disconnect_test.cpp

@@ -1446,7 +1446,11 @@ bool Runtime::synchronizeVariables() {
     }
     std::vector<std::pair<Control*, std::function<void()>>> undo;
     const auto visit = [&](auto&& self, Control& c) -> bool {
-        if (!c.fields().variable.empty() && console_.hasVariable(c.fields().variable)) {
+        // Native TextList::onPreRender is a no-op. Its selection is set by
+        // scripts and published on action; polling here can undo mouse-down
+        // before mouse-up publishes the new selection to the bound variable.
+        if (!dynamic_cast<TextList*>(&c) && !c.fields().variable.empty() &&
+            console_.hasVariable(c.fields().variable)) {
             const auto value = console_.getVariable(c.fields().variable);
             auto* text = dynamic_cast<Text*>(&c);
             if (!text || text->text != value) {

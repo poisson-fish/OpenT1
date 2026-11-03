@@ -169,7 +169,7 @@ class ShapeDemo : public SdlApplication {
         std::printf("Loaded %s: %zu meshes, %zu materials, %zu bitmap dependencies on %s.\n",
                     shapeName.c_str(),
                     resources_.shape->meshes.size(),
-                    resources_.materials.list.materials.size(),
+                    resources_.materials.list().materials.size(),
                     resources_.shape->dependencies().size(),
                     std::string(surface_->driver()).c_str());
         return true;

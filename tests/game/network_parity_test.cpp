@@ -22,6 +22,7 @@
 #include <fstream>
 #include <iterator>
 #include <limits>
+#include <ranges>
 
 using namespace opent1::game;
 using namespace sim_net_test;
@@ -1146,13 +1147,18 @@ void remoteJoinWithStartupBots() {
     const std::array<std::string, 1> address{"IP:127.0.0.1:" + std::to_string(endpoint->port)};
     CHECK(clientApp.console().execute("connect", address).value == "True");
     int frame = 0;
-    const auto advance = [&] {
-        const auto time = frame++ * .032;
-        CHECK(serverApp.stepFrame(time, false));
-        CHECK(clientApp.stepFrame(time, false));
+    const auto advanceFrames = [&](int count, FearGameApp* replacement = nullptr) {
+        for (const auto currentFrame : std::views::iota(frame, frame + count)) {
+            const auto time = currentFrame * .032;
+            CHECK(serverApp.stepFrame(time, false));
+            CHECK(clientApp.stepFrame(time, false));
+            if (replacement) {
+                CHECK(replacement->stepFrame(time, false));
+            }
+        }
+        frame += count;
     };
-    for (; frame < 64;)
-        advance();
+    advanceFrames(64);
     auto& cg = clientPlugin.clientGlobals();
     CHECK(clientPlugin.isConnected() && cg.manager->getId() == 2050);
     CHECK(serverApp.console().getVariable("HumanConnections") == "1");
@@ -1171,20 +1177,17 @@ void remoteJoinWithStartupBots() {
     CHECK(late);
     const auto lateId = late->id;
     sg.playerManager->serverClientTeamChange(lateId, 1);
-    for (const auto end = frame + 16; frame < end;)
-        advance();
+    advanceFrames(16);
     CHECK(cg.playerManager->findBaseRep(lateId));
     CHECK(cg.playerManager->findBaseRep(lateId)->team == 1);
     CHECK(!cg.playerManager->findClient(lateId));
     CHECK(clientApp.console().getVariable("HumanJoins") == "1");
     CHECK(sg.aiManager->remove("LateBot", true));
-    for (const auto end = frame + 16; frame < end;)
-        advance();
+    advanceFrames(16);
     CHECK(!cg.playerManager->findBaseRep(lateId));
     CHECK(clientApp.console().getVariable("HumanDrops").empty());
     CHECK(sg.aiManager->remove("StartupBot", true));
-    for (const auto end = frame + 16; frame < end;)
-        advance();
+    advanceFrames(16);
     CHECK(!cg.playerManager->findBaseRep(2049));
     CHECK(cg.playerManager->findClient(2050) && sg.playerManager->findClient(2050));
     CHECK(clientApp.console().getVariable("HumanDrops").empty());
@@ -1195,10 +1198,7 @@ void remoteJoinWithStartupBots() {
     CHECK(replacementApp.init());
     replacementApp.console().setVariable("PCFG::Name", "ReplacementHuman");
     CHECK(replacementApp.console().execute("connect", address).value == "True");
-    for (const auto end = frame + 32; frame < end;) {
-        advance();
-        CHECK(replacementApp.stepFrame((frame - 1) * .032, false));
-    }
+    advanceFrames(32, &replacementApp);
     CHECK(replacementApp.fearPlugin().clientGlobals().manager->getId() == 2049);
     CHECK(cg.playerManager->findClient(2049));
     CHECK(cg.playerManager->findClient(2049)->name == "ReplacementHuman");
@@ -1206,15 +1206,13 @@ void remoteJoinWithStartupBots() {
     CHECK(clientApp.console().getVariable("HumanJoins") == "2");
     CHECK(sg.playerManager->findClient(2049)->playerPSC);
     CHECK(replacementApp.console().execute("disconnect").value == "True");
-    for (const auto end = frame + 16; frame < end;)
-        advance();
+    advanceFrames(16);
     CHECK(!cg.playerManager->findBaseRep(2049));
     CHECK(clientApp.console().getVariable("HumanDrops") == "1");
     CHECK(serverApp.console().evaluate(
         "AI::spawn(ReusedStartupBot, NetworkBotArmor, \"0 2 100\");").ok());
     CHECK(sg.aiManager->findAI("ReusedStartupBot")->id == 2049);
-    for (const auto end = frame + 16; frame < end;)
-        advance();
+    advanceFrames(16);
     CHECK(cg.playerManager->findBaseRep(2049) && !cg.playerManager->findClient(2049));
     CHECK(cg.playerManager->getNumClients() == 1 && cg.playerManager->getNumBaseReps() == 2);
     CHECK(clientApp.console().getVariable("HumanJoins") == "2");

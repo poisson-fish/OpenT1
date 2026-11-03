@@ -27,6 +27,14 @@ until the outermost dispatch returns. The generated source identifies the
 alteration and retains the upstream notice. The downloaded source tree is not
 modified. Installed SDL packages bypass this alteration.
 
+## OpenAL alteration
+
+On macOS, `cmake/OpenALSoftCompat.cmake` generates an altered build-local copy
+of OpenAL Soft's `alc/alc.cpp`. It uses a lambda to dereference effect slot
+clusters, supporting libc++ 23's templated `unique_ptr::operator*`. The generated
+source identifies the alteration and retains the upstream notice. The downloaded
+source tree is not modified.
+
 ## Distribution
 
 Keep these notices and their referenced license texts with binary distributions.

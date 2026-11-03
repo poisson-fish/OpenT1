@@ -88,10 +88,24 @@ void windowOwnership() {
         CHECK(std::string_view(SDL_GetWindowTitle(a.nativeHandle())) == "OpenT1 UTF-8 \xc3\xa9");
         a.setClientSize(320, 240);
         CHECK(a.state().width == 320);
-        a.setSizeLocked(true);
-        a.setClientSize(800, 600);
-        CHECK(a.state().width == 320);
-        a.setSizeLocked(false);
+        if (SDL_SetWindowResizable(a.nativeHandle(), false)) {
+            CHECK(SDL_SetWindowResizable(a.nativeHandle(), true));
+            a.setSizeLocked(true);
+            a.setClientSize(800, 600);
+            CHECK(a.state().width == 320);
+            a.setSizeLocked(false);
+        } else {
+            // Newer SDL dummy drivers reject native resizability changes.
+            // Surface that error without latching the wrapper's size lock.
+            bool rejected{};
+            try {
+                a.setSizeLocked(true);
+            } catch (const std::runtime_error&) {
+                rejected = true;
+            }
+            CHECK(rejected);
+            SDL_ClearError();
+        }
         a.setClientSize(800, 600);
         CHECK(a.state().width == 800);
         a.startTextInput();

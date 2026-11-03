@@ -98,7 +98,7 @@ if(NOT OPENT1_HAS_CXX20_THREADS)
     message(
         FATAL_ERROR
             "OpenT1 requires C++20 std::jthread and std::stop_token support. "
-            "On macOS, use Homebrew LLVM 20 with its matching libc++ headers and runtime; "
+            "On macOS, use Homebrew LLVM 20 or newer with its matching libc++ headers and runtime; "
             "see docs/development.md."
     )
 endif()

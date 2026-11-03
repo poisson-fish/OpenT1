@@ -38,11 +38,62 @@ an installed SDL package does not receive that correction.
 To include all five demonstration executables in the default build, configure
 with `cmake --preset x64-debug -DOPENT1_BUILD_EXAMPLES=ON`.
 
+## Linux presets
+
+Install CMake 3.25 or newer, Ninja, GCC 14 (`gcc-14` and `g++-14`), and SDL's
+platform development dependencies (see the Linux installation step in CI).
+The Linux presets use GCC 14, matching CI:
+
+```sh
+cmake --preset linux-debug
+cmake --build --preset linux-debug --parallel 3
+ctest --preset linux-debug
+```
+
+Use `linux-release` for an optimized desktop build or `linux-headless` for a
+Debug build without SDL3 or OpenAL. On distributions with different executable
+names, override `CMAKE_C_COMPILER` and `CMAKE_CXX_COMPILER` at configuration time
+with a compiler supporting the C++20 facilities listed below.
+
+## macOS presets
+
+Install CMake 3.25 or newer, Ninja, the Xcode Command Line Tools, and Homebrew
+LLVM (`brew install cmake ninja llvm`). The macOS presets select Homebrew's
+compiler, matching libc++ headers/runtime, and the macOS SDK automatically:
+
+```sh
+cmake --preset macos-debug
+cmake --build --preset macos-debug --parallel 3
+ctest --preset macos-debug
+```
+
+Use `macos-release` for an optimized desktop build or `macos-headless` for a
+Debug build without SDL3 or OpenAL. A custom LLVM installation can be selected
+with `-DOPENT1_LLVM_ROOT=/path/to/llvm` in a fresh build directory. The toolchain
+prefers the current `llvm` formula and falls back to `llvm@20` if installed.
+After upgrading or switching compilers, run `cmake --fresh --preset <name>` to
+discard stale compiler paths and feature checks before rebuilding.
+
+## VS Code
+
+With CMake Tools, run **CMake: Select Configure Preset**, choose a preset for
+your platform, then run **CMake: Configure**. Configure presets are filtered by
+host operating system. All platforms have configure, build, and test presets:
+
+| Platform | Debug | Release | Headless |
+| --- | --- | --- | --- |
+| Windows (MSVC) | `x64-debug` | `x64-release` | `headless` |
+| macOS (Homebrew LLVM) | `macos-debug` | `macos-release` | `macos-headless` |
+| Linux (GCC 14) | `linux-debug` | `linux-release` | `linux-headless` |
+
+Each preset uses its own build directory, avoiding cached compiler selections
+from a different platform.
+
 ## Other toolchains
 
 On Linux or macOS, use an out-of-tree build with a compiler and standard
 library supporting C++20, including `std::format`, `std::jthread`, and
-`std::stop_token` (GCC 14 or newer, or LLVM 20 with libc++ 20). For a full desktop
+`std::stop_token` (GCC 14 or newer, or LLVM 20 or newer with matching libc++). For a full desktop
 build, install SDL's platform development dependencies first; CI's Linux
 installation step lists the packages used on Ubuntu 24.04. Configuration fetches
 SDL3 if an installed package is unavailable
@@ -55,15 +106,15 @@ cmake --build build/desktop --parallel 3
 ctest --test-dir build/desktop --output-on-failure --no-tests=error
 ```
 
-On macOS, install [Homebrew LLVM 20](https://formulae.brew.sh/formula/llvm@20)
+On macOS, install [Homebrew LLVM](https://formulae.brew.sh/formula/llvm)
 and select both its compiler and its C++ library before configuring a fresh
 build directory. The Apple C++ library in
 the macOS 15 CI image does not provide `std::jthread` or `std::stop_token`.
 Using only Homebrew's compiler with Apple's runtime is insufficient.
 
 ```sh
-brew install llvm@20
-llvm_prefix="$(brew --prefix llvm@20)"
+brew install llvm
+llvm_prefix="$(brew --prefix llvm)"
 export CC="$llvm_prefix/bin/clang"
 export CXX="$llvm_prefix/bin/clang++"
 export CXXFLAGS="-nostdinc++ -isystem $llvm_prefix/include/c++/v1"
@@ -174,6 +225,8 @@ $env:OPENT1_TEST_ASSETS = 'C:\Games\Tribes'
 ```
 
 The optional cases do not bundle game assets or run unless this variable is set.
+The `game` suite's installed-content integration checks use the same variable;
+they do not auto-discover nearby installations during the standard test run.
 
 When the selected installation includes `RPG/scripts.vol`, the same `fixpack`
 suite also hosts `rpgmap5`, checks the mission terrain, advances eight simulation

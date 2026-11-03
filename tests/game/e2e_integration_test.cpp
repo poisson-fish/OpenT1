@@ -68,6 +68,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -1188,11 +1189,13 @@ void verifyFullStackEndToEndIntegration() {
     // =========================================================================
     // 7. Live TRIBES / PCRPG Base Volume Mounting, Live .mis Loading & Full 3D Scene Rendering
     // =========================================================================
-    const auto discoveredAssets = FearGameApp::discoverAssetRoot();
-    if (!discoveredAssets.empty()) {
+    // Match the other acceptance cases: local installations are opt-in and
+    // must not change the standard suite's results through auto-discovery.
+    const auto* installedAssets = std::getenv("OPENT1_TEST_ASSETS");
+    if (installedAssets && *installedAssets) {
         FearGameApp::Config liveCfg{};
         liveCfg.writeRoot = tempRoot;
-        liveCfg.assetRoot = discoveredAssets;
+        liveCfg.assetRoot = installedAssets;
         liveCfg.mountDiscoveredAssets = true;
 
         FearGameApp liveApp(liveCfg);
@@ -1299,9 +1302,11 @@ void verifyFullStackEndToEndIntegration() {
 
         // Verify movement in an active match; the normal mission warmup now
         // correctly keeps control in the pregame observer camera.
-        constexpr std::array<std::string_view, 8> missionRuntimeArgs{{
+        const std::array<std::string_view, 10> missionRuntimeArgs{{
             "--smoke",
             "--verify-input",
+            "--assets",
+            installedAssets,
             "$Server::warmupTime",
             "0",
             "--mission",
@@ -1314,7 +1319,7 @@ void verifyFullStackEndToEndIntegration() {
 
     constexpr std::array<std::string_view, 5> smokeRuntimeArgs{{
         "--smoke",
-        "--mount-assets",
+        "--no-assets",
         "--spawn-demo",
         "--frames",
         "4",

@@ -35,6 +35,14 @@ Use `x64-release` for an optimized build. For a build without SDL3, audio, or
 dependency downloads, use the `headless` preset. See [building and testing](docs/development.md)
 for portable configuration, build options, and the test suite.
 
+On macOS, install CMake, Ninja, and Homebrew LLVM (`brew install cmake ninja llvm`),
+then use `macos-debug`, `macos-release`, or `macos-headless`. In VS Code, run
+**CMake: Select Configure Preset** and choose the corresponding macOS preset.
+These presets select the compiler and matching C++ library automatically.
+
+On Linux, install GCC 14, CMake, Ninja, and SDL's platform development dependencies,
+then use `linux-debug`, `linux-release`, or `linux-headless`.
+
 ## Run
 
 Gameplay requires an externally supplied Tribes installation.

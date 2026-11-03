@@ -31,6 +31,24 @@ fetchcontent_declare(
     INACTIVITY_TIMEOUT 30
 )
 fetchcontent_makeavailable(openal_soft)
+if(APPLE)
+    include(cmake/OpenALSoftCompat.cmake)
+    # Homebrew backends can add include roots containing a different fmt.
+    # Use bundled headers to match the fmt library OpenAL links against.
+    foreach(_target IN ITEMS OpenAL alsoft.common alsoft.core-modules)
+        if(TARGET ${_target})
+            target_include_directories(
+                ${_target} BEFORE PRIVATE "$<TARGET_PROPERTY:alsoft::fmt,INTERFACE_INCLUDE_DIRECTORIES>"
+            )
+        endif()
+    endforeach()
+    # OpenAL 1.25.2 predates Apple's nonblocking CoreAudio callback annotations.
+    # Keep the diagnostic as a warning, matching upstream's 681d049 fix:
+    # https://github.com/kcat/openal-soft/commit/681d049c06c65a346f8c77c9f4deecee64cda352
+    if(HAVE_WFUNCTION_EFFECTS)
+        target_compile_options(OpenAL PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-error=function-effects>)
+    endif()
+endif()
 add_library(
     opent1_audio STATIC src/audio/wave.cpp src/audio/openal_audio.cpp src/audio/audio_runtime.cpp
 )

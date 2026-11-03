@@ -9,6 +9,11 @@
     {
       "name": "x64-debug",
       "displayName": "OpenT1 x64-debug",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/x64-debug",
       "toolchainFile": "${sourceDir}/cmake/toolchains/msvc-x64.cmake",
@@ -21,6 +26,11 @@
     {
       "name": "x64-release",
       "displayName": "OpenT1 x64-release",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/x64-release",
       "toolchainFile": "${sourceDir}/cmake/toolchains/msvc-x64.cmake",
@@ -33,12 +43,104 @@
     {
       "name": "headless",
       "displayName": "OpenT1 headless",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/headless",
       "toolchainFile": "${sourceDir}/cmake/toolchains/msvc-x64.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "BUILD_TESTING": "ON",
+        "OPENT1_BUILD_PLATFORM": "OFF",
+        "OPENT1_BUILD_AUDIO": "OFF"
+      }
+    },
+    {
+      "name": "macos-base",
+      "hidden": true,
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/macos-llvm.cmake",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "FETCHCONTENT_QUIET": "OFF",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "macos-debug",
+      "displayName": "OpenT1 macOS Debug",
+      "inherits": "macos-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "macos-release",
+      "displayName": "OpenT1 macOS Release",
+      "inherits": "macos-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "macos-headless",
+      "displayName": "OpenT1 macOS headless",
+      "inherits": "macos-debug",
+      "cacheVariables": {
+        "FETCHCONTENT_QUIET": null,
+        "OPENT1_BUILD_PLATFORM": "OFF",
+        "OPENT1_BUILD_AUDIO": "OFF"
+      }
+    },
+    {
+      "name": "linux-base",
+      "hidden": true,
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc-14",
+        "CMAKE_CXX_COMPILER": "g++-14",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "FETCHCONTENT_QUIET": "OFF",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "linux-debug",
+      "displayName": "OpenT1 Linux Debug",
+      "inherits": "linux-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "linux-release",
+      "displayName": "OpenT1 Linux Release",
+      "inherits": "linux-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "linux-headless",
+      "displayName": "OpenT1 Linux headless",
+      "inherits": "linux-debug",
+      "cacheVariables": {
+        "FETCHCONTENT_QUIET": null,
         "OPENT1_BUILD_PLATFORM": "OFF",
         "OPENT1_BUILD_AUDIO": "OFF"
       }
@@ -56,6 +158,30 @@
     {
       "name": "headless",
       "configurePreset": "headless"
+    },
+    {
+      "name": "macos-debug",
+      "configurePreset": "macos-debug"
+    },
+    {
+      "name": "macos-release",
+      "configurePreset": "macos-release"
+    },
+    {
+      "name": "macos-headless",
+      "configurePreset": "macos-headless"
+    },
+    {
+      "name": "linux-debug",
+      "configurePreset": "linux-debug"
+    },
+    {
+      "name": "linux-release",
+      "configurePreset": "linux-release"
+    },
+    {
+      "name": "linux-headless",
+      "configurePreset": "linux-headless"
     }
   ],
   "testPresets": [
@@ -88,6 +214,46 @@
       "execution": {
         "noTestsAction": "error"
       }
+    },
+    {
+      "name": "macos-debug",
+      "configurePreset": "macos-debug",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "macos-release",
+      "configurePreset": "macos-release",
+      "inherits": "macos-debug"
+    },
+    {
+      "name": "macos-headless",
+      "configurePreset": "macos-headless",
+      "inherits": "macos-debug"
+    },
+    {
+      "name": "linux-debug",
+      "configurePreset": "linux-debug",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "linux-release",
+      "configurePreset": "linux-release",
+      "inherits": "linux-debug"
+    },
+    {
+      "name": "linux-headless",
+      "configurePreset": "linux-headless",
+      "inherits": "linux-debug"
     }
   ]
 }

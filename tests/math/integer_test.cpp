@@ -10,6 +10,8 @@
 // This case intentionally changes rounding between ordinary FP expressions.
 // Volatile operands alone do not declare floating-environment access to MSVC.
 #pragma fenv_access(on)
+#elif defined(__clang__)
+#pragma STDC FENV_ACCESS ON
 #endif
 
 namespace {

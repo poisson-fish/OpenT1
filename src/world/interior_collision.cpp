@@ -2,6 +2,7 @@
 #include <ranges>
 #include "collision_geometry.hpp"
 #include <functional>
+#include <memory>
 #include <numeric>
 #include <memory_resource>
 

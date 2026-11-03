@@ -1,6 +1,7 @@
 // Native interior/terrain surface and receiver comparison viewer.
 #define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL.h>
+#include <iterator>
 #include <SDL3/SDL_main.h>
 #include <opent1/world/world_scene.hpp>
 #include <opent1/gfx/sdl_gpu_surface.hpp>
@@ -42,45 +43,47 @@ class WorldDemo : public SdlApplication {
         bool baked = true, openGLLights = false, nativeGeometry = false, nativeVisibility = false,
              nativeTraversal = false, nativeCache = false;
         GpuSurfaceConfig gpu;
-        for (std::size_t i = 1; i < args.size(); ++i) {
-            if (args[i] == "--assets" && i + 1 < args.size()) {
-                directory = args[++i];
-            } else if (args[i] == "--interior" && i + 1 < args.size()) {
-                interior = args[++i];
-            } else if (args[i] == "--terrain" && i + 1 < args.size()) {
-                terrain = args[++i];
-            } else if (args[i] == "--driver" && i + 1 < args.size()) {
-                gpu.driver = args[++i];
-            } else if (args[i] == "--snapshot" && i + 1 < args.size()) {
-                snapshot_ = args[++i];
-            } else if (args[i] == "--unlit") {
+        for (auto argumentIt = std::ranges::next(args.begin(), 1, args.end());
+             argumentIt != args.end();
+             ++argumentIt) {
+            if (*argumentIt == "--assets" && std::next(argumentIt) != args.end()) {
+                directory = *++argumentIt;
+            } else if (*argumentIt == "--interior" && std::next(argumentIt) != args.end()) {
+                interior = *++argumentIt;
+            } else if (*argumentIt == "--terrain" && std::next(argumentIt) != args.end()) {
+                terrain = *++argumentIt;
+            } else if (*argumentIt == "--driver" && std::next(argumentIt) != args.end()) {
+                gpu.driver = *++argumentIt;
+            } else if (*argumentIt == "--snapshot" && std::next(argumentIt) != args.end()) {
+                snapshot_ = *++argumentIt;
+            } else if (*argumentIt == "--unlit") {
                 baked = false;
-            } else if (args[i] == "--opengl-lightmaps") {
+            } else if (*argumentIt == "--opengl-lightmaps") {
                 openGLLights = true;
-            } else if (args[i] == "--native-geometry") {
+            } else if (*argumentIt == "--native-geometry") {
                 nativeGeometry = true;
-            } else if (args[i] == "--native-visibility") {
+            } else if (*argumentIt == "--native-visibility") {
                 nativeVisibility = true;
                 nativeGeometry = true;
-            } else if (args[i] == "--native-traversal") {
+            } else if (*argumentIt == "--native-traversal") {
                 nativeTraversal = true;
                 nativeVisibility = true;
                 nativeGeometry = true;
-            } else if (args[i] == "--native-cache") {
+            } else if (*argumentIt == "--native-cache") {
                 nativeCache = true;
-            } else if (args[i] == "--native-shadow") {
+            } else if (*argumentIt == "--native-shadow") {
                 nativeShadow_ = true;
-            } else if (args[i] == "--no-shadow") {
+            } else if (*argumentIt == "--no-shadow") {
                 shadows_ = false;
-            } else if (args[i] == "--scene-light") {
+            } else if (*argumentIt == "--scene-light") {
                 sceneLights_ = true;
-            } else if (args[i] == "--automatic-detail") {
+            } else if (*argumentIt == "--automatic-detail") {
                 automaticDetail_ = true;
-            } else if (args[i] == "--containers") {
+            } else if (*argumentIt == "--containers") {
                 containers_ = true;
-            } else if (args[i] == "--software") {
+            } else if (*argumentIt == "--software") {
                 software_ = true;
-            } else if (args[i] == "--smoke") {
+            } else if (*argumentIt == "--smoke") {
                 smoke_ = true;
             } else {
                 throw std::runtime_error(
@@ -272,8 +275,8 @@ class WorldDemo : public SdlApplication {
                 frame->shadowGeometry(window, {0, 0, -1}, radius * 8, .1f, nativeShadow_);
             require(bool(shadowGeometry), "Receiver collection failed");
             shadowBitmap = {64, std::vector<UInt8>(64 * 64), true};
-            for (UInt32 y = 0; y < 64; ++y) {
-                for (UInt32 x = 0; x < 64; ++x) {
+            for (auto y : std::views::iota(UInt32{0}, UInt32{64})) {
+                for (auto x : std::views::iota(UInt32{0}, UInt32{64})) {
                     if (std::hypot(Flt32(x) - 31.5f, Flt32(y) - 31.5f) < 28) {
                         shadowBitmap.pixels[y * 64 + x] = 160;
                     }

@@ -1,4 +1,5 @@
 #include <opent1/math/math_Fix16_and_int.hpp>
+#include <ranges>
 #include <cfenv>
 #if defined(_M_IX86) || defined(_M_X64) || defined(__SSE__)
 #include <xmmintrin.h>
@@ -44,7 +45,7 @@ void m_fpuSetControlState(Int16 state) noexcept {
     unsigned mask{};
     constexpr unsigned exceptions[] = {
         _EM_INVALID, _EM_DENORMAL, _EM_ZERODIVIDE, _EM_OVERFLOW, _EM_UNDERFLOW, _EM_INEXACT};
-    for (unsigned i = 0; i < 6; ++i) {
+    for (auto i : std::views::iota(unsigned{0}, unsigned{6})) {
         if (controlState & (1U << i)) {
             mask |= exceptions[i];
         }

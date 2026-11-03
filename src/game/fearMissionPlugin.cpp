@@ -1,4 +1,5 @@
 #include <opent1/game/fear_mission_editor.hpp>
+#include <ranges>
 
 #include <charconv>
 #include <format>
@@ -130,7 +131,10 @@ FearMissionPlugin::handleCommand(Console& console, Int32 id, std::span<const std
                 return "False";
             }
             std::string name;
-            for (UInt32 index = 1; index != 0; ++index) {
+            for (auto index :
+                 std::views::iota(UInt32{1}) | std::views::take_while([&](UInt32 index) {
+                     return index != 0;
+                 })) {
                 name = std::format("{}{}", argv[1], index);
                 if (!manager_->findObject(name) && !me_->getAddGroup()->findObject(name)) {
                     break;

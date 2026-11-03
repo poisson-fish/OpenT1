@@ -1,4 +1,5 @@
 #include "opent1/game/server_irc_controls.hpp"
+#include <ranges>
 
 namespace opent1::game {
 
@@ -23,7 +24,7 @@ void FGRecordingList::clearRecordings() {
 }
 
 void FGRecordingList::setSelectedRecording(std::string_view name) {
-    for (std::size_t i = 0; i < recordings_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, recordings_.size())) {
         if (recordings_[i].name == name) {
             selected = {0, static_cast<Int32>(i)};
             return;
@@ -52,7 +53,9 @@ void FGRecordingList::selectRandomRecording(UInt32 seed) {
         return;
     }
     std::vector<std::size_t> unplayed{};
-    for (std::size_t i = 0; i < recordings_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < recordings_.size();
+                  })) {
         if (!recordings_[i].alreadyPlayed) {
             unplayed.push_back(i);
         }

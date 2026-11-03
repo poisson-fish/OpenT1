@@ -1,4 +1,5 @@
 #include <opent1/game/status_combat_huds.hpp>
+#include <ranges>
 
 #include <algorithm>
 #include <cmath>
@@ -249,7 +250,7 @@ CompassHud::State CompassHud::computeState(
     const Flt32 cosYaw = std::cos(playerYaw);
     const Flt32 sinYaw = std::sin(playerYaw);
     const auto& srcPts = lowRes ? kLoResCompassPoints : kHiResCompassPoints;
-    for (std::size_t i = 0; i < srcPts.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, srcPts.size())) {
         st.compassVertices[i] =
             rotateVertex({static_cast<Flt32>(srcPts[i].x), static_cast<Flt32>(srcPts[i].y)},
                          cosYaw,
@@ -275,7 +276,7 @@ CompassHud::State CompassHud::computeState(
     const Flt32 cosWp = std::cos(st.wayPointAngle);
     const Flt32 sinWp = std::sin(st.wayPointAngle);
     const Flt32 scale = lowRes ? 0.6f : 1.0f;
-    for (std::size_t i = 0; i < kWayPointTriangle.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, kWayPointTriangle.size())) {
         st.arrowVertices[i] = rotateVertex(
             {kWayPointTriangle[i].x * scale, kWayPointTriangle[i].y * scale}, cosWp, sinWp, center);
     }
@@ -308,7 +309,9 @@ bool CompassHud::draw(gfx::SoftwareSurface& s, Point2I offset, RectI clip) const
     while (*points > 0) {
         const auto count = static_cast<int>(*points++);
         Point2I previous;
-        for (int i = 0; i < count; ++i) {
+        for (auto i : std::views::iota(0) | std::views::take_while([&](int i) {
+                          return i < count;
+                      })) {
             const auto x = *points++, y = *points++;
             const Point2I point{offset.x + Int32(center + x * co - y * si),
                                 offset.y + Int32(center + x * si + y * co)};
@@ -323,7 +326,7 @@ bool CompassHud::draw(gfx::SoftwareSurface& s, Point2I offset, RectI clip) const
            middle + Point2I{0, state_.lowRes ? -15 : -29},
            ShellPaletteColor::RED);
     if (state_.wayPointActive) {
-        for (std::size_t i = 0; i < 3; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
             s.line(offset + state_.arrowVertices[i],
                    offset + state_.arrowVertices[(i + 1) % 3],
                    ShellPaletteColor::BLUE_HILITE);

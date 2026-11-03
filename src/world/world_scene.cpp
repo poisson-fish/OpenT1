@@ -1,15 +1,38 @@
 #include <opent1/gfx/render_limits.hpp>
+#include <ranges>
 #include <opent1/world/world_scene.hpp>
 #include <opent1/world/world_mission.hpp>
 #include <opent1/world/scene_objects.hpp>
+#include <opent1/core/reusable_scratch.hpp>
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
 #include <unordered_map>
 #include <cstdio>
 #include <cstdlib>
+#include <memory_resource>
 
 namespace opent1::world {
+void trimWorldRenderCaches(sim::SimWorld& world) {
+    auto& manager = world.manager();
+    manager.dispatch([&] {
+        auto* set = dynamic_cast<sim::SimSet*>(manager.findObject(sim::RenderSetId));
+        if (!set)
+            return;
+        std::vector<sim::SimAddress> providers;
+        for (auto* object : set->objects())
+            if (object)
+                providers.push_back(object->address());
+        for (const auto& address : providers) {
+            if (auto* object = address.resolve(manager); object && !object->isRemoved()) {
+                WorldSurfaceQuery query;
+                query.trimCaches = true;
+                object->processQuery(query);
+            }
+        }
+    });
+}
+
 namespace {
 bool finite(Point3F p) {
     return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z) &&
@@ -20,12 +43,14 @@ bool rigid(const TMat3F& transform, bool allowReflection = false) {
     if (!finite(transform.p)) {
         return false;
     }
-    for (std::size_t i = 0; i < 3; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
         const Point3F row{transform.m[i][0], transform.m[i][1], transform.m[i][2]};
         if (!finite(row) || std::abs(m_dot(row, row) - 1) > .0001f) {
             return false;
         }
-        for (std::size_t j = 0; j < i; ++j) {
+        for (auto j : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t j) {
+                          return j < i;
+                      })) {
             const Point3F other{transform.m[j][0], transform.m[j][1], transform.m[j][2]};
             if (std::abs(m_dot(row, other)) > .0001f) {
                 return false;
@@ -68,6 +93,24 @@ struct ContainerSelection {
     bool outside{};
 };
 
+struct ContainerScratch {
+    std::vector<sim::SimContainer*> objects;
+    std::vector<InteriorContainerNode> nodes;
+    std::vector<InteriorLinkInstance> interiors;
+    std::vector<bool> visible, linked;
+    std::array<std::byte, 128 * 1024> storage;
+    std::pmr::monotonic_buffer_resource memory{storage.data(), storage.size()};
+
+    void clear() {
+        detail::clearScratch(objects);
+        detail::clearScratch(nodes);
+        detail::clearScratch(interiors);
+        detail::clearScratch(visible);
+        detail::clearScratch(linked);
+        memory.release();
+    }
+};
+
 std::optional<ContainerSelection> selectContainers(sim::SimManager& manager,
                                                    std::span<const sim::SimAddress> sources,
                                                    const sim::EnvironmentCamera& viewCamera,
@@ -79,12 +122,19 @@ std::optional<ContainerSelection> selectContainers(sim::SimManager& manager,
     if (!root || root->isRemoved() || !root->isOpen()) {
         return {};
     }
-    std::vector<sim::SimContainer*> objects{root};
-    std::vector<InteriorContainerNode> nodes{
-        {root->getBoundingBox(), -1, -1, root->getType(), root->getContainerMask(), true}};
-    std::unordered_map<const sim::SimObject*, UInt32> indices{{root, 0}};
-    std::vector<InteriorLinkInstance> interiors;
-    for (std::size_t i = 0; i < objects.size(); ++i) {
+    detail::ScratchLease<ContainerScratch> workspace;
+    auto& scratch = workspace.get();
+    auto& objects = scratch.objects;
+    auto& nodes = scratch.nodes;
+    auto& interiors = scratch.interiors;
+    objects.push_back(root);
+    nodes.push_back(
+        {root->getBoundingBox(), -1, -1, root->getType(), root->getContainerMask(), true});
+    std::pmr::unordered_map<const sim::SimObject*, UInt32> indices{&scratch.memory};
+    indices.emplace(root, 0);
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < objects.size();
+                  })) {
         auto* parent = objects[i];
         if (!parent->isOpen()) {
             continue;
@@ -145,7 +195,10 @@ std::optional<ContainerSelection> selectContainers(sim::SimManager& manager,
         }
         return {};
     }
-    std::vector<bool> visible(nodes.size()), linked(nodes.size());
+    auto& visible = scratch.visible;
+    auto& linked = scratch.linked;
+    visible.resize(nodes.size());
+    linked.resize(nodes.size());
     for (auto index : view->containers) {
         visible[index] = true;
     }
@@ -153,6 +206,8 @@ std::optional<ContainerSelection> selectContainers(sim::SimManager& manager,
         linked[index] = true;
     }
     ContainerSelection result;
+    result.visible.reserve(sources.size());
+    result.linked.reserve(sources.size());
     result.outside = view->outsideVisible;
     for (const auto& address : sources) {
         const auto* object = address.resolve(manager);
@@ -192,7 +247,9 @@ scopedSceneObjects(sim::SimManager& manager,
         return {};
     }
     std::vector<sim::SimAddress> result;
-    for (std::size_t i = 0; i < candidates.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < candidates.size();
+                  })) {
         if (selected->visible[i]) {
             result.push_back(candidates[i]);
         }
@@ -208,6 +265,8 @@ std::optional<TsLighting> tsSceneLighting(const sim::SimSceneLighting& scene,
     TsLighting result;
     result.ambient = rgb(scene.ambient);
     result.shapeToWorld = shapeToWorld;
+    result.lights.reserve(scene.lights.size());
+    result.worldSources.reserve(scene.lights.size());
     for (const auto& source : scene.lights) {
         // Keep the provider contract valid even for fields unused by its type.
         if (!finite(source.position) || !finite(source.direction) || !finite(source.attenuation) ||
@@ -342,10 +401,10 @@ bool SimTsShape::setShapeName(std::string_view name) {
 
 bool SimTsShape::setResources(TsShapeResources resources) {
     if (advancing_ || !resources.shape ||
-        resources.materials.textures.size() != resources.materials.list.materials.size()) {
+        resources.materials.textures().size() != resources.materials.list().materials.size()) {
         return false;
     }
-    if (std::ranges::any_of(resources.materials.list.materials, [](const auto& material) {
+    if (std::ranges::any_of(resources.materials.list().materials, [](const auto& material) {
             return !material.useDefaultProperties &&
                    (!std::isfinite(material.friction) || !std::isfinite(material.elasticity) ||
                     material.friction < 0 || material.elasticity < 0 || material.friction > 1e12f ||
@@ -432,13 +491,13 @@ bool SimTsShape::processQuery(sim::SimQuery& query) {
             if (!pose) {
                 throw std::invalid_argument("invalid TS collision pose");
             }
-            auto snapshot = TsShapeCollision::prepare(*pose, collisionDetail_);
+            auto snapshot = TsShapeCollision::shared(*pose, collisionDetail_);
             if (!snapshot) {
                 throw std::invalid_argument("invalid TS collision detail");
             }
-            geometry = std::make_shared<const TsShapeCollision>(std::move(*snapshot));
+            geometry = std::move(snapshot);
         }
-        const auto& materials = resources_.materials.list;
+        const auto& materials = resources_.materials.list();
         if (materials.materialsPerDetail < 0 ||
             std::size_t(materials.materialsPerDetail) > materials.materials.size()) {
             throw std::invalid_argument("invalid TS collision material list");
@@ -500,8 +559,10 @@ WorldSceneFrame::captureContainers(sim::SimWorld& world,
                                    const sim::EnvironmentCamera& camera,
                                    const sim::VolumetricView& volumeView,
                                    bool lighting,
-                                   std::optional<TerrainTextureTiming> terrainTiming) {
-    return captureImpl(world, camera, volumeView, lighting, std::nullopt, true, terrainTiming);
+                                   std::optional<TerrainTextureTiming> terrainTiming,
+                                   bool retainedHardware) {
+    return captureImpl(
+        world, camera, volumeView, lighting, std::nullopt, true, terrainTiming, retainedHardware);
 }
 
 std::optional<WorldSceneFrame>
@@ -511,7 +572,8 @@ WorldSceneFrame::captureImpl(sim::SimWorld& world,
                              bool lighting,
                              std::optional<std::span<const InteriorSceneRoot>> interiorRoots,
                              bool containers,
-                             std::optional<TerrainTextureTiming> terrainTiming) {
+                             std::optional<TerrainTextureTiming> terrainTiming,
+                             bool retainedHardware) {
     if (camera.viewport.left != 0 || camera.viewport.top != 0 || camera.viewport.width() > 16384 ||
         camera.viewport.height() > 16384 || !rigid(camera.worldToCamera) ||
         (terrainTiming && *terrainTiming != TerrainTextureTiming::RetainedLru &&
@@ -540,10 +602,27 @@ WorldSceneFrame::captureImpl(sim::SimWorld& world,
     WorldSceneFrame frame;
     frame.camera_ = camera;
     frame.lightingEnabled_ = lighting;
+    frame.retainedHardware_ = retainedHardware && camera.perspective;
     auto& manager = world.manager();
     bool success = false;
     const char* stage = "resource service";
     sim::SimObjectId providerId{};
+
+    struct CaptureScratch {
+        std::vector<sim::SimAddress> sources, volumeSources;
+        std::vector<bool> selected, linked;
+        std::vector<std::pair<sim::SimAddress, WorldSurfaceQuery::LinkDetail>> linkDetails;
+
+        void clear() {
+            detail::clearScratch(sources);
+            detail::clearScratch(volumeSources);
+            detail::clearScratch(selected);
+            detail::clearScratch(linked);
+            detail::clearScratch(linkDetails);
+        }
+    };
+
+    detail::ScratchLease<CaptureScratch> workspace;
     try {
         manager.dispatch([&] {
             auto* service = sim::SimResource::find(manager);
@@ -551,29 +630,34 @@ WorldSceneFrame::captureImpl(sim::SimWorld& world,
                 return;
             }
             const auto resources = service->shared();
-            sim::SimSceneLighting sceneLighting;
+            sim::SimSceneLighting capturedLighting;
             if (lighting) {
                 stage = "scene lighting";
                 auto* set = dynamic_cast<sim::SimLightSet*>(manager.findObject(sim::LightSetId));
                 auto cameraToWorld = camera.worldToCamera;
                 cameraToWorld.inverse();
                 if (set) {
-                    sceneLighting = set->getSceneLighting(cameraToWorld.p, set->ignoreDistance());
+                    capturedLighting =
+                        set->getSceneLighting(cameraToWorld.p, set->ignoreDistance());
                 }
-                if (!tsSceneLighting(sceneLighting, {})) {
+                if (!tsSceneLighting(capturedLighting, {})) {
                     return;
                 }
-                frame.lighting_ = sceneLighting;
+                frame.lighting_ =
+                    std::make_shared<const sim::SimSceneLighting>(std::move(capturedLighting));
             }
+            const auto& sceneLighting = frame.lighting();
             auto* set = dynamic_cast<sim::SimSet*>(manager.findObject(sim::RenderSetId));
-            std::vector<sim::SimAddress> sources;
+            auto& sources = workspace.get().sources;
             if (set) {
                 for (const auto* object : set->objects()) {
                     sources.push_back(object->address());
                 }
             }
-            std::vector<bool> selected(sources.size(), true);
-            std::vector<bool> linked(sources.size(), interiorRoots.has_value());
+            auto& selected = workspace.get().selected;
+            auto& linked = workspace.get().linked;
+            selected.assign(sources.size(), true);
+            linked.assign(sources.size(), interiorRoots.has_value());
             if (containers) {
                 stage = "container traversal";
                 auto cameraToWorld = camera.worldToCamera;
@@ -588,7 +672,10 @@ WorldSceneFrame::captureImpl(sim::SimWorld& world,
             } else if (interiorRoots) {
                 std::vector<InteriorLinkInstance> interiors;
                 std::vector<std::size_t> sourceIndices;
-                for (std::size_t i = 0; i < sources.size(); ++i) {
+                for (auto i :
+                     std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                         return i < sources.size();
+                     })) {
                     auto* provider = dynamic_cast<SimInteriorSurface*>(sources[i].resolve(manager));
                     if (!provider || provider->isRemoved()) {
                         continue;
@@ -634,8 +721,11 @@ WorldSceneFrame::captureImpl(sim::SimWorld& world,
                 frame.outsideVisible_ = visible->outsideVisible;
             }
             std::size_t polygons{};
-            std::vector<std::pair<sim::SimAddress, WorldSurfaceQuery::LinkDetail>> linkDetails;
-            for (std::size_t sourceIndex = 0; sourceIndex < sources.size(); ++sourceIndex) {
+            auto& linkDetails = workspace.get().linkDetails;
+            for (auto sourceIndex : std::views::iota(std::size_t{0}) |
+                                        std::views::take_while([&](std::size_t sourceIndex) {
+                                            return sourceIndex < sources.size();
+                                        })) {
                 if (!selected[sourceIndex]) {
                     continue;
                 }
@@ -662,9 +752,11 @@ WorldSceneFrame::captureImpl(sim::SimWorld& world,
                     surface.camera = camera;
                     surface.linkRendering = linked[sourceIndex];
                     surface.terrainTiming = terrainTiming;
+                    surface.retainedTerrain =
+                        frame.retainedHardware_ && !std::getenv("OPENT1_PROJECTED_TERRAIN");
                     surface.deferLinkDetail_ = true;
                     if (lighting) {
-                        surface.lighting = sceneLighting;
+                        surface.lighting = frame.lighting_;
                     }
                     const bool provided = object->processQuery(surface);
                     stage = "surface query";
@@ -688,7 +780,10 @@ WorldSceneFrame::captureImpl(sim::SimWorld& world,
                     view.perspective = camera.perspective;
                     view.nearDistance = camera.nearDistance;
                     view.farDistance = camera.farDistance;
-                    auto prepared = image.mesh->prepare(view);
+                    const bool retained =
+                        frame.retainedHardware_ && image.mesh->retainedHardwareCompatible();
+                    auto prepared =
+                        retained ? std::optional(TsStaticShapeFrame{}) : image.mesh->prepare(view);
                     stage = "surface preparation";
                     if (!prepared ||
                         prepared->polygonCount() > gfx::renderLimits().polygons - polygons) {
@@ -734,7 +829,11 @@ WorldSceneFrame::captureImpl(sim::SimWorld& world,
                             return;
                         }
                     }
-                    auto prepared = TsStaticShapeFrame::prepare(image.resources, view, image.pose);
+                    auto prepared = TsStaticShapeFrame::prepare(
+                        image.resources,
+                        view,
+                        image.pose,
+                        frame.retainedHardware_ && !std::getenv("OPENT1_PROJECTED_SHAPES"));
                     stage = "shape preparation";
                     if (!prepared ||
                         prepared->polygonCount() > gfx::renderLimits().polygons - polygons) {
@@ -745,9 +844,12 @@ WorldSceneFrame::captureImpl(sim::SimWorld& world,
                     frame.shapeInputs_.push_back(std::move(image));
                 }
             }
-            std::vector<sim::SimAddress> volumeSources;
+            auto& volumeSources = workspace.get().volumeSources;
             if (containers) {
-                for (std::size_t i = 0; i < sources.size(); ++i) {
+                for (auto i :
+                     std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                         return i < sources.size();
+                     })) {
                     if (selected[i]) {
                         volumeSources.push_back(sources[i]);
                     }
@@ -798,17 +900,36 @@ std::optional<gfx::HardwareBatch>
 WorldSceneFrame::hardware(const gfx::Palette& palette,
                           std::span<const sim::EnvironmentShadow> shadows,
                           Flt32 paletteGamma) const {
-    std::vector<gfx::HardwarePolygon> polygons;
-    for (const auto& surface : surfaceFrames_) {
-        auto inputs = surface.hardwarePolygons(&palette, paletteGamma);
-        if (!inputs) {
+    struct HardwareScratch {
+        std::vector<gfx::HardwarePolygon> polygons;
+
+        void clear() {
+            detail::clearScratch(polygons);
+        }
+    };
+
+    detail::ScratchLease<HardwareScratch> workspace;
+    auto& polygons = workspace.get().polygons;
+    for (auto i : std::views::iota(std::size_t{0}, surfaceFrames_.size())) {
+        const auto& image = surfaces_[i];
+        TsStaticView view;
+        m_mul(image.placement, camera_.worldToCamera, view.shapeToCamera);
+        view.width = Int32(camera_.viewport.width());
+        view.height = Int32(camera_.viewport.height());
+        view.focal = camera_.focal;
+        view.center = camera_.center;
+        view.nearDistance = camera_.nearDistance;
+        view.farDistance = camera_.farDistance;
+        if (retainedHardware_ && image.mesh->retainedHardwareCompatible()) {
+            if (!image.mesh->appendHardwareInterior(polygons, view, palette, paletteGamma))
+                return {};
+        } else if (!surfaceFrames_[i].appendHardwarePolygons(polygons, &palette, paletteGamma)) {
             return {};
         }
-        polygons.insert(polygons.end(), inputs->begin(), inputs->end());
     }
-    for (std::size_t i = 0; i < shapes_.size(); ++i) {
-        auto inputs = shapes_[i].hardwarePolygons(&palette, paletteGamma);
-        if (!inputs) {
+    for (auto i : std::views::iota(std::size_t{0}, shapes_.size())) {
+        const auto first = polygons.size();
+        if (!shapes_[i].appendHardwarePolygons(polygons, &palette, paletteGamma)) {
             return {};
         }
         const auto& position = shapeInputs_[i].shapeToWorld.p;
@@ -817,10 +938,9 @@ WorldSceneFrame::hardware(const gfx::Palette& palette,
                               position.y * transform.m[1][1] + position.z * transform.m[2][1];
         const auto sortValue =
             distance <= camera_.nearDistance ? .99f : camera_.nearDistance / distance;
-        for (auto& input : *inputs) {
+        for (auto& input : std::span(polygons).subspan(first)) {
             input.imageSortValue = sortValue;
         }
-        polygons.insert(polygons.end(), inputs->begin(), inputs->end());
     }
     const auto materials = materials_.frames();
     return sim::prepareHardwareEnvironment(
@@ -839,8 +959,28 @@ bool WorldSceneFrame::draw(gfx::SoftwareSurface& surface,
         return false;
     }
     std::vector<gfx::SortedPolygon> polygons;
-    for (const auto& world : surfaceFrames_) {
-        auto inputs = world.softwarePolygons(surface.palette(), cache);
+    // Lazy software projections must outlive the borrowed polygon spans submitted below.
+    std::vector<std::optional<TsStaticShapeFrame>> softwareFrames(surfaceFrames_.size());
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < surfaceFrames_.size();
+                  })) {
+        auto& software = softwareFrames[i];
+        if (retainedHardware_ && surfaces_[i].mesh->retainedHardwareCompatible()) {
+            TsStaticView view;
+            m_mul(surfaces_[i].placement, camera_.worldToCamera, view.shapeToCamera);
+            view.width = Int32(camera_.viewport.width());
+            view.height = Int32(camera_.viewport.height());
+            view.focal = camera_.focal;
+            view.center = camera_.center;
+            view.perspective = camera_.perspective;
+            view.nearDistance = camera_.nearDistance;
+            view.farDistance = camera_.farDistance;
+            software = surfaces_[i].mesh->prepare(view);
+            if (!software)
+                return false;
+        }
+        auto inputs =
+            (software ? *software : surfaceFrames_[i]).softwarePolygons(surface.palette(), cache);
         if (!inputs) {
             return false;
         }
@@ -868,6 +1008,7 @@ WorldSceneFrame::reframed(const sim::EnvironmentCamera& camera) const {
         return {};
     }
     WorldSceneFrame result = *this;
+    result.retainedHardware_ = false;
     result.camera_ = camera;
     result.shapes_.clear();
     result.surfaceFrames_.clear();
@@ -903,7 +1044,7 @@ WorldSceneFrame::reframed(const sim::EnvironmentCamera& camera) const {
             view.nearDistance = .01f;
         }
         if (lightingEnabled_) {
-            view.lighting = imageLighting(lighting_, image);
+            view.lighting = imageLighting(lighting(), image);
             if (!view.lighting) {
                 return {};
             }
@@ -994,8 +1135,8 @@ std::optional<std::vector<WorldShadow>> WorldSceneFrame::shadows(Point3F directi
             }
             std::vector<UInt8> pixels;
             pixels.reserve(66 * 66);
-            for (Int32 y = 0; y < 66; ++y) {
-                for (Int32 x = 0; x < 66; ++x) {
+            for (auto y : std::views::iota(Int32{0}, Int32{66})) {
+                for (auto x : std::views::iota(Int32{0}, Int32{66})) {
                     pixels.push_back(std::to_integer<UInt8>(mask->row(y)[x]));
                 }
             }

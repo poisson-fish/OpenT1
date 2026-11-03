@@ -421,6 +421,10 @@ std::vector<std::string> TerrainGridFile::dependencies(std::string_view name) co
 bool registerTerrainLoaders(ResourceManager& manager) {
     const auto grid = manager.registerLoader<TerrainGridFile>(".dtf", TerrainGridFile::load);
     const auto block = manager.registerLoader<TerrainGridBlock>(".dtb", TerrainGridBlock::load);
+    if (grid)
+        manager.setSourceOnlyLoader(".dtf");
+    if (block)
+        manager.setSourceOnlyLoader(".dtb");
     return grid && block;
 }
 
@@ -461,7 +465,7 @@ std::optional<TerrainGridResources> TerrainGridResources::load(ResourceManager& 
             block->heights.size() > 4'194'304 - total ||
             (!result.grid->materialList.empty() &&
              !std::ranges::all_of(block->materials, [&](auto m) {
-                 return m.hole() || Int32(m.index) < result.materials.list.materialsPerDetail;
+                 return m.hole() || Int32(m.index) < result.materials.list().materialsPerDetail;
              }))) {
             return {};
         }

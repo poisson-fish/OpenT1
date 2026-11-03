@@ -1,4 +1,5 @@
 #include <opent1/game/hud_controls.hpp>
+#include <ranges>
 
 #include <algorithm>
 #include <cmath>
@@ -49,8 +50,8 @@ bool FGArrayCtrl::clickHeader(Point2I localPt, bool rightClick) {
         return false;
     }
     Int32 curX = 0;
-    for (std::size_t pos = 0; pos < columnInfo_.size(); ++pos) {
-        for (std::size_t i = 0; i < columnInfo_.size(); ++i) {
+    for (auto pos : std::views::iota(std::size_t{0}, columnInfo_.size())) {
+        for (auto i : std::views::iota(std::size_t{0}, columnInfo_.size())) {
             const auto& col = columnInfo_[i];
             if (!col.active || col.position != static_cast<Int32>(pos)) {
                 continue;
@@ -89,8 +90,8 @@ bool FGArrayCtrl::beginResizeColumn(Point2I localPt) {
         return false;
     }
     Int32 curX = 0;
-    for (std::size_t pos = 0; pos < columnInfo_.size(); ++pos) {
-        for (std::size_t i = 0; i < columnInfo_.size(); ++i) {
+    for (auto pos : std::views::iota(std::size_t{0}, columnInfo_.size())) {
+        for (auto i : std::views::iota(std::size_t{0}, columnInfo_.size())) {
             const auto& col = columnInfo_[i];
             if (!col.active || col.position != static_cast<Int32>(pos)) {
                 continue;

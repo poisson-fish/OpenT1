@@ -1,4 +1,5 @@
 #include <opent1/world/input_commands.hpp>
+#include <iterator>
 #include <charconv>
 #include <cmath>
 
@@ -119,19 +120,19 @@ std::optional<sim::SimInputEvent> parseInputArguments(std::span<const std::strin
     if (!event.deviceType) {
         return {};
     }
-    std::size_t index = 1;
-    const auto action = lower(args[index]);
+    auto input = std::next(args.begin());
+    const auto action = lower(*input);
     event.action = action == "make"    ? sim::InputMake
                    : action == "break" ? sim::InputBreak
                                        : sim::InputMove;
     if (event.action != sim::InputMove) {
-        ++index;
+        ++input;
     }
-    if (index == args.size()) {
+    if (input == args.end()) {
         return {};
     }
-    for (; index < args.size(); ++index) {
-        const auto key = lower(args[index]);
+    for (; input != args.end(); ++input) {
+        const auto key = lower(*input);
         UInt8 modifier{};
         if (key == "r_alt") {
             modifier = sim::InputRAlt;
@@ -149,7 +150,7 @@ std::optional<sim::SimInputEvent> parseInputArguments(std::span<const std::strin
         }
         event.modifier |= modifier;
     }
-    if (index == args.size()) {
+    if (input == args.end()) {
         if (event.deviceType == sim::InputKeyboard && event.action != sim::InputMove &&
             (event.modifier == sim::InputShift || event.modifier == sim::InputCtrl ||
              event.modifier == sim::InputAlt)) {
@@ -158,10 +159,10 @@ std::optional<sim::SimInputEvent> parseInputArguments(std::span<const std::strin
         }
         return {};
     }
-    if (index + 1 != args.size()) {
+    if (std::next(input) != args.end()) {
         return {};
     }
-    const auto object = instance(args[index]);
+    const auto object = instance(*input);
     if (!object || object->second > 255) {
         return {};
     }
@@ -178,8 +179,8 @@ std::optional<sim::SimInputEvent> parseInputArguments(std::span<const std::strin
             return {};
         }
         event.objType = sim::InputKey;
-        event.objInst = args[index].size() == 1 ? sim::inputKeyCode(args[index][0])
-                                                : sim::inputKeyCode(args[index]);
+        event.objInst =
+            input->size() == 1 ? sim::inputKeyCode(input->front()) : sim::inputKeyCode(*input);
         if (!event.objInst) {
             return {};
         }
@@ -195,26 +196,26 @@ std::optional<InputAction> parseActionArguments(std::span<const std::string> arg
     if (!number(args[0], result.action.action) || !result.action.action) {
         return {};
     }
-    std::size_t index = 1;
+    auto input = std::next(args.begin());
     float value{};
-    if (index < args.size() && number(args[index], value)) {
+    if (input != args.end() && number(*input, value)) {
         if (!std::isfinite(value)) {
             return {};
         }
         result.flags |= sim::ActionValue;
         result.action.fValue = value;
-        ++index;
+        ++input;
     }
-    for (; index < args.size(); ++index) {
+    for (; input != args.end(); ++input) {
         const auto found = std::ranges::find_if(flags, [&](const auto& f) {
-            return lower(f.first) == lower(args[index]);
+            return lower(f.first) == lower(*input);
         });
         if (found == flags.end()) {
             return {};
         }
         result.flags |= found->second;
         if (found->second == sim::ActionDeadZone || found->second == sim::ActionScale) {
-            if (++index == args.size() || !number(args[index], value) || !std::isfinite(value)) {
+            if (++input == args.end() || !number(*input, value) || !std::isfinite(value)) {
                 return {};
             }
             value = std::clamp(value, 0.f, 1.f);

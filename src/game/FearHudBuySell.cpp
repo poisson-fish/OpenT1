@@ -1,4 +1,5 @@
 #include <opent1/game/chat_inventory_huds.hpp>
+#include <ranges>
 
 namespace opent1::game {
 
@@ -13,7 +14,9 @@ void FGHBuySell::populateShoppingItems(const PlayerPSC* psc, const DataBlockMana
         return;
     }
     const Int32 numItemTypes = dbm->getDataGroupSize(DataBlockManager::ItemDataType);
-    for (Int32 i = 0; i < numItemTypes; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < numItemTypes;
+                  })) {
         if (!psc->isInShoppingList(i)) {
             continue;
         }

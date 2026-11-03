@@ -1,4 +1,5 @@
 #include <opent1/sim/sim_base.hpp>
+#include <ranges>
 #include <opent1/console/console.hpp>
 #include <charconv>
 #include <cmath>
@@ -636,7 +637,10 @@ Persistent::Error SimSet::read(StreamIO& stream, Int32, Int32, Persistent::LoadC
     if (getManager() || !empty() || !stream.read(count) || count < 0) {
         return Persistent::Error::ReadError;
     }
-    for (Int32 i = 0; i < count; ++i) {
+    for ([[maybe_unused]] auto i :
+         std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+             return i < count;
+         })) {
         const auto result = context.load(stream);
         if (!result) {
             return result.error;

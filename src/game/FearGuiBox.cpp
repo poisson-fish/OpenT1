@@ -1,4 +1,5 @@
 #include <opent1/game/shell_controls.hpp>
+#include <ranges>
 
 namespace opent1::game {
 
@@ -15,7 +16,7 @@ bool FearGuiBox::draw(gfx::SoftwareSurface& s, Point2I offset, RectI clip) const
     }
     const bool ghost = ghosted_ || (canvas() && !canvas()->contains(this));
     const UInt8 inside = ghost ? 236 : 240, outside = ghost ? 235 : 239, corner = ghost ? 234 : 238;
-    for (int i = 0; i < 2; ++i) {
+    for (auto i : std::views::iota(0, 2)) {
         const auto color = i ? inside : outside;
         s.line({r.left + 4, r.top + i}, {r.right - 4, r.top + i}, color);
         s.line({r.left + 4, r.bottom - i}, {r.right - 4, r.bottom - i}, color);

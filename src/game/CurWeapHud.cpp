@@ -1,4 +1,5 @@
 #include <opent1/game/status_combat_huds.hpp>
+#include <ranges>
 
 #include <algorithm>
 #include <format>
@@ -26,7 +27,9 @@ CurrentWeaponHud::Layout CurrentWeaponHud::computeLayout(const PlayerPSC* psc,
     }
 
     const Int32 numItemTypes = dbm->getDataGroupSize(DataBlockManager::ItemDataType);
-    for (Int32 i = 0; i < numItemTypes; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < numItemTypes;
+                  })) {
         if (psc->itemCount(i) <= 0) {
             continue;
         }
@@ -39,7 +42,9 @@ CurrentWeaponHud::Layout CurrentWeaponHud::computeLayout(const PlayerPSC* psc,
         slot.itemTypeId = i;
         slot.hudIcon = itemData->hudIcon;
         if (const auto* player = dynamic_cast<const Player*>(psc->getControlObject())) {
-            for (Int32 mount = 0; mount < Player::MaxItemImages; ++mount) {
+            for (auto mount : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 mount) {
+                                  return mount < Player::MaxItemImages;
+                              })) {
                 slot.mounted = slot.mounted || player->getMountedItem(mount) == i;
             }
         }

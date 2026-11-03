@@ -152,8 +152,8 @@ bool Item::initResources(GameBaseData* in_data) {
     }
 
     if (isRotate_) {
-        setMovementFlags(movementFlags() | AtRest);
         setLinearVelocity(Point3F{0.0f, 0.0f, 0.0f});
+        setMovementFlags(movementFlags() | AtRest);
         setTimeSlice(0.05f);
     }
     return true;
@@ -334,13 +334,10 @@ void Item::throwObject(GameBase* object, Flt32 speed, bool careless) {
     } else {
         setOwnerId(object->getId());
         throwerClientId_ = object->getControlClient();
-        if (throwerClientId_ == 0) {
-            throwerClientId_ = object->getLastOwnerClient();
-        }
         if (throwerClientId_ != 0 && getManager()) {
             if (auto* pPM = PlayerManager::get(getManager())) {
                 if (const auto* pCR = pPM->findBaseRep(throwerClientId_)) {
-                    throwerClientLoginId_ = pCR->loginStatus;
+                    throwerClientLoginId_ = pCR->loginId;
                 } else {
                     throwerClientLoginId_ = 0xFFFFFFFFu;
                 }
@@ -551,8 +548,8 @@ bool Item::unpackUpdate(sim::network::GhostManager& gm, BitStream& stream) {
     }
 
     if (stream.readFlag()) {
-        setMovementFlags(movementFlags() | AtRest);
         setLinearVelocity(Point3F{0.0f, 0.0f, 0.0f});
+        setMovementFlags(movementFlags() | AtRest);
     } else if (stream.readFlag()) {
         Point3F vel{};
         if (!readPod(stream, vel)) {

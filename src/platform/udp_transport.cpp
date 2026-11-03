@@ -1,4 +1,5 @@
 #include <opent1/platform/net_transport.hpp>
+#include <ranges>
 #include <algorithm>
 #include <charconv>
 #include <format>
@@ -57,7 +58,7 @@ std::optional<IPv4Address> parseIPv4Address(std::string_view text) {
         result.host.fill(255);
         return result;
     }
-    for (std::size_t i = 0; i < result.host.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, result.host.size())) {
         const auto dot = host.find('.');
         if ((i < 3) != (dot != host.npos)) {
             return {};

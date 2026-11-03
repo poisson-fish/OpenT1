@@ -1,4 +1,5 @@
 #include <opent1/world/interior_shape.hpp>
+#include <ranges>
 #include "asset_reader.hpp"
 #include <set>
 #include <map>
@@ -111,7 +112,7 @@ InteriorLighting::animation(Flt32 seconds, std::span<const InteriorLightControl>
         const auto& next =
             states[std::size_t(l.firstState) + (index + 1 < UInt32(l.stateCount) ? index + 1 : 0)];
         std::array<UInt8, 4> color{};
-        for (std::size_t i = 0; i < 4; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, std::size_t{4})) {
             const auto value =
                 Flt32(state.color[i]) + (Flt32(next.color[i]) - state.color[i]) * multiplier;
             color[i] = UInt8(std::clamp(value / 256 + .5f, 0.f, 255.f));

@@ -1,4 +1,5 @@
 #include <opent1/gui/runtime.hpp>
+#include <ranges>
 #include <opent1/gui/containers.hpp>
 #include <opent1/gui/text_format.hpp>
 #include <opent1/core/mem_stream.hpp>
@@ -210,7 +211,7 @@ bool bindResources(Control& root, const Resources& resources) {
             if (!next || !next->valid() || next->bitmaps.empty()) {
                 return false;
             }
-            for (std::size_t i = 0; i < next->bitmaps.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, next->bitmaps.size())) {
                 if (!next->get(Int32(i))) {
                     return false;
                 }
@@ -231,7 +232,7 @@ bool bindResources(Control& root, const Resources& resources) {
                 if (!next) {
                     return {};
                 }
-                for (Int32 i = 0; i < 9; ++i) {
+                for (auto i : std::views::iota(Int32{0}, Int32{9})) {
                     if (!next->get(i)) {
                         return {};
                     }
@@ -835,9 +836,9 @@ bool Runtime::open(std::string_view path, bool dialog, UInt32 message) {
 
 bool Runtime::routeEvent(const Event& e) {
     std::vector<std::shared_ptr<Delegate>> chain;
-    for (auto i = delegates_.rbegin(); i != delegates_.rend(); ++i) {
-        if (*i && (chain.empty() || chain.back() != *i)) {
-            chain.push_back(*i);
+    for (const auto& delegate : delegates_ | std::views::reverse) {
+        if (delegate && (chain.empty() || chain.back() != delegate)) {
+            chain.push_back(delegate);
         }
     }
     if (chain.empty() && delegate_) {
@@ -853,9 +854,9 @@ bool Runtime::routeEvent(const Event& e) {
 
 bool Runtime::routeMessage(Control& c, UInt32 message) {
     std::vector<std::shared_ptr<Delegate>> chain;
-    for (auto i = delegates_.rbegin(); i != delegates_.rend(); ++i) {
-        if (*i && (chain.empty() || chain.back() != *i)) {
-            chain.push_back(*i);
+    for (const auto& delegate : delegates_ | std::views::reverse) {
+        if (delegate && (chain.empty() || chain.back() != delegate)) {
+            chain.push_back(delegate);
         }
     }
     if (chain.empty() && delegate_) {
@@ -1103,8 +1104,8 @@ Control* Runtime::findControl(std::string_view key) const {
             return found;
         }
     }
-    for (auto it = graphs_.rbegin(); it != graphs_.rend(); ++it) {
-        if (auto* found = find((*it)->root())) {
+    for (const auto& graph : graphs_ | std::views::reverse) {
+        if (auto* found = find(graph->root())) {
             return found;
         }
     }
@@ -1497,7 +1498,9 @@ void Runtime::install() {
         throw std::logic_error("GUI runtime requires shared ownership");
     }
     std::vector<std::shared_ptr<void>> commands;
-    for (std::size_t i = 0; i < names.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < names.size();
+                  })) {
         commands.push_back(console_.scopedCommand(
             Int32(i),
             names[i],

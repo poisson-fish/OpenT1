@@ -1,6 +1,7 @@
 // Loaded TS default-pose viewer. Requires the user's original local assets.
 #define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL.h>
+#include <iterator>
 #include <SDL3/SDL_main.h>
 #include <opent1/world/world_scene.hpp>
 #include <opent1/sim/common_irc_shadow.hpp>
@@ -66,26 +67,28 @@ class ShapeDemo : public SdlApplication {
                     "Expected a nonnegative integer");
             return result;
         };
-        for (std::size_t i = 1; i < args.size(); ++i) {
-            if (args[i] == "--assets" && i + 1 < args.size()) {
-                directory = args[++i];
-            } else if (args[i] == "--shape" && i + 1 < args.size()) {
-                shapeName = args[++i];
-            } else if (args[i] == "--volume" && i + 1 < args.size()) {
-                volumeName = args[++i];
-            } else if (args[i] == "--driver" && i + 1 < args.size()) {
-                gpu.driver = args[++i];
-            } else if (args[i] == "--snapshot" && i + 1 < args.size()) {
-                snapshot_ = args[++i];
-            } else if (args[i] == "--software") {
+        for (auto argumentIt = std::ranges::next(args.begin(), 1, args.end());
+             argumentIt != args.end();
+             ++argumentIt) {
+            if (*argumentIt == "--assets" && std::next(argumentIt) != args.end()) {
+                directory = *++argumentIt;
+            } else if (*argumentIt == "--shape" && std::next(argumentIt) != args.end()) {
+                shapeName = *++argumentIt;
+            } else if (*argumentIt == "--volume" && std::next(argumentIt) != args.end()) {
+                volumeName = *++argumentIt;
+            } else if (*argumentIt == "--driver" && std::next(argumentIt) != args.end()) {
+                gpu.driver = *++argumentIt;
+            } else if (*argumentIt == "--snapshot" && std::next(argumentIt) != args.end()) {
+                snapshot_ = *++argumentIt;
+            } else if (*argumentIt == "--software") {
                 software_ = true;
-            } else if (args[i] == "--smoke") {
+            } else if (*argumentIt == "--smoke") {
                 smoke_ = true;
-            } else if (args[i] == "--sequence" && i + 1 < args.size()) {
-                sequence_ = integer(args[++i]);
-            } else if (args[i] == "--collision-detail" && i + 1 < args.size()) {
-                collisionDetail = integer(args[++i]);
-            } else if (args[i] == "--root-motion") {
+            } else if (*argumentIt == "--sequence" && std::next(argumentIt) != args.end()) {
+                sequence_ = integer(*++argumentIt);
+            } else if (*argumentIt == "--collision-detail" && std::next(argumentIt) != args.end()) {
+                collisionDetail = integer(*++argumentIt);
+            } else if (*argumentIt == "--root-motion") {
                 rootMotion_ = true;
             } else {
                 throw std::runtime_error(
@@ -169,7 +172,7 @@ class ShapeDemo : public SdlApplication {
         std::printf("Loaded %s: %zu meshes, %zu materials, %zu bitmap dependencies on %s.\n",
                     shapeName.c_str(),
                     resources_.shape->meshes.size(),
-                    resources_.materials.list.materials.size(),
+                    resources_.materials.list().materials.size(),
                     resources_.shape->dependencies().size(),
                     std::string(surface_->driver()).c_str());
         return true;

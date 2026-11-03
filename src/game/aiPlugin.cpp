@@ -1,4 +1,5 @@
 #include <opent1/game/ai.hpp>
+#include <ranges>
 #include <opent1/game/string_table.hpp>
 
 #include <charconv>
@@ -63,7 +64,10 @@ enum AICommandId : Int32 {
 [[nodiscard]] Point3F parsePoint3FArg(std::string_view sv) noexcept {
     Point3F out{0.0f, 0.0f, 0.0f};
     std::size_t idx = 0;
-    for (std::size_t comp = 0; comp < 3 && idx < sv.size(); ++comp) {
+    for (auto comp :
+         std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t comp) {
+             return comp < 3 && idx < sv.size();
+         })) {
         while (idx < sv.size() && (sv[idx] == ' ' || sv[idx] == '\t')) {
             ++idx;
         }
@@ -257,10 +261,8 @@ AIPlugin::handleCommand(Console& console, Int32 id, std::span<const std::string>
                 return "false";
             }
             const auto* players = PlayerManager::get(manager_);
-            const auto* rep = players ? players->findClient(dir.playerId) : nullptr;
-            const auto* followedAi = aiMgr->findByPlayerId(dir.playerId);
-            if (!(rep && dynamic_cast<Player*>(rep->ownedObject)) &&
-                !(followedAi && followedAi->player())) {
+            const auto* rep = players ? players->findBaseRep(dir.playerId) : nullptr;
+            if (!rep || !dynamic_cast<Player*>(rep->ownedObject)) {
                 return "false";
             }
             for (AIObj* ai : list) {

@@ -150,7 +150,9 @@ struct Writer {
                                      UInt32,
                                      std::conditional_t<sizeof(T) == 2, UInt16, UInt8>>;
         const auto bits = std::bit_cast<U>(value);
-        for (std::size_t i = 0; i < sizeof(T); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < sizeof(T);
+                      })) {
             bytes.push_back(static_cast<std::byte>((bits >> (8 * i)) & 255));
         }
     }
@@ -189,7 +191,10 @@ struct Writer {
         for (char c : value) {
             put(static_cast<UInt8>(c));
         }
-        for (std::size_t i = value.size(); i < count; ++i) {
+        for ([[maybe_unused]] auto i : std::views::iota(static_cast<std::size_t>(value.size())) |
+                                           std::views::take_while([&](std::size_t i) {
+                                               return i < count;
+                                           })) {
             put(UInt8{0});
         }
     }
@@ -629,7 +634,7 @@ bool TsShape::importSequence(const TsShape& source, Int32 sequenceIndex) {
                 return {};
             }
             std::size_t found = to.size();
-            for (std::size_t j = 0; j < to.size(); ++j) {
+            for (auto j : std::views::iota(std::size_t{0}, to.size())) {
                 if (index(to[j], names.size()) && sameName(source.names[name], names[to[j]])) {
                     found = j;
                     break;
@@ -706,7 +711,9 @@ bool TsShape::importSequence(const TsShape& source, Int32 sequenceIndex) {
         return found == subs.end() ? nullptr : &*found;
     };
     std::vector<std::pair<const TsSubSequence*, std::size_t>> shared;
-    for (std::size_t i = 0; i < source.nodes.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < source.nodes.size();
+                  })) {
         const auto* sub = findSub(source.nodes[i]);
         if (!sub) {
             continue;
@@ -732,7 +739,9 @@ bool TsShape::importSequence(const TsShape& source, Int32 sequenceIndex) {
                        target.subSequenceCount)) {
             return false;
         }
-        for (Int32 k = 0; k < sub->keyCount; ++k) {
+        for (auto k : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 k) {
+                          return k < sub->keyCount;
+                      })) {
             const auto& key = source.keyframes[sub->firstKey + k];
             if (!index(key.value, source.transforms.size())) {
                 return false;
@@ -742,7 +751,9 @@ bool TsShape::importSequence(const TsShape& source, Int32 sequenceIndex) {
             candidate.transforms.push_back(source.transforms[key.value]);
         }
     }
-    for (std::size_t i = 0; i < source.objects.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < source.objects.size();
+                  })) {
         const auto& object = source.objects[i];
         const auto* sub = findSub(object);
         if (!sub) {
@@ -760,7 +771,9 @@ bool TsShape::importSequence(const TsShape& source, Int32 sequenceIndex) {
                        target.subSequenceCount)) {
             return false;
         }
-        for (Int32 k = 0; k < sub->keyCount; ++k) {
+        for (auto k : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 k) {
+                          return k < sub->keyCount;
+                      })) {
             const auto& key = source.keyframes[sub->firstKey + k];
             if (!index(key.value, sourceMesh.frames.size())) {
                 return false;
@@ -807,7 +820,7 @@ std::unique_ptr<TsShape> TsShape::load(StreamIO& stream, UInt32 size) {
         return {};
     }
     std::array<Int32, 11> counts{};
-    for (std::size_t i = 0; i < 9; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{9})) {
         counts[i] = r.integer();
     }
     if (s.version >= 2) {
@@ -1027,6 +1040,10 @@ std::optional<Int32> selectTsDetail(const TsShape& shape, Flt32 projectedSize) {
 bool registerTsLoaders(ResourceManager& manager) {
     const auto a = manager.registerLoader<TsShape>(".dts", TsShape::load);
     const auto b = manager.registerLoader<TsMaterialList>(".dml", TsMaterialList::load);
+    if (a)
+        manager.setSourceOnlyLoader(".dts");
+    if (b)
+        manager.setSourceOnlyLoader(".dml");
     return a && b;
 }
 
@@ -1092,7 +1109,7 @@ classifyTsUtilityDetails(TsShape& shape, std::span<const std::string_view> prefi
 
 std::optional<TsMaterialResources> TsMaterialResources::load(ResourceManager& manager,
                                                              const TsMaterialList& list) {
-    TsMaterialResources result{list, {}};
+    Data result{list, {}};
     result.textures.resize(list.materials.size());
     const auto ok =
         std::ranges::all_of(std::views::iota(std::size_t{0}, list.materials.size()), [&](auto i) {
@@ -1102,7 +1119,7 @@ std::optional<TsMaterialResources> TsMaterialResources::load(ResourceManager& ma
             result.textures[i] = manager.load<gfx::Bitmap>(list.materials[i].mapFile);
             return bool(result.textures[i]);
         });
-    return ok ? std::optional(std::move(result)) : std::nullopt;
+    return ok ? std::optional(TsMaterialResources(std::move(result))) : std::nullopt;
 }
 
 std::optional<TsShapeResources> TsShapeResources::load(ResourceManager& manager,
@@ -1134,9 +1151,9 @@ std::optional<TsMaterialResources> TsMaterialResources::loadSkin(ResourceManager
             }
         }
     }
-    TsMaterialResources result{original, {}};
+    Data result{original, {}};
     result.textures.resize(original.materials.size());
-    for (std::size_t i = 0; i < original.materials.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, original.materials.size())) {
         auto& material = result.list.materials[i];
         if (material.type() != 3) {
             continue;
@@ -1157,20 +1174,20 @@ std::optional<TsMaterialResources> TsMaterialResources::loadSkin(ResourceManager
             return {};
         }
     }
-    return result;
+    return TsMaterialResources(std::move(result));
 }
 
 std::optional<TsMaterialResources>
 TsMaterialResources::withDamageSkin(ResourceManager& manager,
-                                    TsMaterialResources result,
+                                    TsMaterialResources sourceMaterials,
                                     Int32 damageLevel,
                                     std::span<const std::string> bitmapNames) {
     if (damageLevel < 0 || damageLevel > 3 ||
-        result.textures.size() != result.list.materials.size()) {
+        sourceMaterials.textures().size() != sourceMaterials.list().materials.size()) {
         return {};
     }
     if (damageLevel == 0) {
-        return result;
+        return sourceMaterials;
     }
     std::vector<Resource<gfx::Bitmap>> decals;
     for (const auto& baseName : bitmapNames) {
@@ -1189,9 +1206,10 @@ TsMaterialResources::withDamageSkin(ResourceManager& manager,
         decals.push_back(std::move(bitmap));
     }
     if (decals.empty()) {
-        return result;
+        return sourceMaterials;
     }
-    for (std::size_t slot = 0; slot < result.textures.size(); ++slot) {
+    auto result = sourceMaterials.data();
+    for (auto slot : std::views::iota(std::size_t{0}, result.textures.size())) {
         auto& material = result.list.materials[slot];
         if (material.type() != 3 || (material.flags & 0xf000U) != 0) {
             continue;
@@ -1224,10 +1242,16 @@ TsMaterialResources::withDamageSkin(ResourceManager& manager,
                         Int32((UInt32{30149123} * iteration) % UInt32(bitmap->width - decal.width));
                     const auto y = Int32((UInt32{3419238501} * iteration) %
                                          UInt32(bitmap->height - decal.height));
-                    for (Int32 row = 0; row < decal.height; ++row) {
+                    for (auto row :
+                         std::views::iota(Int32{0}) | std::views::take_while([&](Int32 row) {
+                             return row < decal.height;
+                         })) {
                         const auto src = decal.row(row);
                         auto dst = bitmap->row(y + row);
-                        for (Int32 column = 0; column < decal.width; ++column) {
+                        for (auto column :
+                             std::views::iota(Int32{0}) | std::views::take_while([&](Int32 column) {
+                                 return column < decal.width;
+                             })) {
                             if (src[column] != std::byte{}) {
                                 dst[x + column] = src[column];
                             }
@@ -1249,6 +1273,6 @@ TsMaterialResources::withDamageSkin(ResourceManager& manager,
         material.mapFile = name;
         result.textures[slot] = std::move(damaged);
     }
-    return result;
+    return TsMaterialResources(std::move(result));
 }
 } // namespace opent1::world

@@ -1,4 +1,5 @@
 #include "sim_test_support.hpp"
+#include <ranges>
 #include <opent1/sim/sim_world_game.hpp>
 #include <opent1/core/mem_stream.hpp>
 #include <atomic>
@@ -105,7 +106,7 @@ void borrowedAndOrdering() {
     SimManager manager;
     auto* group = add<SimGroup>(manager);
     Object* newest{};
-    for (int i = 0; i < 5000; ++i) {
+    for (auto i : std::views::iota(0, 5000)) {
         auto* item = add<Object>(manager);
         item->assignName(i % 10 ? std::to_string(i) : "duplicate");
         CHECK(group->addObject(*item));
@@ -226,7 +227,7 @@ void queue() {
     std::array<std::jthread, 4> threads;
     std::ranges::for_each(threads, [&](auto& thread) {
         thread = std::jthread([&] {
-            for (int i = 0; i < 1000; ++i) {
+            for ([[maybe_unused]] auto i : std::views::iota(0, 1000)) {
                 CHECK(concurrent.insert(eventAt(1, 0), true));
             }
         });
@@ -268,7 +269,7 @@ void legacyScale() {
         ++calls;
     };
     std::vector<std::unique_ptr<SimEvent>> pending;
-    for (std::size_t i = 0; i < 100001; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(std::size_t{0}, std::size_t{100001})) {
         pending.push_back(eventAt(receiver->getId(), 0));
     }
     CHECK(manager.postEvents(std::move(pending)));
@@ -276,7 +277,7 @@ void legacyScale() {
     CHECK(manager.advanceToTime(0) == 99991 && calls == 100001);
     auto* root = add<SimGroup>(manager);
     auto* parent = root;
-    for (std::size_t i = 0; i < 200; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(std::size_t{0}, std::size_t{200})) {
         auto* child = add<SimGroup>(manager);
         CHECK(parent->addObject(*child));
         parent = child;
@@ -305,7 +306,7 @@ void legacyScale() {
         ++worldCalls;
     };
     std::vector<std::unique_ptr<SimEvent>> worldEvents;
-    for (std::size_t i = 0; i < 100001; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(std::size_t{0}, std::size_t{100001})) {
         worldEvents.push_back(eventAt(worldReceiver->getId(), 0));
     }
     CHECK(world.manager().postEvents(std::move(worldEvents)));
@@ -367,7 +368,9 @@ void persistence() {
     Persistent::StoreContext store(registry);
     CHECK(store.store(writer, group) == Persistent::Error::Ok);
     const auto size = static_cast<std::size_t>(writer.getPosition());
-    for (std::size_t n = 0; n <= size; ++n) {
+    for (auto n : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t n) {
+                      return n <= size;
+                  })) {
         MemRWStream reader{std::span<const std::byte>(bytes).first(n)};
         Persistent::LoadContext load(registry);
         const auto loaded = load.load(reader);
@@ -383,7 +386,40 @@ void persistence() {
 }
 }
 
+namespace {
+void hostOwnedRendering() {
+    struct Canvas : SimCanvas {
+        unsigned renders{};
+        bool setTitle(std::string_view) override {
+            return true;
+        }
+        void renderFrame() override {
+            ++renders;
+        }
+    };
+    SimGame game;
+    auto world = std::make_unique<SimWorld>();
+    auto* canvas = add<Canvas>(world->manager());
+    CHECK(game.setWorld(WorldType::Client, std::move(world)));
+    game.frame(0, false);
+    CHECK(canvas->renders == 0);
+    game.frame(.1);
+    CHECK(canvas->renders == 1);
+    game.console().addCommand(
+        0, "explicitRender", [canvas](Console&, Int32, std::span<const std::string>) {
+            canvas->renderFrame();
+            return std::string{};
+        });
+    CHECK(SimConsoleEvent::schedule(*canvas, "explicitRender();", .05f));
+    game.frame(.2, false);
+    CHECK(canvas->renders == 2);
+    game.frame(.3);
+    CHECK(canvas->renders == 3);
+}
+}
+
 int opent1_test_sim_base() {
+    hostOwnedRendering();
     legacyScale();
     graph();
     borrowedAndOrdering();

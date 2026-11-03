@@ -1,4 +1,5 @@
 #include <opent1/game/proj_attach.hpp>
+#include <ranges>
 
 #include <algorithm>
 #include <cmath>
@@ -34,7 +35,9 @@ void SwooshTrail::updateTransform(const TMat3F& in_newTransform, Flt32 /*in_newT
 
             const Point3F* pBeginPoint = &rBarFront.centerPoint;
             Flt32 totalLength = 0.0f;
-            for (UInt32 i = 1; i <= m_numActiveSections_ - 1; ++i) {
+            for (auto i : std::views::iota(UInt32{1}) | std::views::take_while([&](UInt32 i) {
+                              return i <= m_numActiveSections_ - 1;
+                          })) {
                 PointBar& rCurrent = m_pointChain_[i];
                 const Point3F& rEndPoint = rCurrent.centerPoint;
                 totalLength += (rEndPoint - *pBeginPoint).len();
@@ -85,7 +88,9 @@ void SwooshTrail::updateTransform(const TMat3F& in_newTransform, Flt32 /*in_newT
 
             const Point3F* pBeginPoint = &rBarFront.centerPoint;
             Flt32 totalLength = 0.0f;
-            for (UInt32 i = 1; i <= m_numActiveSections_ - 1; ++i) {
+            for (auto i : std::views::iota(UInt32{1}) | std::views::take_while([&](UInt32 i) {
+                              return i <= m_numActiveSections_ - 1;
+                          })) {
                 PointBar& rCurrent = m_pointChain_[i];
                 const Point3F& rEndPoint = rCurrent.centerPoint;
                 totalLength += (rEndPoint - *pBeginPoint).len();

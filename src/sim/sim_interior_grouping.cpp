@@ -1,4 +1,5 @@
 #include <opent1/sim/sim_interior_grouping.hpp>
+#include <iterator>
 #include <opent1/sim/sim_editor_events.hpp>
 #include <sstream>
 #include <cmath>
@@ -75,30 +76,32 @@ bool SimInteriorGrouping::processArguments(std::span<const std::string> args) {
     if (!game_->createObject("SimInterior", lines[1], this, baseArgs)) {
         return false;
     }
-    for (std::size_t i = 2; i + 1 < lines.size(); ++i) {
-        if (lines[i].starts_with("GROUP ")) {
-            if (++i + 1 >= lines.size()) {
+    for (auto lineIt = std::ranges::next(lines.begin(), 2, lines.end());
+         lineIt != lines.end() && std::next(lineIt) != lines.end();
+         ++lineIt) {
+        if (lineIt->starts_with("GROUP ")) {
+            if (std::ranges::distance(++lineIt, lines.end()) <= 1) {
                 return false;
             }
-            const auto& path = lines[i];
+            const auto& path = *lineIt;
             auto* parent = resolve(path, true);
             const auto colon = path.rfind(':');
             const auto name = path.substr(colon == path.npos ? 0 : colon + 1);
-            const auto type = lines[i - 1].substr(6);
+            const auto type = std::prev(lineIt)->substr(6);
             if (!parent || name.empty() || !game_->createObject(type, name, parent)) {
                 return false;
             }
             if (!dynamic_cast<SimGroup*>(parent->findObject(name))) {
                 return false;
             }
-        } else if (lines[i] == "OBJECT") {
-            if (lines.size() - i < 8) {
+        } else if (*lineIt == "OBJECT") {
+            if (std::ranges::distance(lineIt, lines.end()) < 8) {
                 return false;
             }
-            auto* parent = resolve(lines[++i], false);
-            const auto& name = lines[++i];
-            const auto& type = lines[++i];
-            std::istringstream arguments(lines[++i]);
+            auto* parent = resolve(*++lineIt, false);
+            const auto& name = *++lineIt;
+            const auto& type = *++lineIt;
+            std::istringstream arguments(*++lineIt);
             std::vector<std::string> values;
             for (std::string value; arguments >> value;) {
                 if (values.size() == 32) {
@@ -112,7 +115,7 @@ bool SimInteriorGrouping::processArguments(std::span<const std::string> args) {
                 return bool(input >> value.x >> value.y >> value.z) && std::isfinite(value.x) &&
                        std::isfinite(value.y) && std::isfinite(value.z);
             };
-            if (!point(lines[++i], position) || !point(lines[++i], rotation) || !parent) {
+            if (!point(*++lineIt, position) || !point(*++lineIt, rotation) || !parent) {
                 return false;
             }
             auto* object = game_->createObject(type, name, parent, values);

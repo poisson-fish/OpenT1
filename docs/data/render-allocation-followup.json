@@ -1,0 +1,121 @@
+{
+  "date": "2026-11-03",
+  "baseline_revision": "1dad34ac74b76a00ed9b6f878d5494b77f7df761",
+  "candidate": "working tree: shared material/lighting snapshots and reusable render scratch",
+  "configuration": {
+    "build": "Windows x64 Release",
+    "backend": "direct3d12",
+    "audit_frames": 240,
+    "allocation_interval_frames": 60,
+    "readback_mode": "rotate",
+    "readback_frames": 240,
+    "instrumented_timings_used": false
+  },
+  "baseline_audit_executable_sha256": "2bcdeb1f11b7751d94bc003e3528b790f031ff872706b424b8c0cc8a92d022da",
+  "candidate_audit_executable_sha256": "346eb03111bc0eab5edf768c7b918e8c8bf25f7d930132abb8006c734f406f4e",
+  "baseline_readback_executable_sha256": "a91217094df07de529f180150f7ec94c44366d19ead2c5139232d094147f21a4",
+  "candidate_readback_executable_sha256": "e58ab77138f8b44b385280a7f5fcc9b1bacc234c2bb7cae18d884d3b02a09b55",
+  "fixed_lookup_scratch_bytes_per_thread": 393216,
+  "maximum_retained_scratch_vector_bytes": 8388608,
+  "notes": [
+    "Rates count render preparation/submission allocations in the final 60-frame interval, excluding simulation.",
+    "C++ heap live bytes exclude the fixed thread-local lookup arenas; ordinary scratch vector capacities are included.",
+    "These allocation audits establish no frame-time improvement."
+  ],
+  "missions": {
+    "rpgmap1": {
+      "before": {
+        "render_allocations_per_frame": 5656.416666666667,
+        "cpp_live_bytes": 107294335,
+        "cpp_peak_bytes": 111727928,
+        "final_scene": {
+          "scene_polygons": 5956,
+          "scene_surfaces": 18,
+          "scene_shapes": 9,
+          "draws": 2032,
+          "textures": 2483,
+          "physical_textures": 1139,
+          "mesh_uploads": 54
+        }
+      },
+      "after": {
+        "render_allocations_per_frame": 3820.4333333333334,
+        "cpp_live_bytes": 108969680,
+        "cpp_peak_bytes": 111495347,
+        "final_scene": {
+          "scene_polygons": 5956,
+          "scene_surfaces": 18,
+          "scene_shapes": 9,
+          "draws": 2032,
+          "textures": 2483,
+          "physical_textures": 1139,
+          "mesh_uploads": 54
+        }
+      },
+      "allocation_reduction_percent": 32.45841743153056,
+      "cpp_live_delta_bytes": 1675345
+    },
+    "rpgmap5": {
+      "before": {
+        "render_allocations_per_frame": 7188.366666666667,
+        "cpp_live_bytes": 143333943,
+        "cpp_peak_bytes": 149294432,
+        "final_scene": {
+          "scene_polygons": 6042,
+          "scene_surfaces": 14,
+          "scene_shapes": 8,
+          "draws": 2065,
+          "textures": 2909,
+          "physical_textures": 1243,
+          "mesh_uploads": 73
+        }
+      },
+      "after": {
+        "render_allocations_per_frame": 4829.066666666667,
+        "cpp_live_bytes": 145588874,
+        "cpp_peak_bytes": 148871006,
+        "final_scene": {
+          "scene_polygons": 6042,
+          "scene_surfaces": 14,
+          "scene_shapes": 8,
+          "draws": 2065,
+          "textures": 2909,
+          "physical_textures": 1243,
+          "mesh_uploads": 73
+        }
+      },
+      "allocation_reduction_percent": 32.82108592123385,
+      "cpp_live_delta_bytes": 2254931
+    }
+  },
+  "capture_sha256": {
+    "before/rpgmap1.jsonl": "648fab6ccd34098812a2620c9ef293a1cac65753235aaca9ee4cae5d352187c2",
+    "after/rpgmap1.jsonl": "8394f192b0972a915a36eb3b8d96424fe3509fe8f8c25a20d09fa97719bf26a5",
+    "before/rpgmap5.jsonl": "fd400664887ae5adf6083ee28e194547fa43781131d5bfc9b500df03a18ddf23",
+    "after/rpgmap5.jsonl": "5425792d171cc58d05b1e694b61e83536ad25989a860dd89be2e8303b4fb78a3",
+    "before/rpgmap1-rotate.json.ppm": "c16e6b360da37688179b131b9acd8815fc142edcd37cfe90d366b03757eb5918",
+    "before/rpgmap5-rotate.json.ppm": "9f2654752f08ebe652700b7321a79e4d7e9dbbda90374c2dd58fba204596eea2",
+    "after/rpgmap1-rotate.json.ppm": "c16e6b360da37688179b131b9acd8815fc142edcd37cfe90d366b03757eb5918",
+    "after/rpgmap5-rotate.json.ppm": "9f2654752f08ebe652700b7321a79e4d7e9dbbda90374c2dd58fba204596eea2"
+  },
+  "readbacks": {
+    "rpgmap1-rotate.json.ppm": {
+      "changed_pixels": 0,
+      "pixels_over_2": 0,
+      "max_channel_error": 0,
+      "mean_channel_error": 0.0
+    },
+    "rpgmap5-rotate.json.ppm": {
+      "changed_pixels": 0,
+      "pixels_over_2": 0,
+      "max_channel_error": 0,
+      "mean_channel_error": 0.0
+    }
+  },
+  "validation": [
+    "13 Windows Release CTest suites passed",
+    "Real-device D3D12 platform suite passed",
+    "Allocation accounting/alignment/release self-test passed",
+    "Both RPG rotating readbacks match baseline pixel-for-pixel"
+  ]
+}

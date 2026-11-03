@@ -1,5 +1,6 @@
 #include <opent1/gfx/render_limits.hpp>
 #include <opent1/sim/sim_hardware_environment.hpp>
+#include <opent1/core/reusable_scratch.hpp>
 #include "environment_projection.hpp"
 #include <algorithm>
 #include <cmath>
@@ -23,6 +24,19 @@ struct Polygon {
     double sortValue{};
     std::span<const Point2F> lightMapCoordinates;
     std::span<const Flt32> vertexOpacity;
+    std::optional<gfx::HardwarePolygon> borrowed{};
+};
+
+struct EnvironmentScratch {
+    std::vector<Polygon> polygons;
+    std::vector<gfx::Bitmap> shadowTextures;
+    std::vector<gfx::HardwarePolygon> batch;
+
+    void clear() {
+        detail::clearScratch(polygons);
+        detail::clearScratch(shadowTextures);
+        detail::clearScratch(batch);
+    }
 };
 }
 
@@ -54,7 +68,7 @@ prepareHardwareEnvironment(const EnvironmentCamera& camera,
         return {};
     }
     std::size_t frameCount{};
-    for (std::size_t i = 0; i < materials.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, materials.size())) {
         const auto& m = materials[i];
         if (m.name.empty() || m.name.size() > 1024 || m.name.find('\0') != m.name.npos ||
             m.frames.size() > 32768 ||
@@ -70,8 +84,9 @@ prepareHardwareEnvironment(const EnvironmentCamera& camera,
         }
         frameCount += m.frames.size();
     }
-    std::vector<Polygon> polygons;
-    std::vector<gfx::Bitmap> shadowTextures;
+    detail::ScratchLease<EnvironmentScratch> workspace;
+    auto& polygons = workspace.get().polygons;
+    auto& shadowTextures = workspace.get().shadowTextures;
     shadowTextures.reserve(shadows.size());
     std::size_t vertices{};
     for (const auto& input : scene) {
@@ -163,7 +178,7 @@ prepareHardwareEnvironment(const EnvironmentCamera& camera,
                     const auto& color = palette.find().colors[index];
                     material.color = {color.red / 255.f, color.green / 255.f, color.blue / 255.f};
                     if (paletteGamma != 1) {
-                        for (std::size_t i = 0; i < 3; ++i) {
+                        for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
                             material.color[i] =
                                 Flt32(std::pow(material.color[i], double(1.f / paletteGamma)));
                         }
@@ -223,7 +238,7 @@ prepareHardwareEnvironment(const EnvironmentCamera& camera,
     }
     // SimRenderImage orders complete images by increasing near/distance. Keep
     // authored polygon order within each image, including intersecting meshes.
-    std::vector<gfx::HardwarePolygon> batch;
+    auto& batch = workspace.get().batch;
     batch.reserve(scene.size() + polygons.size());
     for (const auto& input : scene) {
         if (input.material.blend == gfx::HardwareBlend::Opaque) {
@@ -247,12 +262,10 @@ prepareHardwareEnvironment(const EnvironmentCamera& camera,
         const auto sortValue = input.imageSortValue           ? double(*input.imageSortValue)
                                : depth <= camera.nearDistance ? .99
                                                               : camera.nearDistance / depth;
-        polygons.push_back({{input.vertices.begin(), input.vertices.end()},
-                            input.material,
-                            2,
-                            sortValue,
-                            input.lightMapCoordinates,
-                            input.vertexOpacity});
+        polygons.push_back(
+            {{}, input.material, 2, sortValue, input.lightMapCoordinates, input.vertexOpacity});
+        // The caller owns every scene span through synchronous prepare().
+        polygons.back().borrowed = input;
     }
     std::ranges::stable_sort(polygons, [](const auto& a, const auto& b) {
         if (a.stage != b.stage) {
@@ -261,7 +274,10 @@ prepareHardwareEnvironment(const EnvironmentCamera& camera,
         return a.stage == 2 && a.sortValue < b.sortValue;
     });
     std::ranges::for_each(polygons, [&](const auto& p) {
-        batch.push_back({p.vertices, p.material, p.lightMapCoordinates, p.vertexOpacity});
+        if (p.borrowed)
+            batch.push_back(*p.borrowed);
+        else
+            batch.push_back({p.vertices, p.material, p.lightMapCoordinates, p.vertexOpacity});
     });
     return gfx::HardwareBatch::prepare(batch, &palette);
 }

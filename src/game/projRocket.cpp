@@ -1,4 +1,5 @@
 #include <opent1/game/player.hpp>
+#include <ranges>
 #include <opent1/game/proj_rocket.hpp>
 #include <opent1/game/smoke_puff.hpp>
 #include <opent1/world/scene_objects.hpp>
@@ -89,7 +90,7 @@ public:
             {{0, 1, 2}, {0, 2, 3}, {2, 1, 0}, {3, 2, 0}}};
         for (const auto& face : faces) {
             world::StaticSurfaceTriangle triangle;
-            for (std::size_t i = 0; i < face.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, face.size())) {
                 triangle.vertices[i].position = points[face[i]];
                 triangle.vertices[i].texture = texture[face[i]];
             }
@@ -576,7 +577,10 @@ void RocketDumb::clientProcess(UInt32 in_currTime) {
         if (count > 0) {
             if (auto* smoke = SmokeManager::get(getManager())) {
                 const Point3F step = delta * (m_pRocketData_->projSpecialTime / length);
-                for (Int32 i = 0; i < count; ++i) {
+                for ([[maybe_unused]] auto i :
+                     std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                         return i < count;
+                     })) {
                     m_lastPuffPosition_ += step;
                     smoke->addPuff(m_pRocketData_->trailString,
                                    0.4f,

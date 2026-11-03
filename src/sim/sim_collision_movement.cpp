@@ -1533,7 +1533,9 @@ bool SimMovement::position(TMat3F target, bool stepped, Flt32 minDistance, Flt32
                     const auto step = count ? delta * (1.f / static_cast<float>(count)) : Point3F{};
                     // Test rotation in place too; legacy skipped it for zero steps.
                     const auto steps = std::max(count, 1);
-                    for (Int32 s = 0; s < steps && live(*this); ++s) {
+                    for (auto s : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 s) {
+                                      return s < steps && live(*this);
+                                  })) {
                         info.image->transform.p += step;
                         if (!testImage(info)) {
                             const auto dt =

@@ -644,11 +644,13 @@ bool Bullet::onWorldSurfaceQuery(world::WorldSurfaceQuery& query) {
     }
 
     auto mesh = std::make_shared<world::WorldSurfaceMesh>();
-    mesh->materials.list.details = mesh->materials.list.materialsPerDetail = 1;
+    world::TsMaterialResources::Data materialData;
+    materialData.list.details = materialData.list.materialsPerDetail = 1;
     world::TsMaterial material;
     material.flags = 0x2103; // Unlit indexed translucency, matching the legacy tracer fill.
-    mesh->materials.list.materials.push_back(material);
-    mesh->materials.textures.push_back(m_tracerTexture_);
+    materialData.list.materials.push_back(material);
+    materialData.textures.push_back(m_tracerTexture_);
+    mesh->materials = world::TsMaterialResources(std::move(materialData));
     world::StaticSurfaceTriangle triangle;
     triangle.vertices[0].position = start;
     triangle.vertices[1].position = end - side;

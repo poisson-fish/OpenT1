@@ -1,4 +1,5 @@
 #include "opent1/game/server_irc_controls.hpp"
+#include <iterator>
 
 namespace opent1::game {
 
@@ -34,9 +35,12 @@ bool ServerInfoCtrl::drawCell(
     }
     const auto& heading = row[0] == '0' ? currentServer_.teamHeading : currentServer_.playerHeading;
     std::vector<Int32> stops{0};
-    for (std::size_t i = 0; i + 1 < heading.size() && stops.size() < 16; ++i) {
-        if (heading[i] == '\t') {
-            stops.push_back(static_cast<UInt8>(heading[++i]));
+    for (auto characterIt = heading.begin();
+         characterIt != heading.end() && std::next(characterIt) != heading.end() &&
+         stops.size() < 16;
+         ++characterIt) {
+        if (*characterIt == '\t') {
+            stops.push_back(static_cast<UInt8>(*++characterIt));
         }
     }
     stops.push_back(640);

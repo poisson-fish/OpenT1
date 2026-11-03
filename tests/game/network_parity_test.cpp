@@ -22,6 +22,7 @@
 #include <fstream>
 #include <iterator>
 #include <limits>
+#include <ranges>
 
 using namespace opent1::game;
 using namespace sim_net_test;
@@ -32,10 +33,19 @@ void localProfileDelivery() {
     CHECK(app.init());
     auto& plugin = app.fearPlugin();
     auto& console = app.console();
-    CHECK(plugin.createServerWorld({}, true));
+    CHECK(plugin.createServerWorld({}, false));
+    auto* players = plugin.serverGlobals().playerManager;
+    CHECK(!players->findClient(2049));
+    CHECK(players->getNumClients() == 0 && players->getNumBaseReps() == 0);
+    const auto bot = players->aiAdded("Mission startup bot", "male1", "base", true);
+    CHECK(bot == 2049);
+    CHECK(!players->findClient(bot));
+    CHECK(players->findBaseRep(bot) && !players->findBaseRep(bot)->isClientRep());
+    console.setVariable("PCFG::Name", "LocalProfile");
     console.setVariable("PCFG::Info", "dummy RPG password \"quoted\" \\ value");
     console.setVariable("PCFG::RealName", "Profile Name");
-    CHECK(console.evaluate(R"(
+    CHECK(console
+              .evaluate(R"(
         function Server::onClientConnect(%client) {
             $profileConnectCount++;
             $profileConnectWorld = getManagerId();
@@ -57,33 +67,51 @@ void localProfileDelivery() {
             $Client::info[%client, 5] = %info;
         }
         function dataFinished() {
-            $profileAtDataFinished = $Client::info[2049, 5];
+            $profileAtDataFinished = $Client::info[$profileSender, 5];
         }
-    )").ok());
+    )")
+              .ok());
     // connect(LOOPBACK) must run the same script handshake as a remote join,
     // before datablock completion can trigger RPG's initial mission drop.
     CHECK(console.evaluate("connect(\"LOOPBACK:28001\");").value == "True");
+    const auto localId = Int32(plugin.clientGlobals().manager->getId());
+    CHECK(localId == 2050);
+    CHECK(players->findClient(localId)->name == "LocalProfile");
+    CHECK(players->findClient(localId)->isClientRep());
+    CHECK(players->findClient(localId)->playerPSC == plugin.serverGlobals().playerPSC);
+    CHECK(players->findBaseRep(bot)->name == "Mission startup bot");
+    CHECK(!players->findBaseRep(bot)->isClientRep());
+    CHECK(players->getNumClients() == 1 && players->getNumBaseReps() == 2);
     CHECK(console.getVariable("profileConnectCount") == "1");
     CHECK(console.getVariable("profileAcceptedCount") == "1");
     CHECK(console.getVariable("profileAcceptedMessage") == "Accepted");
     CHECK(console.getVariable("profileConnectWorld") ==
           std::to_string(plugin.serverGlobals().manager->getId()));
-    CHECK(console.getVariable("profileAcceptedWorld") == "2049");
+    CHECK(console.getVariable("profileAcceptedWorld") == std::to_string(localId));
     CHECK(console.getVariable("profileAddress") == "LOOPBACK:28001");
-    CHECK(console.getVariable("profileSender") == "2049");
+    CHECK(console.getVariable("profileSender") == std::to_string(localId));
     CHECK(console.getVariable("profileName") == "Profile Name");
     CHECK(console.getVariable("profileAtDataFinished") == console.getVariable("PCFG::Info"));
+    CHECK(plugin.focusServer());
+    CHECK(console.evaluate("PlayerData LocalProfileArmor { mass = 9; };").ok());
+    CHECK(plugin.spawnPlayer("LocalProfileArmor", {0, 0, 100}, {}));
+    CHECK(players->findClient(localId)->ownedObject);
+    CHECK(players->findClient(localId)->ownedObject->getOwnerClient() == localId);
+    CHECK(!plugin.spawnPlayer("LocalProfileArmor", {}, {}, bot));
     CHECK(console.execute("localConnect").value == "True");
     CHECK(console.getVariable("profileConnectCount") == "1");
     CHECK(console.getVariable("profileAcceptedCount") == "1");
     // Rehosting creates a new server-side client even when the client world
     // and loopback address survive. It must send the current profile again.
-    CHECK(plugin.createServerWorld({}, true));
+    CHECK(plugin.createServerWorld({}, false));
     console.setVariable("PCFG::Info", "");
     CHECK(console.execute("localConnect").value == "True");
     CHECK(console.getVariable("profileConnectCount") == "2");
     CHECK(console.getVariable("profileAcceptedCount") == "2");
     CHECK(console.getVariable("profileAtDataFinished").empty());
+    CHECK(plugin.clientGlobals().manager->getId() == 2049);
+    CHECK(plugin.clientGlobals().playerManager->findClient(2049));
+    CHECK(!plugin.clientGlobals().playerManager->findBaseRep(bot + 1));
 }
 
 void localObserverMenuState() {
@@ -152,8 +180,8 @@ void scriptObserverTransforms() {
     CHECK(camera && camera->mode() == ObserverCamera::FreeRotateMode);
     const auto matches = [&](const TMat3F& actual) {
         CHECK((actual.p - source->getLinearPosition()).len() < .001f);
-        for (int row = 0; row < 3; ++row) {
-            for (int col = 0; col < 3; ++col) {
+        for (auto row : std::views::iota(0, 3)) {
+            for (auto col : std::views::iota(0, 3)) {
                 CHECK(std::abs(actual.m[row][col] - source->getTransform().m[row][col]) < .00001f);
             }
         }
@@ -210,18 +238,21 @@ void localScriptKick() {
     CHECK(app.init());
     auto& plugin = app.fearPlugin();
     CHECK(plugin.createServerWorld({}, true));
+    CHECK(plugin.serverGlobals().playerManager->aiAdded("Startup NPC", "male1", "base", true) ==
+          2049);
     CHECK(app.console().execute("localConnect").value == "True");
+    CHECK(plugin.clientGlobals().manager->getId() == 2050);
     CHECK(app.console()
               .evaluate(R"(
         function Server::onClientDisconnect(%id) { $droppedClient = %id; }
         function onConnection(%state) { $connectionState = %state; }
-        schedule("Net::kick(2049, \"Dummy profile rejection\");", 0);
+        schedule("Net::kick(2050, \"Dummy profile rejection\");", 0);
     )")
               .ok());
     CHECK(app.stepFrame(0));
     CHECK(!plugin.isConnected() && !plugin.serverGlobals().manager && plugin.clientGlobals().manager);
     CHECK(app.console().getVariable("ConnectedToServer") == "false");
-    CHECK(app.console().getVariable("droppedClient") == "2049");
+    CHECK(app.console().getVariable("droppedClient") == "2050");
     CHECK(app.console().getVariable("connectionState") == "Dropped");
     CHECK(app.console().getVariable("errorString") == "Dummy profile rejection");
 }
@@ -451,7 +482,9 @@ void delayedControlReplay() {
     server->setControlObject(source);
     client->setControlObject(target);
     UInt32 previous = 0;
-    for (UInt32 i = 0; i < PlayerPSC::MaxMoves; ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < PlayerPSC::MaxMoves;
+                  })) {
         client->clientCollectInput(previous, i * 32 + 8, .032f);
         previous = i * 32 + 8;
     }
@@ -482,7 +515,7 @@ void soundEventDelivery() {
         CHECK(profile);
         profile->dist = 100;
         profile->profile.maxDistance = 100;
-        for (Int32 i = 0; i < 3; ++i) {
+        for (auto i : std::views::iota(Int32{0}, Int32{3})) {
             auto* sound = dynamic_cast<SoundData*>(blocks->createDataBlock(
                 "Effect" + std::to_string(i), DataBlockManager::SoundDataType));
             CHECK(sound);
@@ -902,7 +935,7 @@ void originalPscCapture() {
     CHECK(players->clientAdded("Capture", "male1", "base", true, 2049) == 2049);
     auto* psc = add<PlayerPSC>(endpoint.manager(), true);
     CHECK(endpoint.stream->addObject(*psc));
-    for (UInt32 mode = 0; mode < 6; ++mode) {
+    for (auto mode : std::views::iota(UInt32{0}, UInt32{6})) {
         auto* client = players->findClient(2049);
         client->curGuiMode = mode;
         client->sendScores = mode & 1;
@@ -1013,7 +1046,9 @@ void nativeServerFraming() {
     CHECK(client.itemCount(4) == 9);
     server.packetReceived(key);
     // Initial/control-absent packets and indexed inventory both reject truncation.
-    for (Int32 bits = 0; bits < count; ++bits) {
+    for (auto bits : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 bits) {
+                         return bits < count;
+                     })) {
         PlayerPSC truncated;
         truncated.setFirstMoveSeq(2);
         BitStream packet{std::span<const std::byte>(bytes)};
@@ -1035,7 +1070,7 @@ void recorderLayout() {
           output.write(UInt8{1}));
     CHECK(output.write(Int32{17}) && output.write(-0.25f) && output.write(0.125f));
     CHECK(output.getPosition() == 33);
-    for (std::size_t n = 0; n < bytes.size(); ++n) {
+    for (auto n : std::views::iota(std::size_t{0}, bytes.size())) {
         MemRWStream shortInput{std::span<const std::byte>(bytes).first(n)};
         CHECK(!psc.processRecorderStream(shortInput, 0));
         CHECK(psc.moves().empty());
@@ -1082,6 +1117,110 @@ void ownershipBacklinks() {
           players->findClient(2050)->ownedObject == object);
     CHECK(object->deleteObject());
     CHECK(!players->findClient(2050)->controlObject && !players->findClient(2050)->ownedObject);
+}
+
+void remoteJoinWithStartupBots() {
+    FearGameApp serverApp, clientApp;
+    CHECK(serverApp.init() && clientApp.init());
+    auto& serverPlugin = serverApp.fearPlugin();
+    auto& clientPlugin = clientApp.fearPlugin();
+    CHECK(serverPlugin.createServerWorld({}, true));
+    CHECK(serverApp.console()
+              .evaluate(R"(
+        function Server::onClientConnect(%id) { $HumanConnections++; $HumanId = %id; }
+        PlayerData NetworkBotArmor { mass = 9; boxWidth = 0.5; boxDepth = 0.5; boxNormalHeight = 2.3; };
+        AI::spawn(StartupBot, NetworkBotArmor, "0 2 100", "0 0 0", RemoteHuman);
+    )")
+              .ok());
+    auto& sg = serverPlugin.serverGlobals();
+    const auto* startupBot = sg.aiManager->findAI("StartupBot");
+    sg.playerManager->teamAdded("Players", "base");
+    sg.playerManager->teamAdded("Enemies", "base");
+    CHECK(startupBot && startupBot->id == 2049);
+    CHECK(sg.playerManager->getNumClients() == 0);
+    CHECK(serverApp.console().getVariable("HumanConnections").empty());
+    CHECK(clientApp.console()
+              .evaluate(R"(
+        function onClientJoin(%id) { $HumanJoins++; }
+        function onClientDrop(%id) { $HumanDrops++; }
+    )")
+              .ok());
+    clientApp.console().setVariable("PCFG::Name", "RemoteHuman");
+    const auto endpoint = net::parseIPv4Address(sg.csDelegate->delegate()->localAddress());
+    CHECK(endpoint);
+    const std::array<std::string, 1> address{"IP:127.0.0.1:" + std::to_string(endpoint->port)};
+    CHECK(clientApp.console().execute("connect", address).value == "True");
+    int frame = 0;
+    const auto advanceFrames = [&](int count, FearGameApp* replacement = nullptr) {
+        for (const auto currentFrame : std::views::iota(frame, frame + count)) {
+            const auto time = currentFrame * .032;
+            CHECK(serverApp.stepFrame(time, false));
+            CHECK(clientApp.stepFrame(time, false));
+            if (replacement) {
+                CHECK(replacement->stepFrame(time, false));
+            }
+        }
+        frame += count;
+    };
+    advanceFrames(64);
+    auto& cg = clientPlugin.clientGlobals();
+    CHECK(clientPlugin.isConnected() && cg.manager->getId() == 2050);
+    CHECK(serverApp.console().getVariable("HumanConnections") == "1");
+    CHECK(serverApp.console().getVariable("HumanId") == "2050");
+    CHECK(sg.playerManager->findClient(2050)->name == "RemoteHuman");
+    CHECK(!sg.playerManager->findClient(2049) && !cg.playerManager->findClient(2049));
+    CHECK(cg.playerManager->findBaseRep(2049));
+    CHECK(cg.playerManager->getNumClients() == 1 && cg.playerManager->getNumBaseReps() == 2);
+    CHECK(clientApp.console().getVariable("HumanJoins") == "1");
+    CHECK(serverApp.console()
+              .evaluate(R"(
+        AI::spawn(LateBot, NetworkBotArmor, "0 4 100");
+    )")
+              .ok());
+    auto* late = sg.aiManager->findAI("LateBot");
+    CHECK(late);
+    const auto lateId = late->id;
+    sg.playerManager->serverClientTeamChange(lateId, 1);
+    advanceFrames(16);
+    CHECK(cg.playerManager->findBaseRep(lateId));
+    CHECK(cg.playerManager->findBaseRep(lateId)->team == 1);
+    CHECK(!cg.playerManager->findClient(lateId));
+    CHECK(clientApp.console().getVariable("HumanJoins") == "1");
+    CHECK(sg.aiManager->remove("LateBot", true));
+    advanceFrames(16);
+    CHECK(!cg.playerManager->findBaseRep(lateId));
+    CHECK(clientApp.console().getVariable("HumanDrops").empty());
+    CHECK(sg.aiManager->remove("StartupBot", true));
+    advanceFrames(16);
+    CHECK(!cg.playerManager->findBaseRep(2049));
+    CHECK(cg.playerManager->findClient(2050) && sg.playerManager->findClient(2050));
+    CHECK(clientApp.console().getVariable("HumanDrops").empty());
+
+    // Reuse the former AI slot for a connection, then for an AI again while
+    // the first client stays connected and receives the ordered roster events.
+    FearGameApp replacementApp;
+    CHECK(replacementApp.init());
+    replacementApp.console().setVariable("PCFG::Name", "ReplacementHuman");
+    CHECK(replacementApp.console().execute("connect", address).value == "True");
+    advanceFrames(32, &replacementApp);
+    CHECK(replacementApp.fearPlugin().clientGlobals().manager->getId() == 2049);
+    CHECK(cg.playerManager->findClient(2049));
+    CHECK(cg.playerManager->findClient(2049)->name == "ReplacementHuman");
+    CHECK(cg.playerManager->getNumClients() == 2);
+    CHECK(clientApp.console().getVariable("HumanJoins") == "2");
+    CHECK(sg.playerManager->findClient(2049)->playerPSC);
+    CHECK(replacementApp.console().execute("disconnect").value == "True");
+    advanceFrames(16);
+    CHECK(!cg.playerManager->findBaseRep(2049));
+    CHECK(clientApp.console().getVariable("HumanDrops") == "1");
+    CHECK(serverApp.console().evaluate(
+        "AI::spawn(ReusedStartupBot, NetworkBotArmor, \"0 2 100\");").ok());
+    CHECK(sg.aiManager->findAI("ReusedStartupBot")->id == 2049);
+    advanceFrames(16);
+    CHECK(cg.playerManager->findBaseRep(2049) && !cg.playerManager->findClient(2049));
+    CHECK(cg.playerManager->getNumClients() == 1 && cg.playerManager->getNumBaseReps() == 2);
+    CHECK(clientApp.console().getVariable("HumanJoins") == "2");
+    CHECK(clientApp.console().getVariable("HumanDrops") == "1");
 }
 
 void addressedJoin() {
@@ -1132,6 +1271,7 @@ void liveServerBrowser() {
     CHECK(players->clientAdded("Buddy One", "male1", "base", true, 2049) == 2049);
     players->setClientScoreHeading("Player\tScore\tPing");
     players->setClientScore(2049, "%n\t7\t%p", 7);
+    CHECK(players->aiAdded("Hidden browser NPC", "male1", "base", true) > 0);
     auto* server = add<FearCSDelegate>(serverWorld.manager(),
                                        true,
                                        std::shared_ptr<BanList>{},
@@ -1150,7 +1290,7 @@ void liveServerBrowser() {
     serverConsole.setVariable("modList", "base");
     clientConsole.setVariable("pref::buddyList", "\"Buddy One\" Other");
     CHECK(client->queryBrowserServer(address));
-    for (UInt32 now = 1; now < 100; ++now) {
+    for (auto now : std::views::iota(UInt32{1}, UInt32{100})) {
         (void)client->delegate()->process(now);
         (void)server->delegate()->process(now);
     }
@@ -1177,7 +1317,7 @@ void liveServerBrowser() {
     CHECK(list.setServerPreference(address, true, false));
     serverConsole.setVariable("Server::Hostname", "Updated");
     CHECK(client->queryBrowserServer(address, true));
-    for (UInt32 now = 100; now < 150; ++now) {
+    for (auto now : std::views::iota(UInt32{100}, UInt32{150})) {
         (void)client->delegate()->process(now);
         (void)server->delegate()->process(now);
     }
@@ -1201,7 +1341,10 @@ void liveServerBrowser() {
     client->delegate()->browser().onTimeout(address);
     CHECK(client->discoveredServers().front().status == ServerListCtrl::STAT_TIME_OUT);
     const auto encoded = server->encodeBrowserGameInfo();
-    for (std::size_t size = 0; size < encoded.size() / 2; ++size) {
+    for (auto size :
+         std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t size) {
+             return size < encoded.size() / 2;
+         })) {
         CHECK(!client->receiveBrowserGameInfo(
             {address,
              1,
@@ -1222,7 +1365,10 @@ void hostnameConnection() {
     CHECK(endpoint == "IP:localhost:" + std::to_string(port));
     CHECK(client->connect(endpoint, 0) == net::Result::Ok);
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    for (UInt32 now = 1; !client->stream(2048); ++now) {
+    for (auto now :
+         std::views::iota(UInt32{1}) | std::views::take_while([&]([[maybe_unused]] UInt32 now) {
+             return !client->stream(2048);
+         })) {
         CHECK(std::chrono::steady_clock::now() < deadline);
         (void)server->process(now);
         (void)client->process(now);
@@ -1286,6 +1432,7 @@ int opent1_test_game_network_parity() {
     nativeServerFraming();
     recorderLayout();
     ownershipBacklinks();
+    remoteJoinWithStartupBots();
     addressedJoin();
     hostnameConnection();
     return 0;

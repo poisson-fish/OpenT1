@@ -1,4 +1,5 @@
 #include "test_support.hpp"
+#include <ranges>
 #include "test_registry.hpp"
 #include "ts_test_support.hpp"
 #include <opent1/game/game_app.hpp>
@@ -253,7 +254,9 @@ void largeInteriorMeshes() {
         world::InteriorSurface surface;
         surface.vertexCount = UInt8(count);
         geometry->surfaces.push_back(surface);
-        for (UInt16 i = 0; i < count; ++i) {
+        for (auto i : std::views::iota(UInt16{0}) | std::views::take_while([&](UInt16 i) {
+                          return i < count;
+                      })) {
             const auto angle = Flt32(i) * 2.f * std::numbers::pi_v<Flt32> / Flt32(count);
             geometry->points.push_back({std::cos(angle), 0, std::sin(angle)});
             geometry->texturePoints.push_back({Flt32(i) / count, 0});
@@ -264,12 +267,14 @@ void largeInteriorMeshes() {
         world::InteriorShapeResources resources;
         resources.shape = manager.load<world::InteriorShape>("ring.dis");
         resources.geometry.push_back(manager.load<world::InteriorGeometry>("ring.dig"));
-        resources.materials.list.materials.resize(1);
-        resources.materials.list.materials[0].flags = 1;
-        resources.materials.textures.resize(1);
+        world::TsMaterialResources::Data materialData;
+        materialData.list.materials.resize(1);
+        materialData.list.materials[0].flags = 1;
+        materialData.textures.resize(1);
+        resources.materials = world::TsMaterialResources(std::move(materialData));
         const auto mesh = world::WorldSurfaceMesh::interior(resources, 0, 0, false);
-        CHECK(mesh && mesh->triangles.size() == std::size_t(count - 2) &&
-              mesh->interiorSurfaceIds.size() == mesh->triangles.size());
+        CHECK(mesh && mesh->triangleCount() == std::size_t(count - 2) && mesh->interiorMesh &&
+              mesh->interiorMesh->surfaceIds.size() == mesh->triangleCount());
         world::TsStaticView view;
         view.shapeToCamera.identity();
         view.shapeToCamera.p = {0, 5, 0};
@@ -284,7 +289,7 @@ void emptyMissionLighting() {
     body.integer(7); // build id
     body.integer(4); // scale
     body.integer(0); // slots
-    for (int i = 0; i < 5; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(0, 5)) {
         body.integer(0);
     } // empty arrays
     body.integer(0);    // names
@@ -383,7 +388,7 @@ int opent1_test_installed_rpg_compatibility() {
               "compat-dummy-password");
         auto surface = gfx::SoftwareSurface::create(320, 240);
         CHECK(surface);
-        for (int frame = 0; frame < 8; ++frame) {
+        for (auto frame : std::views::iota(0, 8)) {
             CHECK(app.stepFrame(frame * .032));
             CHECK(app.renderFrame(*surface));
             CHECK(app.console().getVariable("OpenT1::LastRenderError").empty());
@@ -414,8 +419,8 @@ int opent1_test_installed_rpg_compatibility() {
         for (const auto* camera : {serverObserver, observer}) {
             const auto& eye = camera->getEyeTransform();
             CHECK((eye.p - marker->getLinearPosition()).len() < .001f);
-            for (int row = 0; row < 3; ++row) {
-                for (int col = 0; col < 3; ++col) {
+            for (auto row : std::views::iota(0, 3)) {
+                for (auto col : std::views::iota(0, 3)) {
                     CHECK(std::abs(eye.m[row][col] - marker->getTransform().m[row][col]) < .00001f);
                 }
             }
@@ -484,7 +489,7 @@ int opent1_test_installed_rpg_compatibility() {
         cg.playerPSC->setFirstPerson(false);
         world::WorldShapeQuery playerImage;
         CHECK(cg.playerPSC->getControlObject()->processQuery(playerImage) && playerImage.image);
-        CHECK(playerImage.image->resources.materials.list.materials.front().mapFile ==
+        CHECK(playerImage.image->resources.materials.list().materials.front().mapFile ==
               "rpgbase.larmor.BMP");
         cg.playerPSC->setFirstPerson(true);
         CHECK(app.console().evaluate("return SaveCharacter(2049);").value == "true");
@@ -545,7 +550,7 @@ int opent1_test_installed_rpg_compatibility() {
             returning.console().setVariable("PCFG::Script", "");
             returning.console().setVariable("PCFG::Info", password);
             CHECK(returning.loadMission("rpgmap5"));
-            for (int frame = 0; frame < 8; ++frame) {
+            for (auto frame : std::views::iota(0, 8)) {
                 CHECK(returning.stepFrame(frame * .032));
             }
             const bool rejected = password != "compat-dummy-password";
@@ -557,7 +562,9 @@ int opent1_test_installed_rpg_compatibility() {
             if (rejected) {
                 CHECK(dynamic_cast<game::ObserverCamera*>(returningClient.playerPSC->getControlObject()));
                 CHECK(!returning.fearPlugin().centerPrintText().empty());
-                for (int frame = 1; frame <= 81; ++frame) {
+                for (auto frame : std::views::iota(1) | std::views::take_while([&](int frame) {
+                                      return frame <= 81;
+                                  })) {
                     CHECK(returning.stepFrame(.224 + frame * .256));
                 }
                 CHECK(!returning.fearPlugin().isConnected());

@@ -1,5 +1,6 @@
 #pragma once
 #include <opent1/core/stream_io.hpp>
+#include <opent1/core/mapped_file.hpp>
 #include <filesystem>
 #include <optional>
 #include <vector>
@@ -19,7 +20,10 @@ struct VolumeItem {
     StreamCompressType compression{STRM_COMPRESS_NONE};
 };
 
-// Owns archive bytes and decoded entries. Names compare with ASCII case folding.
+// Retains read-only archive backing and owned decoded entries. Path sources use
+// a file mapping where available; span sources retain an owned copy.
+// Authoring replaces archive files atomically; never edit a mounted file in place.
+// Names compare with ASCII case folding.
 // Entry views expire on close/open; metadata views expire on close/openVolume.
 // Disk search paths belong in higher-level APIs.
 class VolumeRStream : public StreamIO {
@@ -34,6 +38,19 @@ public:
     VolumeRStream& operator=(VolumeRStream&& other) noexcept;
     Bool openVolume(const std::filesystem::path& path);
     Bool openVolume(std::span<const std::byte> bytes);
+
+    [[nodiscard]] std::size_t mappedBytes() const {
+        return mapped_ ? mapped_->bytes().size() : 0;
+    }
+
+    [[nodiscard]] std::size_t ownedBackingBytes() const {
+        return archive_.capacity();
+    }
+
+    [[nodiscard]] std::size_t decodeStagingBytes() const {
+        return decoded_.capacity();
+    }
+
     void closeVolume();
 
     [[nodiscard]] std::span<const VolumeItem> getVolumeItems() const noexcept {
@@ -69,6 +86,12 @@ private:
     Bool parse();
     Bool reject(std::string_view message);
     std::vector<std::byte> archive_, decoded_;
+    std::unique_ptr<ReadOnlyMappedFile> mapped_;
+
+    [[nodiscard]] std::span<const std::byte> archiveBytes() const {
+        return mapped_ ? mapped_->bytes() : std::span<const std::byte>(archive_);
+    }
+
     std::vector<VolumeItem> entries_;
     std::span<const std::byte> current_;
     std::string error_;

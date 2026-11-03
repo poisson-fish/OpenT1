@@ -1,4 +1,5 @@
 #include <opent1/gui/tool_dialogs.hpp>
+#include <ranges>
 
 namespace opent1::gui {
 namespace {
@@ -179,7 +180,9 @@ bool ToolDialogs::open(std::string_view kind, std::span<const std::string> args,
             return false;
         }
         if (!confirm) {
-            for (unsigned i = 0; i < (two ? 2U : 1U); ++i) {
+            for (auto i : std::views::iota(unsigned{0}) | std::views::take_while([&](unsigned i) {
+                              return i < (two ? 2U : 1U);
+                          })) {
                 auto& edit = p->edits[i];
                 edit.maxBytes = 254;
                 edit.active = true;
@@ -207,7 +210,9 @@ bool ToolDialogs::open(std::string_view kind, std::span<const std::string> args,
             confirm ? std::array<std::string_view, 4>{"Yes", "No", "Cancel", ""}
                     : std::array<std::string_view, 4>{"OK", "Cancel", "Browse...", ""};
         const unsigned count = confirm || browse ? 3 : 2;
-        for (unsigned i = 0; i < count; ++i) {
+        for (auto i : std::views::iota(unsigned{0}) | std::views::take_while([&](unsigned i) {
+                          return i < count;
+                      })) {
             auto& b = p->buttons[i];
             b.text = labels[i];
             b.message = i + 1;

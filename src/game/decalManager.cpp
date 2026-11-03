@@ -1,4 +1,5 @@
 #include <opent1/game/decal_manager.hpp>
+#include <ranges>
 #include <opent1/game/string_table.hpp>
 #include <opent1/sim/sim_world_game.hpp>
 #include <opent1/console/console.hpp>
@@ -46,7 +47,9 @@ bool DecalManager::onAdd() {
         mgr->assignId(*this, DecalManagerId);
         addToSet(SimRenderSetId);
     }
-    for (std::size_t i = 0; i < DECALS; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < DECALS;
+                  })) {
         sizes_[i] = kDecalTypes[i].size;
     }
     reset();
@@ -56,7 +59,7 @@ bool DecalManager::onAdd() {
 std::optional<world::TsStaticShapeFrame>
 DecalManager::prepareFrame(ResourceManager& resources, const sim::EnvironmentCamera& camera) {
     if (!materials_) {
-        world::TsMaterialResources materials;
+        world::TsMaterialResources::Data materials;
         materials.list.details = 1;
         materials.list.materialsPerDetail = DECALS;
         for (const auto& desc : kDecalTypes) {
@@ -76,12 +79,14 @@ DecalManager::prepareFrame(ResourceManager& resources, const sim::EnvironmentCam
     std::vector<world::StaticSurfaceTriangle> triangles;
     triangles.reserve(std::size_t(activeCount_) * 2);
     constexpr std::array<Point2F, 4> uv{{{0, 0}, {1, 0}, {1, 1}, {0, 1}}};
-    for (Int32 i = 0; i < activeCount_; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < activeCount_;
+                  })) {
         const auto& decal = rgDecals_[std::size_t((curFirstDecal_ + i) % numDecals_)];
         for (const auto indices : {std::array{0, 1, 2}, std::array{0, 2, 3}}) {
             world::StaticSurfaceTriangle triangle;
             triangle.material = UInt32(decal.type);
-            for (std::size_t j = 0; j < 3; ++j) {
+            for (auto j : std::views::iota(std::size_t{0}, std::size_t{3})) {
                 triangle.vertices[j].position = decal.worldPts[indices[j]];
                 triangle.vertices[j].texture = uv[indices[j]];
             }

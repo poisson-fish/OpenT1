@@ -1,4 +1,5 @@
 #include <opent1/game/commander_huds.hpp>
+#include <ranges>
 
 namespace opent1::game {
 
@@ -36,7 +37,10 @@ bool CommandTeamCtrl::event(const gui::Event& event) {
                     point.x >= 16 + entry.depth * 8 && point.x < 24 + entry.depth * 8;
                 if (event.shift && selected.y >= 0 && !expand) {
                     bool first = true;
-                    for (auto i = std::min(row, selected.y); i <= std::max(row, selected.y); ++i) {
+                    for (auto i : std::views::iota(std::min(row, selected.y)) |
+                                      std::views::take_while([&](auto i) {
+                                          return i <= std::max(row, selected.y);
+                                      })) {
                         clicked(rows_[std::size_t(i)].clientId, !first, false, false);
                         first = false;
                     }

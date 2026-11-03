@@ -1,4 +1,5 @@
 #include <opent1/video/player.hpp>
+#include <ranges>
 #include <opent1/core/file_stream.hpp>
 #include <opent1/core/mem_stream.hpp>
 #include <chrono>
@@ -37,7 +38,9 @@ UInt64 rgbaHash(const Frame& frame) {
     std::vector<std::byte> rgba;
     const auto& bitmap = frame.bitmap;
     const auto& pal = bitmap.palette->palettes[0].colors;
-    for (Int32 y = 0; y < bitmap.height; ++y) {
+    for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                      return y < bitmap.height;
+                  })) {
         for (auto pixel : bitmap.row(y).first(std::size_t(bitmap.width))) {
             const auto color = pal[std::to_integer<UInt8>(pixel)];
             rgba.insert(rgba.end(),
@@ -81,7 +84,7 @@ std::vector<Case> corpus(const char* path = OPENT1_VIDEO_FIXTURE) {
         c.frames.resize(read<UInt32>(stream));
         for (auto& f : c.frames) {
             f.rgba = read<UInt64>(stream);
-            for (std::size_t t = 0; t < 7; ++t) {
+            for (auto t : std::views::iota(std::size_t{0}, std::size_t{7})) {
                 f.sizes[t] = read<UInt32>(stream);
                 f.hashes[t] = read<UInt64>(stream);
             }
@@ -92,7 +95,9 @@ std::vector<Case> corpus(const char* path = OPENT1_VIDEO_FIXTURE) {
 
 void independent(const std::vector<Case>& cases) {
     UInt32 frames{}, chunks{};
-    for (std::size_t ci = 0; ci < cases.size(); ++ci) {
+    for (auto ci : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t ci) {
+                       return ci < cases.size();
+                   })) {
         const auto& c = cases[ci];
         auto movie = load(c.bytes);
         CHECK(movie);
@@ -119,7 +124,7 @@ void independent(const std::vector<Case>& cases) {
                              static_cast<unsigned long long>(expected.rgba));
                 CHECK(false);
             }
-            for (UInt32 t = 0; t < 7; ++t) {
+            for (auto t : std::views::iota(UInt32{0}, UInt32{7})) {
                 const auto& pcm = frame->audio[t];
                 CHECK(pcm.bytes.size() == expected.sizes[t]);
                 if (hash(pcm.bytes) != expected.hashes[t]) {
@@ -139,7 +144,7 @@ void independent(const std::vector<Case>& cases) {
         CHECK(!decoder.next());
         CHECK(decoder.frame() == retained.back());
         CHECK(!decoder.seek(movie->frameCount()));
-        for (UInt32 t = 0; t < 7; ++t) {
+        for (auto t : std::views::iota(UInt32{0}, UInt32{7})) {
             CHECK(movie->audioSamples(t) == samples[t]);
             const auto format = movie->audioFormat(t);
             if (!format.rate) {
@@ -160,7 +165,7 @@ void independent(const std::vector<Case>& cases) {
             CHECK(rgbaHash(*decoder.frame()) == c.frames[i].rgba);
         }
         movie.reset();
-        for (std::size_t i = 0; i < c.frames.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, c.frames.size())) {
             CHECK(rgbaHash(*retained[i]) == c.frames[i].rgba);
         }
     }
@@ -169,14 +174,14 @@ void independent(const std::vector<Case>& cases) {
 
 UInt32 le32(const std::vector<std::byte>& b, std::size_t at) {
     UInt32 v{};
-    for (UInt32 i = 0; i < 4; ++i) {
+    for (auto i : std::views::iota(UInt32{0}, UInt32{4})) {
         v |= UInt32(std::to_integer<UInt8>(b[at + i])) << (i * 8);
     }
     return v;
 }
 
 void word(std::vector<std::byte>& b, std::size_t at, UInt32 value) {
-    for (UInt32 i = 0; i < 4; ++i) {
+    for (auto i : std::views::iota(UInt32{0}, UInt32{4})) {
         b[at + i] = std::byte((value >> (i * 8)) & 255);
     }
 }
@@ -184,7 +189,9 @@ void word(std::vector<std::byte>& b, std::size_t at, UInt32 value) {
 std::size_t packet(const std::vector<std::byte>& b, UInt32 frame) {
     const auto count = le32(b, 12) + (le32(b, 20) & 1);
     std::size_t at = 104 + count * 5 + le32(b, 52);
-    for (UInt32 i = 0; i < frame; ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < frame;
+                  })) {
         at += le32(b, 104 + i * 4) & ~3U;
     }
     return at;
@@ -200,7 +207,7 @@ std::vector<std::byte> corrupt(const Case& c, UInt32 frame) {
 
 void rejection(const std::vector<Case>& cases) {
     const auto& bytes = cases[0].bytes;
-    for (std::size_t n = 0; n < bytes.size(); ++n) {
+    for (auto n : std::views::iota(std::size_t{0}, bytes.size())) {
         MemRWStream cut{std::span<const std::byte>(bytes).first(n)};
         CHECK(!Movie::load(cut, UInt32(n)));
     }
@@ -223,14 +230,17 @@ void rejection(const std::vector<Case>& cases) {
     // Bounded deterministic mutation sweep exercises malformed trees, palettes,
     // packet lengths, audio headers and compressed code paths under ASan too.
     UInt32 random = 13;
-    for (UInt32 i = 0; i < 2000; ++i) {
+    for (auto i : std::views::iota(UInt32{0}, UInt32{2000})) {
         auto mutated = bytes;
         random = random * 1664525U + 1013904223U;
         const auto at = random % mutated.size();
         mutated[at] ^= std::byte(1U << (i % 8));
         if (auto m = load(mutated)) {
             Decoder d(m);
-            for (UInt32 f = 0; f < m->frameCount() && f < 8; ++f) {
+            for ([[maybe_unused]] auto f :
+                 std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 f) {
+                     return f < m->frameCount() && f < 8;
+                 })) {
                 if (!d.next()) {
                     break;
                 }
@@ -306,7 +316,7 @@ void playback(const std::vector<Case>& cases) {
     const auto block = cycle.format.channels * (cycle.format.bits / 8);
     cycle.bytes.resize(std::size_t(movie->durationUs() * cycle.format.rate / 1000000) * block);
     const auto start = std::size_t(p.snapshot().timeUs * cycle.format.rate / 1000000) * block;
-    for (std::size_t i = 0; i < p.snapshot().audio[0].bytes.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, p.snapshot().audio[0].bytes.size())) {
         CHECK(p.snapshot().audio[0].bytes[i] == cycle.bytes[(start + i) % cycle.bytes.size()]);
     }
     CHECK(p.seek(319999, 1000000));
@@ -328,7 +338,7 @@ void playback(const std::vector<Case>& cases) {
     CHECK(rgbaHash(*old) == cases[0].frames[0].rgba);
     const auto allTracks = load(cases[11].bytes);
     CHECK(p.load(allTracks, 0, {false, 127}));
-    for (UInt32 t = 0; t < 7; ++t) {
+    for (auto t : std::views::iota(UInt32{0}, UInt32{7})) {
         const auto format = allTracks->audioFormat(t);
         auto expected = allTracks->audio(t, 0, format.rate);
         expected.bytes.resize(std::size_t(allTracks->durationUs() * format.rate / 1000000) *

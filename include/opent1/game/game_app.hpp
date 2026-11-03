@@ -80,7 +80,7 @@ public:
     }
 
     bool loadPendingMission();
-    bool stepFrame(double wallTimeSeconds);
+    bool stepFrame(double wallTimeSeconds, bool renderCanvases = true);
     bool bindGameplayActions();
     [[nodiscard]] bool gameplayInputActive() const;
     [[nodiscard]] bool gameplayKeyboardActive() const;
@@ -95,6 +95,7 @@ public:
     bool renderFrame(gfx::SoftwareSurface& surface,
                      gfx::HardwareBatch* hardware = nullptr,
                      Flt32 paletteGamma = 1);
+    void trimRenderCaches(); // disposable CPU derived data; immutable mission sources remain owned
     [[nodiscard]] gui::Presentation guiPresentation(Point2I framebufferPixels) const;
 
     [[nodiscard]] Point3F hardwareHazeColor() const noexcept {

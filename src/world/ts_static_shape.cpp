@@ -1,6 +1,8 @@
 #include <opent1/gfx/render_limits.hpp>
 #include <opent1/gfx/render_stats.hpp>
 #include <opent1/world/ts_static_shape.hpp>
+#include <opent1/core/reusable_scratch.hpp>
+#include "ts_retained_mesh.hpp"
 #include <map>
 #include <algorithm>
 #include <cmath>
@@ -8,6 +10,15 @@
 #include <ranges>
 
 namespace opent1::world {
+struct TsStaticShapeFrame::RetainedPart {
+    std::shared_ptr<const gfx::HardwareMesh> mesh;
+    gfx::HardwareTransform transform;
+    TMat3F toCamera;
+    Point3F offset;
+    std::optional<TsPreparedLighting>
+        lighting; // prepared scalars; no copied directional shadow maps
+};
+
 namespace {
 bool finite(Point3F p) {
     return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z);
@@ -43,6 +54,17 @@ struct Vertex {
     Point2F lightMap{};
     Flt32 farSphereDistance{}, haze{};
     UInt8 screenBoundary{};
+};
+
+struct ShapeScratch {
+    std::vector<bool> selected;
+    std::vector<Vertex> vertices, clipping;
+
+    void clear() {
+        detail::clearScratch(selected);
+        detail::clearScratch(vertices);
+        detail::clearScratch(clipping);
+    }
 };
 
 Flt64 distance(const Vertex& a, Int32 plane, const TsStaticView& v) {
@@ -250,7 +272,7 @@ TsStaticShapeFrame::prepareSurfaces(TsMaterialResources materials,
                                     std::span<const StaticSurfaceTriangle> triangles,
                                     const TsStaticView& view) {
     if (!validView(view) || triangles.size() > 1'048'576 ||
-        materials.list.materials.size() != materials.textures.size()) {
+        materials.list().materials.size() != materials.textures().size()) {
         return {};
     }
     TsStaticShapeFrame result;
@@ -264,13 +286,13 @@ TsStaticShapeFrame::prepareSurfaces(TsMaterialResources materials,
     scratch.reserve(10);
     std::optional<TMat3F> cameraToShape;
     if (!std::ranges::all_of(triangles, [&](const auto& triangle) {
-            if (triangle.material >= result.resources_.materials.list.materials.size()) {
+            if (triangle.material >= result.resources_.materials.list().materials.size()) {
                 return false;
             }
             if (triangle.lightMap && !triangle.lightMap->valid()) {
                 return false;
             }
-            if (!result.resources_.materials.list.materials[triangle.material].type()) {
+            if (!result.resources_.materials.list().materials[triangle.material].type()) {
                 return true;
             }
             vertices.clear();
@@ -291,7 +313,7 @@ TsStaticShapeFrame::prepareSurfaces(TsMaterialResources materials,
                     return false;
                 }
                 const auto texture =
-                    result.resources_.materials.list.materials[triangle.material].type() == 3
+                    result.resources_.materials.list().materials[triangle.material].type() == 3
                         ? vertex.texture
                         : Point2F{};
                 vertices.push_back({p,
@@ -343,7 +365,7 @@ TsStaticShapeFrame::prepareSurfaces(TsMaterialResources materials,
                                 1);
                         p.softwareVertices = p.vertices;
                         const auto* bitmap =
-                            result.resources_.materials.textures[triangle.material].get();
+                            result.resources_.materials.textures()[triangle.material].get();
                         if (!bitmap) {
                             return false;
                         }
@@ -388,9 +410,10 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
 
 std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources resources,
                                                               const TsStaticView& view,
-                                                              const TsShapePose& pose) {
+                                                              const TsShapePose& pose,
+                                                              bool retainedHardware) {
     if (!validView(view) || !resources.shape ||
-        resources.materials.list.materials.size() != resources.materials.textures.size()) {
+        resources.materials.list().materials.size() != resources.materials.textures().size()) {
         return {};
     }
     const auto& shape = *resources.shape;
@@ -442,7 +465,9 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
         return {};
     }
     const auto transforms = pose.nodeTransforms();
-    std::vector<bool> selected(shape.nodes.size());
+    detail::ScratchLease<ShapeScratch> workspace;
+    auto& selected = workspace.get().selected;
+    selected.resize(shape.nodes.size());
     if (!std::ranges::all_of(std::views::iota(std::size_t{0}, shape.nodes.size()), [&](auto i) {
             const auto& node = shape.nodes[i];
             if (!at(node.defaultTransform, shape.transforms.size()) ||
@@ -456,7 +481,23 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
         return {};
     }
     std::size_t work{};
-    std::vector<Vertex> vertices, scratch;
+    bool retain = retainedHardware && view.perspective && !view.twoSided &&
+                  view.minimumProjectedAltitude == 0;
+    if (retain) {
+        result.retainedPose_ = pose;
+        // Software fallback needs clipping optics and the prepared per-mesh
+        // lights below. Retaining the source view would clone full shadow maps.
+        auto& projection = result.retainedView_.emplace();
+        projection.width = view.width;
+        projection.height = view.height;
+        projection.focal = view.focal;
+        projection.center = view.center;
+        projection.nearDistance = view.nearDistance;
+        projection.farDistance = view.farDistance;
+        projection.perspective = view.perspective;
+    }
+    auto& vertices = workspace.get().vertices;
+    auto& scratch = workspace.get().clipping;
     vertices.reserve(10);
     scratch.reserve(10);
     const auto ok = std::ranges::all_of(
@@ -495,6 +536,103 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
                     return false;
                 }
             }
+            std::shared_ptr<const ts_detail::RetainedMesh> sourceMesh;
+            std::shared_ptr<const RetainedPart> part;
+            std::optional<Point3F> localEye;
+            Flt64 determinant{};
+            gfx::HardwareTransform transform;
+            if (retain) {
+                sourceMesh = ts_detail::retainedMesh(
+                    resources.shape, object.mesh, state, resources.materials, pose);
+                if (!sourceMesh)
+                    return false;
+                if (!sourceMesh->hardware)
+                    return true;
+                auto localToCamera = toCamera;
+                localToCamera.preTranslate(object.offset);
+                std::array<bool, 6> outside;
+                outside.fill(true);
+                for (auto corner : std::views::iota(UInt32{0}, UInt32{8})) {
+                    const Point3F local{
+                        corner & 1U ? sourceMesh->bounds.fMax.x : sourceMesh->bounds.fMin.x,
+                        corner & 2U ? sourceMesh->bounds.fMax.y : sourceMesh->bounds.fMin.y,
+                        corner & 4U ? sourceMesh->bounds.fMax.z : sourceMesh->bounds.fMin.z};
+                    Point3F p;
+                    m_mul(local, localToCamera, p);
+                    if (!finite(p))
+                        return false;
+                    const std::array<Flt64, 6> planes{
+                        Flt64(p.y) - view.nearDistance,
+                        Flt64(view.farDistance) - p.y,
+                        Flt64(p.x) * view.focal.x + Flt64(p.y) * view.center.x,
+                        -Flt64(p.x) * view.focal.x +
+                            Flt64(p.y) * (Flt64(view.width) - view.center.x),
+                        -Flt64(p.z) * view.focal.y + Flt64(p.y) * view.center.y,
+                        Flt64(p.z) * view.focal.y +
+                            Flt64(p.y) * (Flt64(view.height) - view.center.y)};
+                    const auto margin = 1e-5 * (std::abs(Flt64(p.x) * view.focal.x) +
+                                                std::abs(Flt64(p.y)) * (view.width + view.height) +
+                                                std::abs(Flt64(p.z) * view.focal.y) + 1);
+                    for (auto j : std::views::iota(std::size_t{0}, outside.size()))
+                        outside[j] = outside[j] && planes[j] < -margin;
+                }
+                if (std::ranges::any_of(outside, std::identity{}))
+                    return true;
+                determinant = localToCamera.determinant();
+                if (std::isfinite(determinant) && std::abs(determinant) > 1e-8) {
+                    auto inverse = localToCamera;
+                    inverse.inverse();
+                    if (finite(inverse.p))
+                        localEye = inverse.p;
+                }
+                for (auto i : std::views::iota(std::size_t{0}, std::size_t{3}))
+                    transform.camera[i] = {localToCamera.m[0][i],
+                                           localToCamera.m[1][i],
+                                           localToCamera.m[2][i],
+                                           localToCamera.p[i]};
+                transform.optics = {view.focal.x, view.focal.y, view.center.x, view.center.y};
+                transform.clip = {view.nearDistance, view.farDistance, 1, 0};
+                transform.geometry[2] = 2;
+                transform.ambient = {1, 1, 1, 0};
+                if (preparedLights) {
+                    const auto& light = preparedLights->lighting();
+                    transform.ambient = {light.ambient.x, light.ambient.y, light.ambient.z, 0};
+                    const bool lit = std::ranges::any_of(sourceMesh->modes, [](auto mode) {
+                        return mode == 1 || mode == 2;
+                    });
+                    std::size_t active{};
+                    for (auto i : std::views::iota(std::size_t{0}, light.lights.size())) {
+                        const auto& l = light.lights[i];
+                        const auto& s = preparedLights->states()[i];
+                        if (!lit || (l.type == TsLight::Type::Point &&
+                                     s.mode == TsPreparedLighting::PointMode::OutOfRange))
+                            continue;
+                        if (active == 2 || (l.type == TsLight::Type::Point &&
+                                            std::ranges::find(sourceMesh->modes, UInt8{2}) !=
+                                                sourceMesh->modes.end()))
+                            return false; // preserve uncommon lighting on the projected path
+                        const auto p = l.type == TsLight::Type::Point ? l.position : l.direction;
+                        transform.parameters[active * 4] = {p.x, p.y, p.z, Flt32(l.type)};
+                        transform.parameters[active * 4 + 1] = {
+                            l.intensity.x, l.intensity.y, l.intensity.z, l.range};
+                        transform.parameters[active * 4 + 2] = {
+                            l.attenuation.x, l.attenuation.y, l.attenuation.z, Flt32(s.mode)};
+                        transform.parameters[active * 4 + 3] = {
+                            s.direction.x,
+                            s.direction.y,
+                            s.direction.z,
+                            l.type == TsLight::Type::Point ? s.attenuation : l.shadowAttenuation};
+                        ++active;
+                    }
+                    transform.ambient[3] = Flt32(active);
+                }
+                part =
+                    std::make_shared<const RetainedPart>(RetainedPart{sourceMesh->hardware,
+                                                                      transform,
+                                                                      toCamera,
+                                                                      object.offset,
+                                                                      std::move(preparedLights)});
+            }
             return std::ranges::all_of(mesh.faces, [&](const auto& face) {
                 if (face.material == -1) {
                     return true;
@@ -506,18 +644,46 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
                     }
                     materialIndex = pose.materialRemap()[std::size_t(face.material)];
                 }
-                if (!at(materialIndex, resources.materials.list.materials.size()) ||
-                    materialIndex >= resources.materials.list.materialsPerDetail) {
+                if (!at(materialIndex, resources.materials.list().materials.size()) ||
+                    materialIndex >= resources.materials.list().materialsPerDetail) {
                     return false;
                 }
                 const auto& material =
-                    resources.materials.list.materials[std::size_t(materialIndex)];
+                    resources.materials.list().materials[std::size_t(materialIndex)];
                 if (!material.type()) {
                     return true;
                 }
                 const auto shading = material.flags & 0xf00U;
                 const bool lit = view.lighting && (shading == 0x200U || shading == 0x400U) &&
                                  !(material.type() == 3 && (material.flags & 0x3000U));
+                if (retain) {
+                    const auto faceIndex = std::size_t(&face - mesh.faces.data());
+                    if (localEye) {
+                        const auto& plane = sourceMesh->facePlanes[faceIndex];
+                        Flt64 distance = plane[3], magnitude = std::abs(plane[3]) + 1;
+                        for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
+                            const auto value = plane[i] * (*localEye)[i];
+                            distance += value;
+                            magnitude += std::abs(value);
+                        }
+                        if (distance * determinant > 1e-4 * magnitude * std::abs(determinant))
+                            return true;
+                    }
+                    Polygon polygon;
+                    polygon.material = std::size_t(materialIndex);
+                    polygon.vertices = {{{{0, 0}}, {{1, 0}}, {{0, 1}}}};
+                    const auto haze =
+                        view.haze > .0001f && !(material.flags & 0x2000U) ? view.haze : 0.f;
+                    for (auto& v : polygon.vertices)
+                        v.haze = haze;
+                    polygon.retained = part;
+                    polygon.firstIndex = sourceMesh->firstIndices[faceIndex];
+                    if (!part->mesh || polygon.firstIndex == UINT32_MAX ||
+                        result.polygons_.size() >= gfx::renderLimits().polygons)
+                        return false;
+                    result.polygons_.push_back(std::move(polygon));
+                    return true;
+                }
                 Flt32 flatShade = 1;
                 vertices.clear();
                 if (!std::ranges::all_of(face.corners, [&](const auto& corner) {
@@ -598,6 +764,8 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
             });
         });
     if (!ok) {
+        if (retain)
+            return prepare(std::move(resources), view, pose, false);
         return {};
     }
     result.resources_ = std::move(resources);
@@ -606,7 +774,7 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
     // to the scene; triangle sorting here would split a native render image.
     std::ranges::stable_sort(result.polygons_, [&](const auto& a, const auto& b) {
         const auto translucent = [&](const auto& p) {
-            return (result.resources_.materials.list.materials[p.material].flags & 0x2000U) != 0;
+            return (result.resources_.materials.list().materials[p.material].flags & 0x2000U) != 0;
         };
         if (translucent(a) != translucent(b)) {
             return !translucent(a);
@@ -618,14 +786,22 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
 
 std::optional<std::vector<gfx::HardwarePolygon>>
 TsStaticShapeFrame::hardwarePolygons(const gfx::Palette* palette, Flt32 paletteGamma) const {
+    std::vector<gfx::HardwarePolygon> inputs;
+    return appendHardwarePolygons(inputs, palette, paletteGamma) ? std::optional(std::move(inputs))
+                                                                 : std::nullopt;
+}
+
+bool TsStaticShapeFrame::appendHardwarePolygons(std::vector<gfx::HardwarePolygon>& inputs,
+                                                const gfx::Palette* palette,
+                                                Flt32 paletteGamma) const {
     if ((palette && !palette->valid()) || !std::isfinite(paletteGamma) || paletteGamma < .05f ||
         paletteGamma > 20) {
-        return {};
+        return false;
     }
-    std::vector<gfx::HardwarePolygon> inputs;
-    inputs.reserve(polygons_.size());
+    const auto first = inputs.size();
+    inputs.reserve(first + polygons_.size());
     if (!std::ranges::all_of(polygons_, [&](const auto& p) {
-            const auto& source = resources_.materials.list.materials[p.material];
+            const auto& source = resources_.materials.list().materials[p.material];
             gfx::HardwareMaterial material;
             material.perspective = perspective_;
             if (source.type() == 1 && (!palette || source.index < 0 || source.index > 255)) {
@@ -633,7 +809,7 @@ TsStaticShapeFrame::hardwarePolygons(const gfx::Palette* palette, Flt32 paletteG
             }
             material.color = color(source, palette);
             if (source.type() == 1 && paletteGamma != 1) {
-                for (std::size_t i = 0; i < 3; ++i) {
+                for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
                     material.color[i] =
                         Flt32(std::pow(material.color[i], double(1.f / paletteGamma)));
                 }
@@ -656,7 +832,7 @@ TsStaticShapeFrame::hardwarePolygons(const gfx::Palette* palette, Flt32 paletteG
             material.lightMap = p.lightMap.get();
             if (source.type() == 3) {
                 material.wrap = p.repeatTexture;
-                material.texture = resources_.materials.textures[p.material].get();
+                material.texture = resources_.materials.textures()[p.material].get();
                 material.useSurfacePalette = true;
                 if (!material.texture) {
                     return false;
@@ -707,11 +883,20 @@ TsStaticShapeFrame::hardwarePolygons(const gfx::Palette* palette, Flt32 paletteG
                               material,
                               p.lightMap ? std::span<const Point2F>(p.lightCoordinates)
                                          : std::span<const Point2F>{}});
+            if (p.retained) {
+                auto& input = inputs.back();
+                input.mesh = p.retained->mesh;
+                input.transform = p.retained->transform;
+                input.transform.geometry[0] = p.vertices[0].haze;
+                input.firstIndex = p.firstIndex;
+                input.indexCount = 3;
+            }
             return true;
         })) {
-        return {};
+        inputs.resize(first);
+        return false;
     }
-    return inputs;
+    return true;
 }
 
 std::optional<gfx::HardwareBatch> TsStaticShapeFrame::hardware(const gfx::Palette* palette,
@@ -777,8 +962,7 @@ NativeSoftwareTextureCache::prepare(const Resource<gfx::Bitmap>& texture,
         hash(value);
     }
     const auto [first, last] = index_.equal_range(key);
-    for (auto i = first; i != last; ++i) {
-        const auto entry = i->second;
+    for (const auto& [cachedKey, entry] : std::ranges::subrange(first, last)) {
         const auto& settings = entry->native->settings;
         if (entry->texture.get() == texture.get() && entry->mip == mip && settings.size == s.size &&
             settings.offset == s.offset && settings.lightScale == s.lightScale &&
@@ -809,11 +993,12 @@ NativeSoftwareTextureCache::prepare(const Resource<gfx::Bitmap>& texture,
            (entries_.size() >= 2048 || bytes_ > gfx::Bitmap::MaxFileBytes - bytes)) {
         const auto evicted = std::prev(entries_.end());
         const auto [begin, end] = index_.equal_range(evicted->key);
-        for (auto i = begin; i != end; ++i) {
-            if (i->second == evicted) {
-                index_.erase(i);
-                break;
-            }
+        const auto found =
+            std::ranges::find(std::ranges::subrange(begin, end), evicted, [](const auto& item) {
+                return item.second;
+            });
+        if (found != end) {
+            index_.erase(found);
         }
         bytes_ -= entries_.back().bitmap->pixels.size();
         entries_.pop_back();
@@ -828,6 +1013,10 @@ NativeSoftwareTextureCache::prepare(const Resource<gfx::Bitmap>& texture,
 std::optional<std::vector<gfx::SortedPolygon>>
 TsStaticShapeFrame::softwarePolygons(const gfx::Palette* palette,
                                      NativeSoftwareTextureCache* cache) const {
+    if (retainedPose_) {
+        const auto* frame = projected();
+        return frame ? frame->softwarePolygons(palette, cache) : std::nullopt;
+    }
     if (palette && !palette->valid()) {
         return {};
     }
@@ -838,7 +1027,7 @@ TsStaticShapeFrame::softwarePolygons(const gfx::Palette* palette,
         cached;
     std::size_t preparedBytes{};
     if (!std::ranges::all_of(polygons_, [&](const auto& p) {
-            const auto& source = resources_.materials.list.materials[p.material];
+            const auto& source = resources_.materials.list().materials[p.material];
             gfx::PolygonMaterial material;
             material.shadeSource = p.shadeSource;
             material.shade = p.shade;
@@ -855,7 +1044,7 @@ TsStaticShapeFrame::softwarePolygons(const gfx::Palette* palette,
             material.lightMap = p.lightMap.get();
             material.perspective = bool(p.lightMap);
             if (source.type() == 3) {
-                material.texture = resources_.materials.textures[p.material].get();
+                material.texture = resources_.materials.textures()[p.material].get();
                 if (!material.texture) {
                     return false;
                 }
@@ -896,7 +1085,7 @@ TsStaticShapeFrame::softwarePolygons(const gfx::Palette* palette,
                 if (!bitmap) {
                     auto settings = p.nativeSoftware->settings;
                     settings.mipLevel = p.nativeMip;
-                    bitmap = cache ? cache->prepare(resources_.materials.textures[p.material],
+                    bitmap = cache ? cache->prepare(resources_.materials.textures()[p.material],
                                                     p.lightMap,
                                                     p.nativeSoftware,
                                                     p.nativeMip)
@@ -943,6 +1132,10 @@ bool TsStaticShapeFrame::draw(gfx::SoftwareSurface& surface) const {
 }
 
 std::unique_ptr<gfx::Bitmap> TsStaticShapeFrame::silhouette() const {
+    if (retainedPose_) {
+        const auto* frame = projected();
+        return frame ? frame->silhouette() : nullptr;
+    }
     if (viewport_.x <= 0 || viewport_.x > 256 || viewport_.y <= 0 || viewport_.y > 256) {
         return {};
     }
@@ -959,5 +1152,88 @@ std::unique_ptr<gfx::Bitmap> TsStaticShapeFrame::silhouette() const {
         return {};
     }
     return std::make_unique<gfx::Bitmap>(surface->bitmap());
+}
+
+const TsStaticShapeFrame* TsStaticShapeFrame::projected() const {
+    if (!projected_) {
+        auto result = std::make_shared<TsStaticShapeFrame>();
+        result->resources_ = resources_;
+        result->viewport_ = viewport_;
+        result->detail_ = detail_;
+        result->perspective_ = perspective_;
+        result->opacity_ = opacity_;
+        result->texturePerspective_ = texturePerspective_;
+        std::vector<Vertex> vertices, scratch;
+        vertices.reserve(10);
+        scratch.reserve(10);
+        const auto& view = *retainedView_;
+        for (const auto& polygon : polygons_) {
+            const auto& part = *polygon.retained;
+            const auto indices = part.mesh->indices().subspan(polygon.firstIndex, 3);
+            const auto mode = part.mesh->vertices()[indices[0]].opacity;
+            const bool lit = part.lighting && mode != 0;
+            vertices.clear();
+            for (auto j : std::views::iota(std::size_t{0}, std::size_t{3})) {
+                const auto& v = part.mesh->vertices()[indices[j]];
+                Point3F point{v.position.x, v.position.y, v.inverseDepth};
+                Point3F color{1, 1, 1};
+                if (lit && (mode == 1 || j == 0)) {
+                    const auto value = part.lighting->lightVertex(point, v.color);
+                    if (!value)
+                        return nullptr;
+                    color = *value;
+                }
+                point += part.offset;
+                m_mul(point, part.toCamera, point);
+                if (!finite(point))
+                    return nullptr;
+                vertices.push_back({point, v.texture, color, {}, 0, polygon.vertices[0].haze});
+            }
+            const auto c = vertices.front().color;
+            const auto flat =
+                lit && mode == 2 ? std::min(1.f, c.x * .299f + c.z * .587f + c.y * .114f) : 1.f;
+            const auto clipped = clip(vertices, scratch, view);
+            for (auto i :
+                 std::views::iota(std::size_t{1}) | std::views::take_while([&](std::size_t i) {
+                     return i + 1 < clipped.size();
+                 })) {
+                Polygon p{
+                    {project(clipped[0], view),
+                     project(clipped[i], view),
+                     project(clipped[i + 1], view)},
+                    polygon.material,
+                    lit ? (mode == 2 ? gfx::PolygonSource::Constant : gfx::PolygonSource::Vertex)
+                        : gfx::PolygonSource::None,
+                    flat};
+                if (!visibleTriangle(p.vertices, 0))
+                    continue;
+                if (result->polygons_.size() >= gfx::renderLimits().polygons)
+                    return nullptr;
+                result->polygons_.push_back(std::move(p));
+            }
+        }
+        projected_ = std::move(result);
+    }
+    return projected_.get();
+}
+
+TsHardwareCacheStats tsHardwareCacheStats() {
+    const auto& c = ts_detail::meshCache;
+    return {c.entries.size(), c.bytes, c.budget, c.hits, c.builds};
+}
+
+void trimTsHardwareMeshes(std::size_t budget) {
+    auto& c = ts_detail::meshCache;
+    c.budget = budget;
+    while (!c.entries.empty() && c.bytes > budget) {
+        c.bytes -= c.entries.back()->bytes;
+        c.entries.pop_back();
+    }
+}
+
+void clearTsHardwareMeshes() {
+    const auto budget = ts_detail::meshCache.budget;
+    trimTsHardwareMeshes(0);
+    ts_detail::meshCache.budget = budget;
 }
 } // namespace opent1::world

@@ -1,5 +1,6 @@
 #pragma once
 #include <opent1/world/interior_shape.hpp>
+#include <ranges>
 #include <opent1/world/terrain_grid.hpp>
 #include <opent1/world/terrain_collision_snapshot.hpp>
 #include <opent1/world/terrain_textures.hpp>
@@ -19,6 +20,9 @@ struct InteriorSurfaceLighting {
     std::optional<std::span<const InteriorLightSlot>>
         slots;                 // retained playback slots, copied into owned maps
     const TsLighting* scene{}; // local-space scene lights, borrowed only during preparation
+    const struct WorldSurfaceMesh* previous{}; // immutable snapshot for independent dirty maps
+    Resource<InteriorLighting> missionHandle;  // optional owning identity for an explicit override
+    bool refreshMaps{}; // explicit invalidation retains geometry but rebuilds lighting
 };
 
 struct TerrainLodWindow {
@@ -52,6 +56,8 @@ struct TerrainLodView {
             RetainedLru}; // explicit historical callback policy, independent of mip selection
     Flt32 perspectiveDistance{500};
     std::optional<Flt32> hazeDistance{};
+    bool
+        retainedPatches{}; // hardware native traversal; software callbacks keep their original path
 };
 
 // Bind to immutable terrain resources, as for TerrainTextureCache. Keep one per
@@ -79,6 +85,49 @@ private:
 // Immutable after publication. Each triangle keeps local geometry for receivers
 // and the same UV/material/lighting input for software and GPU rendering.
 struct WorldSurfaceMesh {
+    struct InteriorMesh {
+        Resource<InteriorGeometry> source;
+        Resource<InteriorLighting> lighting;
+        std::vector<std::shared_ptr<const NativeSurfaceTexture>> software;
+        std::vector<UInt32> surfaceIds;
+        TsMaterialResources materials;
+        std::shared_ptr<const gfx::HardwareMesh> hardware;
+        std::vector<std::array<UInt32, 2>> ranges; // first index/count by authored surface
+        std::vector<Box3F> surfaceBounds;
+    };
+
+    // Interior snapshots share local geometry, independently of maps and visibility.
+    std::shared_ptr<const InteriorMesh> interiorMesh;
+    std::shared_ptr<const std::vector<std::shared_ptr<const gfx::LightMap>>> interiorMaps;
+    std::vector<InteriorLightSlot> interiorSlots;
+    const InteriorLighting* interiorMission{}; // identity only, retained by provider/resources
+    Resource<InteriorLighting> interiorMissionHandle;
+    std::optional<TsLighting> interiorSceneLighting;
+    std::vector<bool> interiorSceneAffected;
+    std::optional<std::vector<UInt32>> interiorSelection;
+
+    struct TerrainPatch {
+        std::shared_ptr<const gfx::HardwareMesh> topology;
+        UInt32 topologyKey{};
+        std::array<std::array<Flt32, 4>, 8> heights{};
+        Point3F origin;
+        Flt32 extent{};
+        UInt32 material{};
+        std::size_t firstTriangle{};
+        std::shared_ptr<const gfx::LightMap> lightMap;
+        Point2F mapOrigin{}, mapScale{1, 1};
+    };
+
+    struct TerrainPatches {
+        std::vector<TerrainPatch> patches;
+        Point3F camera;
+        Flt32 farDistance{}, hazeDistance{};
+        std::size_t triangles{};
+    };
+
+    // Camera selection owns compact inputs; topology and source heightfields are shared.
+    std::shared_ptr<const TerrainPatches> terrainPatches;
+    [[nodiscard]] StaticSurfaceTriangle terrainTriangle(std::size_t) const;
     TsMaterialResources materials;
     std::vector<StaticSurfaceTriangle> triangles;
     std::vector<UInt32>
@@ -87,6 +136,59 @@ struct WorldSurfaceMesh {
     // Retained with the frame for source traces and cache/geometry diagnosis.
     std::vector<std::array<UInt32, 4>> terrainSquareIds;
     Box3F bounds;
+
+    [[nodiscard]] auto surfaceTriangles(bool geometryOnly = false) const {
+        const auto count = interiorMesh     ? interiorMesh->surfaceIds.size()
+                           : terrainPatches ? terrainPatches->triangles
+                                            : triangles.size();
+        return std::views::iota(std::size_t{}, count) | std::views::filter([this](auto i) {
+                   return !interiorMesh || !interiorSelection ||
+                          std::ranges::binary_search(*interiorSelection,
+                                                     interiorMesh->surfaceIds[i]);
+               }) |
+               std::views::transform([this, geometryOnly](auto i) {
+                   if (terrainPatches)
+                       return terrainTriangle(i);
+                   if (!interiorMesh) {
+                       if (!geometryOnly)
+                           return triangles[i];
+                       StaticSurfaceTriangle triangle;
+                       triangle.vertices = triangles[i].vertices;
+                       triangle.material = triangles[i].material;
+                       return triangle;
+                   }
+                   StaticSurfaceTriangle triangle;
+                   const auto id = interiorMesh->surfaceIds[i];
+                   triangle.material = interiorMesh->source->surfaces[id].material;
+                   triangle.lit = bool(interiorMesh->lighting);
+                   triangle.repeatTexture = true;
+                   if (!geometryOnly)
+                       triangle.nativeSoftware = interiorMesh->software[id];
+                   if (!geometryOnly && interiorMaps)
+                       triangle.lightMap = (*interiorMaps)[id];
+                   for (auto j : std::views::iota(std::size_t{0}, std::size_t{3})) {
+                       const auto& v =
+                           interiorMesh->hardware
+                               ->vertices()[interiorMesh->hardware->indices()[i * 3 + j]];
+                       triangle.vertices[j] = {{v.position.x, v.position.y, v.inverseDepth},
+                                               v.texture,
+                                               v.color,
+                                               v.lightMap};
+                   }
+                   return triangle;
+               });
+    }
+
+    [[nodiscard]] std::size_t triangleCount() const {
+        if (terrainPatches)
+            return terrainPatches->triangles;
+        if (!interiorMesh)
+            return triangles.size();
+        if (!interiorSelection)
+            return interiorMesh->surfaceIds.size();
+        return std::size_t(std::ranges::distance(surfaceTriangles()));
+    }
+
     // Region selects intersecting full-resolution cells in grid-local XY. Use
     // bounded patches for large terrains, or terrainLod() for adaptive geometry.
     [[nodiscard]] static std::optional<WorldSurfaceMesh> terrain(const TerrainGridResources&,
@@ -108,6 +210,14 @@ struct WorldSurfaceMesh {
              bool bakedLighting = true,
              const InteriorSurfaceLighting& = {});
     [[nodiscard]] std::optional<TsStaticShapeFrame> prepare(const TsStaticView&) const;
+    [[nodiscard]] bool retainedHardwareCompatible() const;
+    [[nodiscard]] std::optional<std::vector<gfx::HardwarePolygon>>
+    hardwareInterior(const TsStaticView&, const gfx::Palette&, Flt32 gamma = 1) const;
+    // Append borrowed inputs into reusable scene storage. Failure restores size.
+    bool appendHardwareInterior(std::vector<gfx::HardwarePolygon>&,
+                                const TsStaticView&,
+                                const gfx::Palette&,
+                                Flt32 gamma = 1) const;
     // Select from a complete interior mesh while retaining its immutable maps.
     [[nodiscard]] std::optional<WorldSurfaceMesh>
     visibleInterior(std::span<const UInt32> surfaces) const;
@@ -148,6 +258,12 @@ public:
     }
 
     [[nodiscard]] UInt32 residentBlocks() const;
+
+    void trimCaches() {
+        cache_.clear();
+        state_.clear();
+    }
+
     ~TerrainResourceStream();
     TerrainResourceStream(const TerrainResourceStream&) = delete;
     TerrainResourceStream& operator=(const TerrainResourceStream&) = delete;

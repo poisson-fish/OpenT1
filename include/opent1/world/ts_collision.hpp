@@ -11,6 +11,10 @@ enum class TsCollisionLevel { Parts, Faces };
 class TsShapeCollision {
 public:
     [[nodiscard]] static std::optional<TsShapeCollision> prepare(const TsShapePose&, Int32 detail);
+    // At most two immutable local collision details per evaluated pose. Placement
+    // is supplied by queries and does not invalidate the shared local snapshot.
+    [[nodiscard]] static std::shared_ptr<const TsShapeCollision> shared(const TsShapePose&,
+                                                                        Int32 detail);
 
     [[nodiscard]] const std::optional<Box3F>& bounds() const {
         return bounds_;

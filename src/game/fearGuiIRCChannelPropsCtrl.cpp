@@ -1,4 +1,5 @@
 #include "opent1/game/server_irc_controls.hpp"
+#include <ranges>
 #include <tuple>
 
 namespace opent1::game {
@@ -59,7 +60,9 @@ void FGIRCChannelPropsCtrl::wake() {
     check(*this, 141137, (flags_ & IRCClient::CHANNEL_MODERATED) != 0);
     check(*this, 141138, !(flags_ & IRCClient::CHANNEL_TOPIC_LIMITED));
     check(*this, 141139, (flags_ & IRCClient::CHANNEL_INVITE) != 0);
-    for (UInt32 tag = 141130; tag <= 141139; ++tag) {
+    for (auto tag : std::views::iota(UInt32{141130}) | std::views::take_while([&](UInt32 tag) {
+                        return tag <= 141139;
+                    })) {
         enable(*this, tag, canSetProps_);
     }
     enable(*this, 141132, canSetTopic_);

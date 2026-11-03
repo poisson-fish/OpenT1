@@ -1,5 +1,6 @@
 // Bounded port of TS::Shadow partitionTree, cachePolys and TPoly::split.
 #include <opent1/sim/sim_environment_render.hpp>
+#include <ranges>
 #include <algorithm>
 #include <cmath>
 #include <deque>
@@ -322,7 +323,9 @@ ShadowGeometry nativeShadowGeometry(const ShadowSourceWindow& window,
     }
     Partition state{window, {}, {}, {}};
     std::vector<Receiver> sorted;
-    for (std::size_t i = 0; i < receivers.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < receivers.size();
+                  })) {
         const auto& receiver = receivers[i];
         Receiver poly;
         poly.vertices = receiver.vertices;
@@ -348,7 +351,9 @@ ShadowGeometry nativeShadowGeometry(const ShadowSourceWindow& window,
         // clip-tree construction. getPlanes offsets only the first minT sample.
         poly.minimum = poly.maximum =
             m_dot(poly.vertices[0] - window.direction * lift, window.direction);
-        for (std::size_t n = 1; n < poly.vertices.size(); ++n) {
+        for (auto n : std::views::iota(std::size_t{1}) | std::views::take_while([&](std::size_t n) {
+                          return n < poly.vertices.size();
+                      })) {
             const auto d = m_dot(poly.vertices[n], window.direction);
             poly.minimum = std::min(poly.minimum, d);
             poly.maximum = std::max(poly.maximum, d);
@@ -357,7 +362,9 @@ ShadowGeometry nativeShadowGeometry(const ShadowSourceWindow& window,
     }
     // The native comparator's <=/>= tie behavior is not a strict ordering. Use
     // bounded insertion, preserving source order for truly equal extents.
-    for (std::size_t i = 1; i < sorted.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{1}) | std::views::take_while([&](std::size_t i) {
+                      return i < sorted.size();
+                  })) {
         for (std::size_t j = i; j > 0; --j) {
             state.spend();
             const auto& a = sorted[j];
@@ -372,7 +379,7 @@ ShadowGeometry nativeShadowGeometry(const ShadowSourceWindow& window,
     }
     Poly source;
     constexpr std::array<Point2F, 4> uv{{{0, 0}, {1, 0}, {1, 1}, {0, 1}}};
-    for (std::size_t i = 0; i < 4; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{4})) {
         source.push_back({window.points[i], uv[i]});
     }
     if (state.planes.size() == 1) {

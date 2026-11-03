@@ -1,4 +1,5 @@
 #include "ts_test_support.hpp"
+#include <ranges>
 #include <opent1/world/ts_shape_pose.hpp>
 #include <opent1/world/ts_shape_instance.hpp>
 #include <opent1/world/ts_collision.hpp>
@@ -31,23 +32,26 @@ void skins() {
     const auto source = TsMaterialResources::load(manager, original);
     CHECK(source);
     const auto skinned = TsMaterialResources::loadSkin(manager, original, "storm", "model.dts");
-    CHECK(skinned && skinned->list.details == 2 && skinned->list.materialsPerDetail == 4);
+    CHECK(skinned && skinned->list().details == 2 && skinned->list().materialsPerDetail == 4);
     for (std::size_t offset : {0U, 4U}) {
-        CHECK(skinned->list.materials[offset].mapFile == "storm.body.bmp");
-        CHECK(skinned->textures[offset].get() == manager.load<gfx::Bitmap>("storm.body.bmp").get());
+        CHECK(skinned->list().materials[offset].mapFile == "storm.body.bmp");
+        CHECK(skinned->textures()[offset].get() == manager.load<gfx::Bitmap>("storm.body.bmp").get());
         // Each base.* slot keeps its own suffix and falls back independently.
-        CHECK(skinned->list.materials[offset + 2].mapFile == "base.trim.bmp");
-        for (std::size_t slot = offset + 1; slot < offset + 4; ++slot) {
-            CHECK(skinned->list.materials[slot].mapFile == original.materials[slot].mapFile);
-            CHECK(skinned->textures[slot].get() == source->textures[slot].get());
+        CHECK(skinned->list().materials[offset + 2].mapFile == "base.trim.bmp");
+        for (auto slot : std::views::iota(static_cast<std::size_t>(offset + 1)) |
+                             std::views::take_while([&](std::size_t slot) {
+                                 return slot < offset + 4;
+                             })) {
+            CHECK(skinned->list().materials[slot].mapFile == original.materials[slot].mapFile);
+            CHECK(skinned->textures()[slot].get() == source->textures()[slot].get());
         }
     }
-    CHECK(skinned->list.materials[0].alpha == .5f && skinned->list.materials[0].surfaceType == 7 &&
-          skinned->list.materials[0].friction == .25f);
-    CHECK(hash(original) == hash(source->list)); // the shared shape list stays unchanged
+    CHECK(skinned->list().materials[0].alpha == .5f && skinned->list().materials[0].surfaceType == 7 &&
+          skinned->list().materials[0].friction == .25f);
+    CHECK(hash(original) == hash(source->list())); // the shared shape list stays unchanged
     for (const auto skin : {"missing", "base", ""}) {
         const auto fallback = TsMaterialResources::loadSkin(manager, original, skin, "model.dts");
-        CHECK(fallback && hash(fallback->list) == hash(original));
+        CHECK(fallback && hash(fallback->list()) == hash(original));
     }
     // An explicit DML may intentionally replace every slot, including custom materials.
     auto replacement = std::make_unique<TsMaterialList>(original);
@@ -59,13 +63,13 @@ void skins() {
     const auto replacementHash = hash(*replacement);
     CHECK(manager.add("listed.model.dml", std::move(replacement)));
     const auto listed = TsMaterialResources::loadSkin(manager, original, "listed", "model.dts");
-    CHECK(listed && hash(listed->list) == replacementHash);
+    CHECK(listed && hash(listed->list()) == replacementHash);
     // An unusable DML falls back to the individual original slots.
     auto invalid = std::make_unique<TsMaterialList>(original);
     invalid->materials[0].mapFile = "absent.bmp";
     CHECK(manager.add("broken.model.dml", std::move(invalid)));
     const auto fallback = TsMaterialResources::loadSkin(manager, original, "broken", "model");
-    CHECK(fallback && hash(fallback->list) == hash(original));
+    CHECK(fallback && hash(fallback->list()) == hash(original));
     auto missing = original;
     missing.materials[1].mapFile = "absent.bmp";
     CHECK(!TsMaterialResources::loadSkin(manager, missing, "storm", "model"));
@@ -121,49 +125,53 @@ void damageSkins() {
                                                                      "11112111",
                                                                      "11134111",
                                                                      "11111111"}}}};
-    for (Int32 level = 1; level <= 3; ++level) {
+    for (auto level : std::views::iota(Int32{1}) | std::views::take_while([&](Int32 level) {
+                          return level <= 3;
+                      })) {
         const auto damaged = TsMaterialResources::withDamageSkin(manager, *source, level, names);
         CHECK(damaged);
-        const auto& bitmap = *damaged->textures[0];
+        const auto& bitmap = *damaged->textures()[0];
         CHECK(bitmap.valid() && bitmap.paletteIndex == 7 && bitmap.detailLevels == 2);
-        for (Int32 y = 0; y < 8; ++y) {
-            for (Int32 x = 0; x < 8; ++x) {
+        for (auto y : std::views::iota(Int32{0}, Int32{8})) {
+            for (auto x : std::views::iota(Int32{0}, Int32{8})) {
                 CHECK(std::to_integer<int>(bitmap.row(y)[x]) == expected[level - 1][y][x] - '0');
             }
         }
         CHECK(std::ranges::all_of(bitmap.level(1), [](auto pixel) {
             return pixel == std::byte{1};
         }));
-        CHECK(damaged->textures[1].get() == source->textures[1].get());
-        CHECK(damaged->textures[2].get() == source->textures[2].get());
+        CHECK(damaged->textures()[1].get() == source->textures()[1].get());
+        CHECK(damaged->textures()[2].get() == source->textures()[2].get());
         const auto cached = TsMaterialResources::withDamageSkin(manager, *source, level, names);
-        CHECK(cached && cached->textures[0].get() == damaged->textures[0].get());
+        CHECK(cached && cached->textures()[0].get() == damaged->textures()[0].get());
     }
-    CHECK(std::ranges::all_of(source->textures[0]->pixels, [](auto pixel) {
+    CHECK(std::ranges::all_of(source->textures()[0]->pixels, [](auto pixel) {
         return pixel == std::byte{1};
     }));
     const auto clean = TsMaterialResources::withDamageSkin(manager, *source, 0, names);
-    CHECK(clean && clean->textures[0].get() == source->textures[0].get());
+    CHECK(clean && clean->textures()[0].get() == source->textures()[0].get());
     CHECK(!TsMaterialResources::withDamageSkin(manager, *source, 4, names));
     // An unavailable first bitmap ends the legacy usable prefix.
     const std::array missing{std::string("missing"), std::string("scar")};
     const auto absent = TsMaterialResources::withDamageSkin(manager, *source, 1, missing);
-    CHECK(absent && absent->textures[0].get() == source->textures[0].get());
+    CHECK(absent && absent->textures()[0].get() == source->textures()[0].get());
     ResourceManager oversizeManager;
-    CHECK(oversizeManager.add("armor.bmp", std::make_unique<gfx::Bitmap>(*source->textures[0])));
+    CHECK(oversizeManager.add("armor.bmp", std::make_unique<gfx::Bitmap>(*source->textures()[0])));
     CHECK(oversizeManager.add("oversized.bmp", gfx::Bitmap::create(8, 8)));
     const auto oversizedSource = TsMaterialResources::load(oversizeManager, list);
     CHECK(oversizedSource);
     const std::array oversized{std::string("oversized")};
     const auto skipped =
         TsMaterialResources::withDamageSkin(oversizeManager, *oversizedSource, 3, oversized);
-    CHECK(skipped && skipped->textures[0]->pixels == source->textures[0]->pixels);
+    CHECK(skipped && skipped->textures()[0]->pixels == source->textures()[0]->pixels);
 }
 
 void unit() {
     skins();
     damageSkins();
-    for (Int32 version = 0; version <= 8; ++version) {
+    for (auto version : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 version) {
+                            return version <= 8;
+                        })) {
         const auto bytes = shape(version, 3, 4, 0, true);
         const auto historical = load(bytes);
         CHECK(historical && historical->version == version);
@@ -283,7 +291,7 @@ void unit() {
         return v;
     };
     CHECK(word() == 0x4654314f && word() == 1 && word() == 37);
-    for (Int32 test = 0; test < 36; ++test) {
+    for (auto test : std::views::iota(Int32{0}, Int32{36})) {
         const auto s = load(shape(5 + test / 9, 1 + (test / 3) % 3, 2 + test % 3));
         CHECK(s);
         CHECK(hash(s->meshes[0]) == word());
@@ -346,7 +354,7 @@ void unit() {
     CHECK(manager.add<gfx::Bitmap>("test.bmp", gfx::Bitmap::create(4, 4)));
     auto retained = TsShapeResources::load(manager, "MODEL.DTS");
     CHECK(retained);
-    CHECK(retained->materials.textures[0] && retained->shape->nodes.size() == 2);
+    CHECK(retained->materials.textures()[0] && retained->shape->nodes.size() == 2);
 }
 
 void assets(const std::filesystem::path& directory) {
@@ -452,7 +460,32 @@ void assets(const std::filesystem::path& directory) {
             auto resource = manager.load<TsShape>("sample.dts");
             const auto defaultPose = TsShapePose::sample(resource);
             CHECK(defaultPose);
-            for (std::size_t detail = 0; detail < resource->details.size(); ++detail) {
+            TsShapeInstance evaluated(resource);
+            const auto cached = evaluated.pose(), repeated = evaluated.pose();
+            CHECK(cached && repeated && cached->revision() == repeated->revision());
+            CHECK(cached->nodeTransforms().data() == repeated->nodeTransforms().data());
+            CHECK(evaluated.advance(0) && evaluated.pose()->revision() == cached->revision());
+            CHECK(!evaluated.addThread(-1) && evaluated.pose()->revision() == cached->revision());
+            if (!resource->details.empty()) {
+                const auto collision = TsShapeCollision::shared(*cached, 0);
+                CHECK(collision && collision == TsShapeCollision::shared(*repeated, 0));
+                CHECK(!TsShapeCollision::shared(*cached, -1));
+                CHECK(collision == TsShapeCollision::shared(*cached, 0));
+            }
+            const auto child = std::ranges::find_if(resource->nodes, [](const auto& node) {
+                return node.parent >= 0;
+            });
+            if (child != resource->nodes.end()) {
+                auto overridden = *cached;
+                auto parent = cached->nodeTransforms()[child->parent];
+                parent.p.x += 1;
+                CHECK(overridden.overrideParentTransform(Int32(child - resource->nodes.begin()),
+                                                         parent));
+                CHECK(overridden.revision() != cached->revision());
+                CHECK(overridden.nodeTransforms().data() != cached->nodeTransforms().data());
+                CHECK(evaluated.pose()->revision() == cached->revision());
+            }
+            for (auto detail : std::views::iota(std::size_t{0}, resource->details.size())) {
                 if (!TsShapeCollision::prepare(*defaultPose, Int32(detail))) {
                     std::fprintf(stderr,
                                  "Rejected original collision detail: %s/%s detail %zu\n",
@@ -507,12 +540,12 @@ void assets(const std::filesystem::path& directory) {
                         }
                     }
                 });
-            for (std::size_t index = 0; index < resource->transitions.size(); ++index) {
+            for (auto index : std::views::iota(std::size_t{0}, resource->transitions.size())) {
                 const auto& edge = resource->transitions[index];
                 TsShapeInstance instance(resource);
                 CHECK(instance.addThread(edge.startSequence, edge.startPosition));
                 CHECK(instance.setTransition(0, Int32(index)));
-                for (int step = 0; step < 5; ++step) {
+                for ([[maybe_unused]] auto step : std::views::iota(0, 5)) {
                     CHECK(instance.advance(Flt64(edge.duration) * .3));
                     ++transitionSamples;
                 }
@@ -539,7 +572,7 @@ void assets(const std::filesystem::path& directory) {
 int opent1_test_ts_shape(int argc, char** argv) {
     if (argc == 3 && std::string_view(argv[1]) == "--formats") {
         std::filesystem::create_directories(argv[2]);
-        for (Int32 test = 0; test < 37; ++test) {
+        for (auto test : std::views::iota(Int32{0}, Int32{37})) {
             const auto bytes = test == 36 ? shape(8, 3, 4, -1)
                                           : shape(5 + test / 9, 1 + (test / 3) % 3, 2 + test % 3);
             FileWStream file(std::filesystem::path(argv[2]) / std::format("format-{}.dts", test));

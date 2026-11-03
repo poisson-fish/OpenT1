@@ -1,4 +1,5 @@
 #include <opent1/game/shell_controls.hpp>
+#include <ranges>
 
 namespace opent1::game {
 
@@ -20,7 +21,9 @@ void FearGuiScrollCtrl::drawBorder(gfx::SoftwareSurface& s, RectI r) const {
     }
     const bool ghost = disabled || (canvas() && !canvas()->contains(this));
     const UInt8 colors[]{UInt8(ghost ? 236 : 240), UInt8(ghost ? 235 : 239), 244};
-    for (int i = 0; i < std::min(3, borderThickness); ++i) {
+    for (auto i : std::views::iota(0) | std::views::take_while([&](int i) {
+                      return i < std::min(3, borderThickness);
+                  })) {
         s.rectangle(r, colors[i]);
         ++r.left;
         ++r.top;

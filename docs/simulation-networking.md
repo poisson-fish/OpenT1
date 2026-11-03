@@ -41,7 +41,13 @@ the little-endian assigned-client/server-manager ID pair. Servers use
 2048; client peers use 2049 through 3071. A manager's local address remains object
 ID zero independently of its network identity.
 
-The game's local host path also runs `Server::onClientConnect(2049)`, then
+Tribes players and AI share the game's 127 representative slots (IDs 2049 through
+2175). Both local and remote joins select the next free slot from `PlayerManager`;
+the local player's ID is not fixed. The delegate's `selectClientId` callback
+provides the game allocator, while generic simulation networking retains its
+own default allocation.
+
+The game's local host path also runs `Server::onClientConnect(clientId)`, then
 `onConnection(Accepted)` in the client world, before completing datablock transfer.
 The client script sends profile fields with `remoteEval(2048, "SetCLInfo", ...)`.
 The Other Info field is `$PCFG::Info`; the server script stores it in
@@ -49,6 +55,20 @@ The Other Info field is `$PCFG::Info`; the server script stores it in
 These fields travel through the script callback rather than the initial join
 packet. Repeated `localConnect` calls within a session do not repeat the callbacks;
 hosting a new server runs them again with the current profile.
+
+As in vanilla, `getBaseRepList` and `findBaseRep` include AI, while `getClientList`
+and `findClient` include only connected players. AI uses the base-representative
+flag in roster events and does not receive a player connection, PSC, or observer
+camera. Client join/drop callbacks, connection announcements, score lists,
+server browser player counts/details, and ping lists operate on real clients.
+As in vanilla, team-change callbacks apply to both players and AI representatives.
+Ownership, skins, targeting, and commander targets can refer to either kind of
+representative. Vanilla's script skin setter changes only connected clients;
+AI skins follow team changes and received base-representative skin events.
+Projectile damage credit requires a real client, while thrown items capture
+only their source's control client. See the
+[vanilla bot comparison](vanilla-bot-lifecycle.md) for the source audit and
+regression coverage.
 
 The delegate owns transport/session state and removes all its streams on removal.
 Each stream is an owning simulation group for its registered packet clients.

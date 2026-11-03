@@ -1,4 +1,5 @@
 #include <opent1/core/filename.hpp>
+#include <ranges>
 #include <opent1/game/file_plugin.hpp>
 #include <algorithm>
 #include <cctype>
@@ -26,7 +27,9 @@ namespace {
 
 [[nodiscard]] int asciiStricmp(std::string_view a, std::string_view b) noexcept {
     const std::size_t n = std::min(a.size(), b.size());
-    for (std::size_t i = 0; i < n; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < n;
+                  })) {
         const int ca = static_cast<unsigned char>(toLowerAscii(a[i]));
         const int cb = static_cast<unsigned char>(toLowerAscii(b[i]));
         if (ca != cb) {

@@ -1,4 +1,5 @@
 #include <opent1/game/commander_huds.hpp>
+#include <ranges>
 
 #include <opent1/game/data_block_manager.hpp>
 
@@ -11,7 +12,9 @@ CommandItemCtrl::CommandItemCtrl() {
 void CommandItemCtrl::populateFromCommander(const TSCommander& cmdr) {
     entries_.clear();
     const auto targs = cmdr.targets();
-    for (std::size_t i = 0; i < targs.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < targs.size();
+                  })) {
         const auto& t = targs[i];
         if (t.datId < 0 || t.team != cmdr.localTeam ||
             t.datGroup == DataBlockManager::TurretDataType || t.playerId >= 0) {

@@ -1,4 +1,6 @@
 #include <opent1/world/landscape.hpp>
+#include <iterator>
+#include <ranges>
 #include <opent1/math/random.hpp>
 #include <algorithm>
 #include <array>
@@ -18,7 +20,7 @@ std::optional<LandscapeScriptFile> readLandscapeScript(std::span<const std::byte
     auto format = LandscapeScriptFormat::RawText;
     if (bytes.size() >= 4) {
         UInt32 count{};
-        for (unsigned i = 0; i < 4; ++i) {
+        for (auto i : std::views::iota(unsigned{0}, unsigned{4})) {
             count |= UInt32(bytes[i]) << (i * 8);
         }
         if (count && count <= maxBytes + 1 && std::size_t(count) + 4 == bytes.size() &&
@@ -35,12 +37,13 @@ std::optional<LandscapeScriptFile> readLandscapeScript(std::span<const std::byte
         return {};
     }
     std::string text;
-    for (std::size_t i = 0; i < bytes.size(); ++i) {
-        const auto c = char(bytes[i]);
+    for (auto characterIt = bytes.begin(); characterIt != bytes.end(); ++characterIt) {
+        const auto c = char(*characterIt);
         if (c == '\r') {
             text += '\n';
-            if (i + 1 < bytes.size() && bytes[i + 1] == std::byte{'\n'}) {
-                ++i;
+            if (std::next(characterIt) != bytes.end() &&
+                *std::next(characterIt) == std::byte{'\n'}) {
+                ++characterIt;
             }
         } else {
             text += c;
@@ -59,7 +62,7 @@ std::optional<std::vector<std::byte>> writeLandscapeScript(std::string_view text
     std::vector<std::byte> result;
     if (format == LandscapeScriptFormat::NativeCounted) {
         const auto count = UInt32(text.size() + 1);
-        for (unsigned i = 0; i < 4; ++i) {
+        for (auto i : std::views::iota(unsigned{0}, unsigned{4})) {
             result.push_back(std::byte(count >> (i * 8)));
         }
     }
@@ -130,8 +133,12 @@ struct NativeLandscape {
         if (!stack.empty() && n > stack[0]->size) {
             auto m = std::make_unique<Matrix>(n);
             const auto old = stack[0]->size, scale = n / old;
-            for (int y = 0; y < n; ++y) {
-                for (int x = 0; x < n; ++x) {
+            for (auto y : std::views::iota(0) | std::views::take_while([&](int y) {
+                              return y < n;
+                          })) {
+                for (auto x : std::views::iota(0) | std::views::take_while([&](int x) {
+                                  return x < n;
+                              })) {
                     m->real[y * n + x] = stack[0]->real[y / scale * old + x / scale];
                 }
             }
@@ -347,9 +354,13 @@ bool Landscape::importBitmap(const Bitmap& b, Flt32 maxHeight) {
         return false;
     }
     auto m = std::make_unique<Matrix>(b.width);
-    for (Int32 y = 0; y < b.height; ++y) {
+    for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                      return y < b.height;
+                  })) {
         const auto row = b.row(y);
-        for (Int32 x = 0; x < b.width; ++x) {
+        for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                          return x < b.width;
+                      })) {
             m->real[y * b.width + x] =
                 Flt32(maxHeight * std::to_integer<UInt8>(row[std::size_t(x)]) / 255.0);
         }
@@ -372,9 +383,13 @@ std::optional<Bitmap> Landscape::bitmap(bool normalize) const {
     if (!b) {
         return {};
     }
-    for (Int32 y = 0; y < m.size; ++y) {
+    for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                      return y < m.size;
+                  })) {
         auto row = b->row(y);
-        for (Int32 x = 0; x < m.size; ++x) {
+        for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                          return x < m.size;
+                      })) {
             const auto v = double(m.real[y * m.size + x]) * 255.0;
             if (!std::isfinite(v) || v < double(std::numeric_limits<Int32>::min()) ||
                 v > double(std::numeric_limits<Int32>::max())) {
@@ -677,11 +692,17 @@ bool Landscape::script(std::string_view script, bool clear, const Loader& loader
     }
     std::vector<std::string> tokens;
     std::string token;
-    for (std::size_t j = 0; j < script.size(); ++j) {
-        const auto c = script[j];
-        if (c == '/' && j + 1 < script.size() && script[j + 1] == '/') {
-            while (j < script.size() && script[j] != '\n') {
-                ++j;
+    for (auto characterIt = script.begin(); characterIt != script.end(); ++characterIt) {
+        const auto c = *characterIt;
+        if (c == '/' && std::next(characterIt) != script.end() && *std::next(characterIt) == '/') {
+            while (characterIt != script.end() && *characterIt != '\n') {
+                ++characterIt;
+            }
+            if (characterIt == script.end()) {
+                if (!token.empty()) {
+                    tokens.push_back(std::exchange(token, {}));
+                }
+                break;
             }
             if (!token.empty()) {
                 tokens.push_back(std::exchange(token, {}));
@@ -754,8 +775,12 @@ bool Landscape::apply(TerrainDocument& d, UInt32 block, Point2I origin) const {
     auto& b = next.blocks[block];
     const auto& m = *impl_->native.stack[0];
     const auto mask = m.size - 1;
-    for (UInt32 y = 0; y <= b.width; ++y) {
-        for (UInt32 x = 0; x <= b.width; ++x) {
+    for (auto y : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 y) {
+                      return y <= b.width;
+                  })) {
+        for (auto x : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 x) {
+                          return x <= b.width;
+                      })) {
             b.heights[std::size_t(y) * (b.width + 1) + x] =
                 m.real[((origin.y + Int32(y) - 1) & mask) * m.size +
                        ((origin.x + Int32(x)) & mask)];

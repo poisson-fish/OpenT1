@@ -6,6 +6,8 @@ add_executable(
     core/stream_test.cpp
     core/compression_test.cpp
     core/resource_test.cpp
+    core/resource_retention_test.cpp
+    core/mapped_file_test.cpp
     core/persist_test.cpp
     math/integer_test.cpp
     math/rotation_test.cpp
@@ -25,6 +27,7 @@ add_executable(
     world/ts_shape_test.cpp
     world/collision_test.cpp
     world/mission_test.cpp
+    world/render_retention_test.cpp
     gui/canvas_test.cpp
     gui/routing_test.cpp
     gui/editor_test.cpp
@@ -36,8 +39,11 @@ add_executable(
     game/gameplay_fix_pack_test.cpp
     game/trpg_behavior_test.cpp
     game/rpg_paths_test.cpp
+    game/rpg_regressions_test.cpp
     game/compatibility_test.cpp
     game/model_rendering_test.cpp
+    game/weather_test.cpp
+    game/disconnect_test.cpp
     video/video_test.cpp
 )
 target_link_libraries(opent1_tests PRIVATE opent1_game)
@@ -68,7 +74,7 @@ if(OPENT1_BUILD_AUDIO)
     list(APPEND suites audio)
 endif()
 if(OPENT1_BUILD_PLATFORM)
-    target_sources(opent1_tests PRIVATE platform/window_test.cpp)
+    target_sources(opent1_tests PRIVATE platform/window_test.cpp platform/gpu_cache_test.cpp)
     if(WIN32 AND TARGET SDL3::SDL3-shared)
         add_custom_command(
             TARGET opent1_tests

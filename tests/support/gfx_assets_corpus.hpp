@@ -1,5 +1,6 @@
 #pragma once
 #include <array>
+#include <ranges>
 #include <cstdint>
 #include <string_view>
 
@@ -28,7 +29,9 @@ inline unsigned imageSize(unsigned test) {
         return ((w * unsigned(depth(test) / 8) + 3) & ~3U) * h;
     }
     unsigned size{};
-    for (int i = 0; i < levels(test); ++i) {
+    for (auto i : std::views::iota(0) | std::views::take_while([&](int i) {
+                      return i < levels(test);
+                  })) {
         size += (w >> i ? w >> i : 1) * (h >> i ? h >> i : 1);
     }
     return size;

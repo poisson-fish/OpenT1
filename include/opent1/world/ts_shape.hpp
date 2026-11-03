@@ -129,6 +129,30 @@ struct TsShape {
 };
 
 // Explicit registrations; Bitmap loaders must also be registered to resolve maps.
+inline std::size_t resourceResidentBytes(const TsMaterial& v) {
+    return sizeof(v) + opent1::detail::allocationBytes(v.mapFile);
+}
+
+inline std::size_t resourceResidentBytes(const TsMaterialList& v) {
+    return sizeof(v) + opent1::detail::allocationBytes(v.materials);
+}
+
+inline std::size_t resourceResidentBytes(const TsMesh& v) {
+    using opent1::detail::allocationBytes;
+    return sizeof(v) + allocationBytes(v.vertices) + allocationBytes(v.textureVertices) +
+           allocationBytes(v.faces) + allocationBytes(v.frames);
+}
+
+inline std::size_t resourceResidentBytes(const TsShape& v) {
+    using opent1::detail::allocationBytes;
+    return sizeof(v) + allocationBytes(v.nodes) + allocationBytes(v.sequences) +
+           allocationBytes(v.subSequences) + allocationBytes(v.keyframes) +
+           allocationBytes(v.transforms) + allocationBytes(v.names) + allocationBytes(v.objects) +
+           allocationBytes(v.details) + allocationBytes(v.transitions) +
+           allocationBytes(v.triggers) + allocationBytes(v.meshes) +
+           (v.materials ? resourceResidentBytes(*v.materials) - sizeof(TsMaterialList) : 0);
+}
+
 // Original authored threshold policy. -1 means too small to draw; nullopt means
 // invalid input. Zero-sized sentinel details stop before utility hierarchies.
 [[nodiscard]] std::optional<Int32> selectTsDetail(const TsShape&, Flt32 projectedSize);
@@ -140,8 +164,33 @@ classifyTsUtilityDetails(TsShape&, std::span<const std::string_view> prefixes);
 bool registerTsLoaders(ResourceManager&);
 
 struct TsMaterialResources {
-    TsMaterialList list;
-    std::vector<Resource<gfx::Bitmap>> textures; // parallel to list.materials
+    struct Data {
+        TsMaterialList list;
+        std::vector<Resource<gfx::Bitmap>> textures; // parallel to list.materials
+    };
+
+    TsMaterialResources() = default;
+
+    TsMaterialResources(TsMaterialList list, std::vector<Resource<gfx::Bitmap>> textures)
+        : TsMaterialResources(Data{std::move(list), std::move(textures)}) {}
+
+    TsMaterialResources(Data data) : data_(std::make_shared<const Data>(std::move(data))) {}
+
+    // Copies retain one immutable table, including its texture dependencies.
+    // Build replacement tables separately; published snapshots never change.
+    [[nodiscard]] const TsMaterialList& list() const {
+        return data().list;
+    }
+
+    [[nodiscard]] const std::vector<Resource<gfx::Bitmap>>& textures() const {
+        return data().textures;
+    }
+
+    [[nodiscard]] const Data& data() const {
+        static const Data empty;
+        return data_ ? *data_ : empty;
+    }
+
     [[nodiscard]] static std::optional<TsMaterialResources> load(ResourceManager&,
                                                                  const TsMaterialList&);
     // Skin bitmaps share the authored material slots, flags and animation remaps.
@@ -156,6 +205,9 @@ struct TsMaterialResources {
                    TsMaterialResources,
                    Int32 damageLevel,
                    std::span<const std::string> bitmapNames);
+
+private:
+    std::shared_ptr<const Data> data_;
 };
 
 struct TsShapeResources {

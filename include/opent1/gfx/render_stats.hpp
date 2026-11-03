@@ -7,8 +7,12 @@ namespace opent1::gfx {
 // enclosing frame stages; counters include attempted work on rejected frames.
 struct RenderWorkStats {
     double terrainLodMs{}, lightSamplesMs{};
+    double terrainVisibilityMs{}, terrainSelectMs{}, terrainEdgesMs{}, terrainEmitMs{};
     std::uint64_t terrainLodCalls{}, terrainNodes{}, terrainValidatedHeights{};
     std::uint64_t terrainMergeHeights{}, terrainMaterialChecks{}, terrainDistanceRejects{};
+    std::uint64_t terrainPointRequests{}, terrainPoints{}, terrainEdgePoints{};
+    // Arena spill allocations and reusable buffer capacity, summed across calls.
+    std::uint64_t terrainScratchAllocations{}, terrainScratchBytes{}, terrainScratchBufferBytes{};
     std::uint64_t lightSampleCalls{}, lightDeltaDecodes{}, lightSampleCopyBytes{};
     std::uint64_t terrainTileBuilds{}, terrainTileHits{}, terrainTileEvictions{};
     // Sum of resident payloads after each terrain LOD call; excludes caller snapshots.
@@ -16,6 +20,8 @@ struct RenderWorkStats {
     double skyMs{};
     std::uint64_t hardwareSkyPolygons{};
     std::uint64_t bitmapCopyBytes{}, layerScanPixels{}, surfaceInversions{};
+    std::uint64_t interiorGeometryBuilds{}, interiorLightMapBuilds{}, interiorLightMapBytes{};
+    std::uint64_t terrainMeshCacheHits{};
 };
 
 inline thread_local RenderWorkStats* currentRenderWorkStats{};
@@ -45,8 +51,13 @@ public:
           start_(output_ ? Clock::now() : Clock::time_point{}) {}
 
     ~ScopedRenderWorkTimer() {
+        stop();
+    }
+
+    void stop() noexcept {
         if (output_) {
             *output_ += std::chrono::duration<double, std::milli>(Clock::now() - start_).count();
+            output_ = nullptr;
         }
     }
 

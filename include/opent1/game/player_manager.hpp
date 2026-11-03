@@ -52,12 +52,20 @@ public:
         std::string skinBase{};
         BaseRep* nextClient{nullptr};
         BaseRep* prevClient{nullptr};
-        UInt32 loginStatus{0};
+        bool isBaseRepType{false};
+        UInt32 loginId{0};
+
+        [[nodiscard]] bool isClientRep() const noexcept {
+            return !isBaseRepType;
+        }
 
         void resetBase() noexcept;
     };
 
     struct ClientRep : public BaseRep {
+        // Vanilla maintains independent links for connected clients and for
+        // all representatives (players plus AI) in the BaseRep subobject.
+        ClientRep* nextClient{nullptr};
         enum CommandStatus : Int32 {
             None = CMD_NONE,
             Received = CMD_RECEIVED,
@@ -169,17 +177,18 @@ public:
 
     [[nodiscard]] ClientRep* findClient(Int32 clientId) noexcept;
     [[nodiscard]] const ClientRep* findClient(Int32 clientId) const noexcept;
-    [[nodiscard]] BaseRep* findBaseRep(Int32 id) noexcept;
-    [[nodiscard]] const BaseRep* findBaseRep(Int32 id) const noexcept;
+    [[nodiscard]] ClientRep* findBaseRep(Int32 id) noexcept;
+    [[nodiscard]] const ClientRep* findBaseRep(Int32 id) const noexcept;
 
     [[nodiscard]] ClientRep* getClientList() const noexcept {
-        return static_cast<ClientRep*>(clientLink_);
-    }
-
-    [[nodiscard]] BaseRep* getBaseRepList() const noexcept {
         return clientLink_;
     }
 
+    [[nodiscard]] BaseRep* getBaseRepList() const noexcept {
+        return baseRepLink_;
+    }
+
+    [[nodiscard]] Int32 getFreeId() const noexcept;
     Int32 clientAdded(std::string_view name,
                       std::string_view voiceBase,
                       std::string_view skinBase,
@@ -188,7 +197,8 @@ public:
     Int32 aiAdded(std::string_view name,
                   std::string_view voiceBase,
                   std::string_view skinBase,
-                  bool gender);
+                  bool gender,
+                  Int32 explicitClientId = 0);
     void clientDropped(Int32 clientId);
     void teamAdded(Int32 teamId);
     void teamAdded(std::string_view teamName, std::string_view skinBase = "base");
@@ -243,7 +253,12 @@ public:
     bool processEvent(const sim::SimEvent& event) override;
 
 private:
-    [[nodiscard]] Int32 getFreeId() noexcept;
+    Int32 addRep(std::string_view name,
+                 std::string_view voiceBase,
+                 std::string_view skinBase,
+                 bool gender,
+                 Int32 explicitClientId,
+                 bool isBaseRepType);
     void linkClientRep(ClientRep* cr) noexcept;
     void unlinkClientRep(ClientRep* cr) noexcept;
     void teamAddedInternal(Int32 teamId);
@@ -259,8 +274,10 @@ private:
     Int32 numTeams_{0};
     std::array<ClientRep, MaxClients> clientList_{};
     std::array<TeamRep, MaxTeams + 1> teamList_{};
-    BaseRep* clientLink_{nullptr};
+    ClientRep* clientLink_{nullptr};
+    BaseRep* baseRepLink_{nullptr};
     ClientRep* freeList_{nullptr};
+    UInt32 nextLoginId_{1};
     bool isServer_{false};
     UInt32 curObjectiveSeq_{1};
     UInt32 curCommandSequence_{};

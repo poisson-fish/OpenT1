@@ -1,4 +1,5 @@
 #include <opent1/game/commander_huds.hpp>
+#include <ranges>
 #include <algorithm>
 #include <cmath>
 
@@ -84,7 +85,10 @@ void CMDObserve::tick(double now) {
                    std::max(2, scene == this ? fields_.extent.y - 8 : scene->fields().extent.y),
                width =
                    std::max(1, scene == this ? fields_.extent.x - 16 : scene->fields().extent.x);
-    for (int frames = 0; frameRemainder_ >= .03 && frames < 120; ++frames) {
+    for ([[maybe_unused]] auto frames :
+         std::views::iota(0) | std::views::take_while([&](int frames) {
+             return frameRemainder_ >= .03 && frames < 120;
+         })) {
         frameRemainder_ -= .03;
         ++snowFrame_;
         if (startupWidth_ < width) {
@@ -121,8 +125,12 @@ bool CMDObserve::draw(gfx::SoftwareSurface& surface, Point2I offset, RectI clip)
         scene == this ? Parent::draw(surface, offset, clip) : drawChildren(surface, offset, clip);
     if (snowDensity_ < 80) {
         UInt32 noise = 0x9e3779b9U ^ snowFrame_;
-        for (Int32 y = 0; y < startupHeight_; ++y) {
-            for (Int32 x = 0; x < startupWidth_; ++x) {
+        for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                          return y < startupHeight_;
+                      })) {
+            for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                              return x < startupWidth_;
+                          })) {
                 noise = noise * 1664525U + 1013904223U;
                 if (noise % UInt32(snowDensity_) == UInt32(snowDensity_ / 2)) {
                     surface.point(start + Point2I{x, y}, 255);

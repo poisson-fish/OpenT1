@@ -77,6 +77,28 @@ struct TerrainGridFile {
 
 bool registerTerrainLoaders(ResourceManager&);
 
+inline std::size_t resourceResidentBytes(const TerrainGridBlock& v) {
+    using opent1::detail::allocationBytes;
+    auto bytes = sizeof(v) + allocationBytes(v.name) + allocationBytes(v.heights) +
+                 allocationBytes(v.materials) + allocationBytes(v.lights) +
+                 allocationBytes(v.hiresDelta) + allocationBytes(v.hiresMaps) +
+                 allocationBytes(v.colorPool) + allocationBytes(v.indexTable) +
+                 allocationBytes(v.treeTable);
+    for (const auto& pins : v.pins)
+        bytes += allocationBytes(pins);
+    return bytes;
+}
+
+inline std::size_t resourceResidentBytes(const TerrainGridBlockEntry& v) {
+    return sizeof(v) + opent1::detail::allocationBytes(v.name);
+}
+
+inline std::size_t resourceResidentBytes(const TerrainGridFile& v) {
+    using opent1::detail::allocationBytes;
+    return sizeof(v) + allocationBytes(v.materialList) + allocationBytes(v.blockMap) +
+           allocationBytes(v.blocks);
+}
+
 struct TerrainCollisionBlock {
     Point3F origin;
     std::shared_ptr<const TerrainCollision> geometry;

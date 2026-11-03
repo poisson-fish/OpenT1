@@ -1,4 +1,5 @@
 #include "ts_test_support.hpp"
+#include <ranges>
 #include <opent1/world/terrain_grid.hpp>
 #include <opent1/world/world_collision_sim.hpp>
 #include <opent1/world/world_scene.hpp>
@@ -308,6 +309,27 @@ void resourcesAndCollision() {
         CHECK(manager.add("map#0.dtb", loadBlock(captured(0))));
         const auto resource = TerrainGridResources::load(manager, "MAP.DTF");
         CHECK(resource);
+        SimTerrainSurface retainedSurface(*resource, {}, false, Box2F{0, 0, 16, 16});
+        WorldSurfaceQuery query;
+        query.camera.emplace();
+        query.camera->viewport = {0, 0, 63, 63};
+        query.camera->focal = {32, 32};
+        query.camera->center = {32, 32};
+        query.camera->worldToCamera.p = {-8, -8, -64};
+        query.camera->worldToCamera.flags = RMat3F::Matrix_HasTranslation;
+        query.terrainTiming = TerrainTextureTiming::RetainedLru;
+        CHECK(retainedSurface.processQuery(query) && query.image);
+        const auto stationary = query.image->mesh;
+        CHECK(retainedSurface.processQuery(query) && query.image->mesh == stationary);
+        query.camera->worldToCamera.p.x -= 1;
+        CHECK(retainedSurface.processQuery(query) && query.image->mesh != stationary);
+        const auto moved = query.image->mesh;
+        query.camera->worldToCamera.m[0][0] = 2;
+        CHECK(!retainedSurface.processQuery(query));
+        query.camera->worldToCamera.m[0][0] = 1;
+        CHECK(retainedSurface.processQuery(query) && query.image->mesh == moved);
+        query.terrainTiming = TerrainTextureTiming::NativeSoftware;
+        CHECK(retainedSurface.processQuery(query) && query.image->mesh != moved);
         for (const bool native : {false, true}) {
             TerrainLodState state(*resource);
             TerrainLodView view{{8, 8, 64}, 320, 0};
@@ -580,7 +602,7 @@ void assets(const std::filesystem::path& directory) {
                               eagerHits.surfaces[0].normal == streamHits.surfaces[0].normal &&
                               eagerHits.surfaces[0].part == streamHits.surfaces[0].part);
                     }
-                    for (std::size_t i = 0; i < window->triangles.size(); ++i) {
+                    for (auto i : std::views::iota(std::size_t{0}, window->triangles.size())) {
                         const auto& a = window->triangles[i];
                         const auto& b = streamed->triangles[i];
                         CHECK(a.material == b.material && a.lit == b.lit &&
@@ -590,17 +612,18 @@ void assets(const std::filesystem::path& directory) {
                             CHECK(a.lightMap->size == b.lightMap->size &&
                                   a.lightMap->samples == b.lightMap->samples);
                         }
-                        for (std::size_t j = 0; j < 3; ++j) {
+                        for (auto j : std::views::iota(std::size_t{0}, std::size_t{3})) {
                             CHECK(a.vertices[j].position == b.vertices[j].position &&
                                   a.vertices[j].texture == b.vertices[j].texture &&
                                   a.vertices[j].intensity == b.vertices[j].intensity &&
                                   a.vertices[j].lightMap == b.vertices[j].lightMap);
                         }
                     }
-                    CHECK(streamed->materials.textures.size() == window->materials.textures.size());
-                    for (std::size_t i = 0; i < window->materials.textures.size(); ++i) {
-                        const auto& a = window->materials.textures[i];
-                        const auto& b = streamed->materials.textures[i];
+                    CHECK(streamed->materials.textures().size() == window->materials.textures().size());
+                    for (auto i :
+                         std::views::iota(std::size_t{0}, window->materials.textures().size())) {
+                        const auto& a = window->materials.textures()[i];
+                        const auto& b = streamed->materials.textures()[i];
                         CHECK(bool(a) == bool(b));
                         if (a) {
                             CHECK(a->width == b->width && a->height == b->height &&
@@ -628,8 +651,13 @@ void assets(const std::filesystem::path& directory) {
                     CHECK(b->hiresMapIndices(UInt32(map.x), UInt32(map.y), 1) ==
                           std::vector<UInt32>{index});
                 }
-                for (UInt32 i = 0; i < b->hiresMaps.size(); ++i) {
-                    for (UInt32 resolution = 0; resolution <= 5; ++resolution) {
+                for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                                  return i < b->hiresMaps.size();
+                              })) {
+                    for (auto resolution : std::views::iota(UInt32{0}) |
+                                               std::views::take_while([&](UInt32 resolution) {
+                                                   return resolution <= 5;
+                                               })) {
                         if (b->hiresMaps[i].resolutions & (1U << resolution)) {
                             CHECK(b->hiresSamples(i, resolution));
                         }

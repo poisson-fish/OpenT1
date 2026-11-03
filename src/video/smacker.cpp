@@ -1,4 +1,5 @@
 #include <opent1/video/smacker.hpp>
+#include <ranges>
 #include <algorithm>
 #include <bit>
 #include <stdexcept>
@@ -28,7 +29,7 @@ struct Bytes {
 
     UInt32 u32() {
         UInt32 v{};
-        for (unsigned i = 0; i < 4; ++i) {
+        for (auto i : std::views::iota(unsigned{0}, unsigned{4})) {
             v |= UInt32(u8()) << (i * 8);
         }
         return v;
@@ -42,8 +43,9 @@ struct Bits {
     UInt32 get(unsigned n = 1) {
         require(n <= 16 && n <= data.size() * 8 - at);
         UInt32 v{};
-        for (unsigned i = 0; i < n; ++i, ++at) {
+        for (const auto i : std::views::iota(0U, n)) {
             v |= UInt32((std::to_integer<unsigned>(data[at / 8]) >> (at % 8)) & 1) << i;
+            ++at;
         }
         return v;
     }
@@ -104,7 +106,7 @@ struct Tree {
         } else {
             auto& n = nodes[std::size_t(id)];
             n.value = UInt16(lo.symbol(b) | (hi.symbol(b) << 8));
-            for (int j = 0; j < 3; ++j) {
+            for (auto j : std::views::iota(0, 3)) {
                 if (n.value == escapes[std::size_t(j)]) {
                     n.cache = j;
                     break;
@@ -173,7 +175,9 @@ Pcm pcm(std::span<const std::byte> bytes, const Chunk& c, AudioFormat format, bo
     const auto sampleBytes = UInt32(format.bits / 8), block = sampleBytes * format.channels;
     require(c.decoded >= block && c.decoded % block == 0);
     std::array<Tree, 4> trees;
-    for (UInt32 i = 0; i < block; ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < block;
+                  })) {
         require(b.get() == 1);
         trees[i].small(b);
         require(b.get() == 0);
@@ -186,7 +190,10 @@ Pcm pcm(std::span<const std::byte> bytes, const Chunk& c, AudioFormat format, bo
     }
     out.bytes.resize(c.decoded);
     for (UInt32 at = 0; at < c.decoded; at += block) {
-        for (UInt32 channel = 0; channel < format.channels; ++channel) {
+        for (auto channel :
+             std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 channel) {
+                 return channel < format.channels;
+             })) {
             if (at) {
                 UInt32 delta = trees[channel * sampleBytes].symbol(b);
                 if (sampleBytes == 2) {
@@ -219,7 +226,9 @@ void palette(std::span<const std::byte> input, gfx::Palette& pal) {
             const auto from = b.u8();
             const UInt32 count = (op & 63) + 1;
             require(count <= 256 - i && count <= 256U - from);
-            for (UInt32 j = 0; j < count; ++j) {
+            for (auto j : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 j) {
+                              return j < count;
+                          })) {
                 colors[i++] = old[from + j];
             }
         } else {
@@ -274,7 +283,7 @@ std::unique_ptr<Movie> Movie::load(StreamIO& stream, UInt32 size) {
         for (auto& s : treeSizes) {
             s = b.u32();
         }
-        for (UInt32 t = 0; t < 7; ++t) {
+        for (auto t : std::views::iota(UInt32{0}, UInt32{7})) {
             const auto f = b.u32();
             const auto rate = f & 0xffffff;
             require(!(f & 0x0c000000));
@@ -297,14 +306,16 @@ std::unique_ptr<Movie> Movie::load(StreamIO& stream, UInt32 size) {
         const auto types = b.take(count);
         Bits treeBits{b.take(treeBytes)};
         bool anyTree{};
-        for (UInt32 i = 0; i < 4; ++i) {
+        for (auto i : std::views::iota(UInt32{0}, UInt32{4})) {
             auto probe = treeBits;
             anyTree = probe.get() != 0 || anyTree;
             d->trees[i] = bigTree(treeBits, treeSizes[i]);
         }
         require(anyTree);
         d->packets.reserve(count);
-        for (UInt32 i = 0; i < count; ++i) {
+        for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                          return i < count;
+                      })) {
             const auto start = b.at;
             Bytes packet{b.take(sizes[i])};
             Packet p;
@@ -316,7 +327,7 @@ std::unique_ptr<Movie> Movie::load(StreamIO& stream, UInt32 size) {
                 p.paletteSize = n - 1;
                 packet.take(n - 1);
             }
-            for (UInt32 t = 0; t < 7; ++t) {
+            for (auto t : std::views::iota(UInt32{0}, UInt32{7})) {
                 if (type & (2U << t)) {
                     require(d->formats[t].rate != 0);
                     const auto n = packet.u32();
@@ -397,7 +408,9 @@ Pcm Movie::audio(UInt32 t, UInt64 first, UInt32 count) const {
     const auto end = std::min(first + count, d.samples[t]);
     const UInt32 block = f.channels * (f.bits / 8);
     out.bytes.reserve(std::size_t(end - first) * block);
-    for (UInt32 i = 0; i < d.frames; ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < d.frames;
+                  })) {
         const auto& c = d.packets[i].audio[t];
         const auto tail = c.first + c.decoded / block;
         if (!c.size || tail <= first) {
@@ -450,7 +463,7 @@ bool Decoder::decode(UInt32 index, std::shared_ptr<const Frame>& previous, bool 
         palette(bytes.subspan(p.palette, p.paletteSize), *f->bitmap.palette);
     }
     if (audio) {
-        for (UInt32 t = 0; t < 7; ++t) {
+        for (auto t : std::views::iota(UInt32{0}, UInt32{7})) {
             f->audio[t] = pcm(bytes, p.audio[t], d.formats[t], d.packed[t]);
         }
     }
@@ -468,22 +481,26 @@ bool Decoder::decode(UInt32 index, std::shared_ptr<const Frame>& previous, bool 
         if ((type & 3) == 1 && d.version == '4') {
             mode = bits.get() ? 1U : (bits.get() ? 2U : 0U);
         }
-        for (UInt32 n = 0; n < run && block < total; ++n, ++block) {
+        const auto endBlock = block + std::min(run, total - block);
+        for (const auto currentBlock : std::views::iota(block, endBlock)) {
             if ((type & 3) == 2) {
                 continue;
             }
-            const UInt32 x = (block % across) * 4, y = (block / across) * 4;
+            const UInt32 x = (currentBlock % across) * 4, y = (currentBlock / across) * 4;
             std::array<UInt8, 16> pixels{};
             if ((type & 3) == 3) {
                 pixels.fill(UInt8(type >> 8));
             } else if ((type & 3) == 0) {
                 const auto colors = symbol(1), map = symbol(0);
-                for (UInt32 k = 0; k < 16; ++k) {
+                for (auto k : std::views::iota(UInt32{0}, UInt32{16})) {
                     pixels[k] = UInt8((map & (1U << k)) ? colors >> 8 : colors & 255);
                 }
             } else {
                 const UInt32 rows = mode ? 2 : 4;
-                for (UInt32 row = 0; row < rows; ++row) {
+                for (auto row :
+                     std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 row) {
+                         return row < rows;
+                     })) {
                     const auto right = symbol(2);
                     const auto left = mode == 1 ? right : symbol(2);
                     const std::array<UInt8, 4> line =
@@ -495,19 +512,23 @@ bool Decoder::decode(UInt32 index, std::shared_ptr<const Frame>& previous, bool 
                             : std::array<UInt8, 4>{
                                   UInt8(left), UInt8(left >> 8), UInt8(right), UInt8(right >> 8)};
                     const UInt32 repeats = mode ? 2 : 1;
-                    for (UInt32 r = 0; r < repeats; ++r) {
+                    for (auto r :
+                         std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 r) {
+                             return r < repeats;
+                         })) {
                         std::copy(
                             line.begin(), line.end(), pixels.begin() + (row * repeats + r) * 4);
                     }
                 }
             }
-            for (UInt32 r = 0; r < 4; ++r) {
+            for (auto r : std::views::iota(UInt32{0}, UInt32{4})) {
                 auto target = f->bitmap.row(Int32(y + r));
-                for (UInt32 col = 0; col < 4; ++col) {
+                for (auto col : std::views::iota(UInt32{0}, UInt32{4})) {
                     target[x + col] = std::byte(pixels[r * 4 + col]);
                 }
             }
         }
+        block = endBlock;
     }
     previous = std::move(f);
     return true;
@@ -541,7 +562,10 @@ bool Decoder::seek(UInt32 index) {
     }
     try {
         auto candidate = start ? frame_ : nullptr;
-        for (UInt32 i = start; i <= index; ++i) {
+        for (auto i :
+             std::views::iota(static_cast<UInt32>(start)) | std::views::take_while([&](UInt32 i) {
+                 return i <= index;
+             })) {
             decode(i, candidate, i == index);
         }
         frame_ = std::move(candidate);

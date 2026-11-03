@@ -1,4 +1,5 @@
 #include <opent1/game/player_manager.hpp>
+#include <ranges>
 #include <opent1/game/sensor_manager.hpp>
 
 namespace opent1::game {
@@ -114,7 +115,9 @@ void SensorManager::newClient(Int32 managerId) {
     if (!client || !client->packetStream) {
         return;
     }
-    for (Int32 i = 0; i < MaxTargets; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < MaxTargets;
+                  })) {
         const auto& entry = targets_[static_cast<std::size_t>(i)];
         if (entry.obj && !entry.name.empty()) {
             auto ev = std::make_unique<TargetNameEvent>();
@@ -162,7 +165,9 @@ Int32 SensorManager::addTarget(GameBase* targ, std::string_view name) {
         return targ->sensorKey;
     }
 
-    for (Int32 i = 0; i < MaxTargets; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < MaxTargets;
+                  })) {
         const Int32 idx = (lastKey_ + i) % MaxTargets;
         if (!targets_[static_cast<std::size_t>(idx)].obj) {
             deleteNotify(*targ);
@@ -277,7 +282,7 @@ void SensorManager::testObject(GameBase* obj) {
     }
 
     obj->setSensorPinged(GameBase::PingStatusClear);
-    for (Int32 iTeam = 0; iTeam < 8; ++iTeam) {
+    for (auto iTeam : std::views::iota(Int32{0}, Int32{8})) {
         obj->setVisibleToTeam(iTeam, false);
     }
 
@@ -310,7 +315,7 @@ void SensorManager::testObject(GameBase* obj) {
         }
     }
 
-    for (Int32 iTeam = 0; iTeam < 8; ++iTeam) {
+    for (auto iTeam : std::views::iota(Int32{0}, Int32{8})) {
         if (obj->getAlwaysVisibleToTeam(iTeam)) {
             obj->setVisibleToTeam(iTeam, true);
             continue;

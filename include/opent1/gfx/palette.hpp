@@ -67,4 +67,12 @@ struct Palette {
 };
 
 bool registerPaletteLoaders(ResourceManager&); // .pal, .ppl and .dpl
+
+inline std::size_t resourceResidentBytes(const SubPalette& v) {
+    return sizeof(v) + opent1::detail::allocationBytes(v.remap);
+}
+
+inline std::size_t resourceResidentBytes(const Palette& v) {
+    return sizeof(v) + opent1::detail::allocationBytes(v.palettes);
+}
 } // namespace opent1::gfx

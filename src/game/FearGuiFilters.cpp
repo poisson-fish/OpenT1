@@ -1,4 +1,5 @@
 #include "opent1/game/shell_controls.hpp"
+#include <ranges>
 
 #include <array>
 #include <charconv>
@@ -101,7 +102,9 @@ std::string FilterCtrl::formatFilterSpec(std::string_view filterName,
                                          std::span<const FilterInfo> conditions) {
     std::string out(filterName);
     out.push_back(':');
-    for (std::size_t i = 0; i < conditions.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < conditions.size();
+                  })) {
         if (i > 0) {
             out.push_back('\t');
         }

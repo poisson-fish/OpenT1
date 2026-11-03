@@ -1,4 +1,5 @@
 #include <opent1/platform/net_transport.hpp>
+#include <ranges>
 #include <algorithm>
 #include <charconv>
 #include <format>
@@ -44,7 +45,7 @@ std::optional<IpxAddress> parseIpxAddress(std::string_view text) {
         return {};
     }
     const auto hex = [](std::string_view source, auto& bytes) {
-        for (std::size_t i = 0; i < bytes.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, bytes.size())) {
             unsigned value{};
             const auto begin = source.data() + i * 2;
             const auto result = std::from_chars(begin, begin + 2, value, 16);
@@ -97,10 +98,10 @@ SOCKADDR_IPX nativeIpx(const IpxAddress& address) {
     SOCKADDR_IPX result{};
     result.sa_family = AF_IPX;
     result.sa_socket = htons(address.port);
-    for (std::size_t i = 0; i < address.network.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, address.network.size())) {
         result.sa_netnum[i] = static_cast<char>(address.network[i]);
     }
-    for (std::size_t i = 0; i < address.node.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, address.node.size())) {
         result.sa_nodenum[i] = static_cast<char>(address.node[i]);
     }
     return result;
@@ -109,10 +110,10 @@ SOCKADDR_IPX nativeIpx(const IpxAddress& address) {
 IpxAddress portableIpx(const SOCKADDR_IPX& address) {
     IpxAddress result;
     result.port = ntohs(address.sa_socket);
-    for (std::size_t i = 0; i < result.network.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, result.network.size())) {
         result.network[i] = static_cast<UInt8>(address.sa_netnum[i]);
     }
-    for (std::size_t i = 0; i < result.node.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, result.node.size())) {
         result.node[i] = static_cast<UInt8>(address.sa_nodenum[i]);
     }
     return result;

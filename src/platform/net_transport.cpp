@@ -1,4 +1,5 @@
 #include <opent1/platform/net_transport.hpp>
+#include <ranges>
 #include <opent1/core/bit_stream.hpp>
 #include <algorithm>
 #include <bit>
@@ -210,7 +211,9 @@ struct Session::Impl {
 
     void flush(Connection& c) {
         // Include the latest outstanding packet (legacy flush accidentally skipped it).
-        for (UInt32 n = 1; n <= 32; ++n) {
+        for (auto n : std::views::iota(UInt32{1}) | std::views::take_while([&](UInt32 n) {
+                          return n <= 32;
+                      })) {
             auto& note = c.p.notes[(c.p.lastSent + n) & 31];
             if (note.type >= 0 && note.key) {
                 emit(c, EventType::Notify, {}, note.key, false);
@@ -265,7 +268,9 @@ struct Session::Impl {
             return;
         }
         p.connectSequence = connect;
-        for (UInt32 n = 1; n < sequence - p.lastReceived; ++n) {
+        for (auto n : std::views::iota(UInt32{1}) | std::views::take_while([&](UInt32 n) {
+                          return n < sequence - p.lastReceived;
+                      })) {
             p.acks[(p.lastReceived + n) & 31] = false;
         }
         if (base != Ping) {
@@ -278,9 +283,15 @@ struct Session::Impl {
                        base == Accept || (((sequence & 31) - h.highAck) & 31) > 11;
         if (h.runCount) {
             UInt32 end{};
-            for (std::size_t n = 0; n < h.runCount; ++n) {
+            for (auto n :
+                 std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t n) {
+                     return n < h.runCount;
+                 })) {
                 end = h.runs[n].start;
-                for (UInt32 j = 0; j < h.runs[n].count; ++j) {
+                for ([[maybe_unused]] auto j :
+                     std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 j) {
+                         return j < h.runs[n].count;
+                     })) {
                     p.notes[end].acked = true;
                     end = (end + 1) & 31;
                 }
@@ -459,7 +470,10 @@ Result Session::sendRaw(std::string_view address, std::span<const std::byte> dat
 
 Result Session::process(UInt32 now) {
     auto& s = *impl_;
-    for (std::size_t n = 0; n < s.config.packetsPerProcess; ++n) {
+    for ([[maybe_unused]] auto n :
+         std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t n) {
+             return n < s.config.packetsPerProcess;
+         })) {
         if (!s.room()) {
             return Result::Capacity;
         }

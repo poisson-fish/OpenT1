@@ -29,7 +29,7 @@ bool FGCommandView::draw(gfx::SoftwareSurface& surface, Point2I offset, RectI cl
     if (!border_) {
         return true;
     }
-    for (Int32 i = 0; i < 15; ++i) {
+    for (auto i : std::views::iota(Int32{0}, Int32{15})) {
         if (!border_->get(i)) {
             return false;
         }

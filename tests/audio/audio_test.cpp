@@ -1,4 +1,5 @@
 #include <opent1/audio/audio.hpp>
+#include <ranges>
 #include <opent1/core/file_stream.hpp>
 #include <opent1/core/mem_stream.hpp>
 #include <opent1/sim/sim_audio.hpp>
@@ -61,9 +62,11 @@ std::shared_ptr<Wave> tone(UInt16 channels = 1, UInt16 bits = 16) {
     w->channels = channels;
     w->bits = bits;
     w->samples.resize(4800 * channels * (bits / 8));
-    for (std::size_t i = 0; i < 4800; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{4800})) {
         const auto sample = Int16(std::sin(double(i) * .06) * 10000);
-        for (UInt16 c = 0; c < channels; ++c) {
+        for (auto c : std::views::iota(UInt16{0}) | std::views::take_while([&](UInt16 c) {
+                          return c < channels;
+                      })) {
             const auto at = (i * channels + c) * (bits / 8);
             w->samples[at] = std::byte(bits == 8 ? 128 + (sample / 256) : sample & 255);
             if (bits == 16) {
@@ -80,7 +83,9 @@ void nativeCorpus() {
     const auto n = read<UInt32>(f);
     CHECK(n == 864);
     float largest{};
-    for (UInt32 i = 0; i < n; ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < n;
+                  })) {
         const auto p = profile(f);
         const auto t = matrix(f);
         Listener l;
@@ -109,7 +114,7 @@ void nativeCorpus() {
               2e-6f);
     }
     CHECK(read<UInt32>(f) == 16);
-    for (UInt32 i = 0; i < 16; ++i) {
+    for (auto i : std::views::iota(UInt32{0}, UInt32{16})) {
         const auto size = read<UInt32>(f);
         std::vector<std::byte> bytes(size);
         CHECK(f.readBytes(bytes));
@@ -123,7 +128,10 @@ void nativeCorpus() {
         CHECK(nativeBufferBytes(*w, true) ==
               ((i & 8) ? w->rate * w->channels * (w->bits / 8) * 2 : w->samples.size()));
         // Reject every truncated prefix, without publishing any partial Wave.
-        for (std::size_t end = 0; end < std::min<std::size_t>(bytes.size(), 80); ++end) {
+        for (auto end :
+             std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t end) {
+                 return end < std::min<std::size_t>(bytes.size(), 80);
+             })) {
             MemRWStream cut{std::span<const std::byte>(bytes.data(), end)};
             CHECK(!Wave::load(cut, UInt32(end)));
         }
@@ -143,7 +151,7 @@ void nativeCorpus() {
     auto control = std::make_shared<BackendControl>();
     Runtime r(Device({true, 48000, {}, control}));
     CHECK(read<UInt32>(f) == 16);
-    for (UInt32 i = 0; i < 16; ++i) {
+    for (auto i : std::views::iota(UInt32{0}, UInt32{16})) {
         const auto index = read<UInt32>(f);
         CHECK(index == i);
         Profile p;
@@ -170,10 +178,12 @@ void nativeCorpus() {
     }
     CHECK(read<UInt32>(f) == 160);
     std::size_t played{};
-    for (UInt32 id = 1; id <= 160; ++id) {
+    for (auto id : std::views::iota(UInt32{1}) | std::views::take_while([&](UInt32 id) {
+                       return id <= 160;
+                   })) {
         CHECK(r.define(id, tone(), {}));
     }
-    for (UInt32 i = 0; i < 160; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(UInt32{0}, UInt32{160})) {
         const auto op = read<UInt32>(f);
         const auto c = read<Int32>(f);
         const auto id = read<UInt32>(f);
@@ -190,7 +200,7 @@ void nativeCorpus() {
             }
         } else {
             // Completion is supplied by the original manager shim at these polls.
-            for (Handle h = 1; h < 1000; ++h) {
+            for (const auto h : std::views::iota(Handle{1}, Handle{1000})) {
                 if (r.snapshot(h).handle) {
                     CHECK(r.stop(h));
                 }
@@ -198,7 +208,7 @@ void nativeCorpus() {
             r.purge();
             CHECK(r.pollSequences());
         }
-        for (std::size_t channel = 0; channel < 32; ++channel) {
+        for (auto channel : std::views::iota(std::size_t{0}, std::size_t{32})) {
             const auto expected = read<UInt32>(f), queued = read<UInt32>(f);
             const auto actual = r.snapshot(r.current(channel)).sound;
             CHECK(actual == expected && r.queued(channel) == queued);
@@ -209,7 +219,7 @@ void nativeCorpus() {
         CHECK(played == read<UInt32>(f));
     }
     CHECK(read<UInt32>(f) == 66);
-    for (UInt32 i = 0; i < 66; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(UInt32{0}, UInt32{66})) {
         sim::SimSoundSequenceEvent e;
         e.channel = read<Int32>(f);
         e.sound = read<UInt32>(f);
@@ -228,7 +238,9 @@ void nativeCorpus() {
         CHECK(decoded.unpack(input));
         CHECK(decoded.sound == e.sound && decoded.channel == e.channel &&
               decoded.spatial == e.spatial);
-        for (UInt32 end = 0; end < bits; ++end) {
+        for (auto end : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 end) {
+                            return end < bits;
+                        })) {
             BitStream cut{std::span<const std::byte>(expected)};
             cut.setLimits(end, 0);
             decoded.sound = 77;
@@ -237,7 +249,7 @@ void nativeCorpus() {
         }
     }
     CHECK(read<UInt32>(f) == 128);
-    for (UInt32 i = 0; i < 128; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(UInt32{0}, UInt32{128})) {
         Wave w;
         w.bits = UInt16(read<UInt32>(f));
         w.channels = 1;
@@ -249,17 +261,17 @@ void nativeCorpus() {
         std::array<std::byte, 32> expected{}, output{};
         CHECK(f.readBytes(expected));
         CHECK(w.readFrames(at / (w.bits / 8), output, loop));
-        for (std::size_t j = 0; j < 32; ++j) {
+        for (auto j : std::views::iota(std::size_t{0}, std::size_t{32})) {
             CHECK(output[j] == expected[(cursor + j) % 32]);
         }
         CHECK(w.readFrames(std::numeric_limits<UInt64>::max(), output, loop));
     }
     CHECK(read<UInt32>(f) == 32);
-    for (UInt32 i = 0; i < 32; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(UInt32{0}, UInt32{32})) {
         Runtime runtime(Device({true, 48000, {}, nullptr}));
         const auto max = read<UInt32>(f);
         std::array<Handle, 8> handles{};
-        for (UInt32 j = 0; j < 8; ++j) {
+        for (auto j : std::views::iota(UInt32{0}, UInt32{8})) {
             Profile p;
             p.flags = read<UInt32>(f);
             p.baseVolume = read<float>(f);
@@ -389,7 +401,7 @@ void backend() {
         }
         {
             std::vector<Source> sources;
-            for (unsigned i = 0; i < 127; ++i) {
+            for ([[maybe_unused]] auto i : std::views::iota(unsigned{0}, unsigned{127})) {
                 sources.push_back(d.source(b));
             }
             CHECK(c->sources == 128 && throws([&] {
@@ -400,7 +412,7 @@ void backend() {
             std::vector<std::shared_ptr<const Buffer>> buffers;
             auto tiny = tone();
             tiny->samples.resize(2);
-            for (unsigned i = 0; i < 511; ++i) {
+            for ([[maybe_unused]] auto i : std::views::iota(unsigned{0}, unsigned{511})) {
                 buffers.push_back(d.upload(*tiny));
             }
             CHECK(c->buffers == 512 && throws([&] {
@@ -495,11 +507,11 @@ void rollback() {
     CHECK(!r.advance(-1) && !r.advance(std::numeric_limits<double>::quiet_NaN()));
     CHECK(!r.queue(32, 1));
     CHECK(!r.queue(-2, 1));
-    for (int i = 0; i < 256; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(0, 256)) {
         CHECK(r.queue(31, 1));
     }
     CHECK(!r.queue(31, 1));
-    for (int i = 1; i < 128; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(1, 128)) {
         CHECK(r.play(1));
     }
     CHECK(!r.play(1));
@@ -608,7 +620,10 @@ void streamingAudio() {
         wave->channels = 1;
         wave->bits = bits;
         wave->samples.resize(3 * wave->rate * (bits / 8));
-        for (std::size_t frame = 0; frame < 3 * wave->rate; ++frame) {
+        for (auto frame :
+             std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t frame) {
+                 return frame < 3 * wave->rate;
+             })) {
             const Int16 value =
                 static_cast<Int16>(std::sin(static_cast<double>(frame) * .17) * 12000);
             wave->samples[frame * (bits / 8)] =
@@ -625,7 +640,9 @@ void streamingAudio() {
         CHECK(handle && control->buffers == 4 && control->sources == 1);
         // The script clock alone cannot advance a native playback cursor.
         CHECK(runtime.advance(100) && runtime.snapshot(handle).frame == 0);
-        for (unsigned tick = 1; tick <= 8; ++tick) {
+        for (auto tick : std::views::iota(unsigned{1}) | std::views::take_while([&](unsigned tick) {
+                             return tick <= 8;
+                         })) {
             const auto pcm = runtime.device().render(4000);
             CHECK(runtime.advance(.5));
             CHECK(control->buffers == 4 && control->sources == 1);
@@ -650,7 +667,7 @@ void streamingAudio() {
         CHECK(runtime.define(78, wave, profile));
         const auto loop = runtime.play(78);
         CHECK(loop);
-        for (unsigned tick = 0; tick < 18; ++tick) {
+        for ([[maybe_unused]] auto tick : std::views::iota(unsigned{0}, unsigned{18})) {
             (void)runtime.device().render(4000);
             CHECK(runtime.advance(.5));
             CHECK(runtime.snapshot(loop).status == Status::Playing &&
@@ -679,7 +696,7 @@ void zeroSoundIdAndRepeatedEffects() {
     auto control = std::make_shared<BackendControl>();
     Runtime runtime(Device({true, 48000, {}, control}));
     CHECK(runtime.define(0, tone(), {}));
-    for (int shot = 0; shot < 300; ++shot) {
+    for ([[maybe_unused]] auto shot : std::views::iota(0, 300)) {
         const auto handle = runtime.play(0);
         CHECK(handle && runtime.snapshot(handle).sound == 0);
         CHECK(runtime.advance(.11));

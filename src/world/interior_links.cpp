@@ -1,4 +1,5 @@
 #include <opent1/gfx/render_limits.hpp>
+#include <ranges>
 #include <opent1/world/interior_links.hpp>
 #include "collision_geometry.hpp"
 
@@ -85,8 +86,13 @@ InteriorLinkGraph::prepare(std::span<const InteriorLinkInstance> instances) {
     }
     instances = graph.instances_;
     std::size_t count{};
-    for (std::size_t i = 0; i < instances.size(); ++i) {
-        for (std::size_t j = i + 1; j < instances.size(); ++j) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < instances.size();
+                  })) {
+        for (auto j : std::views::iota(static_cast<std::size_t>(i + 1)) |
+                          std::views::take_while([&](std::size_t j) {
+                              return j < instances.size();
+                          })) {
             if (!instances[i].linkableFaces || !instances[j].linkableFaces ||
                 !aligned(instances[j].placement, graph.inverses_[i])) {
                 continue;

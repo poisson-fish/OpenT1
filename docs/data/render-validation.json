@@ -1,0 +1,366 @@
+{
+  "date": "2026-11-02",
+  "revision": "ec9540229e8c816f098540771ff1ef36f0018608",
+  "ordinary_benchmark_sha256": "9c862700a110af399f325cde6376b191d5c505e583d296ea1ff954c87a400fa4",
+  "automated_regressions": {
+    "windows_msvc_release": {
+      "ctest_suites": 13,
+      "failed": 0,
+      "gpu_ctest_note": "CTest uses the dummy video driver; real GPU tests run separately."
+    },
+    "windows_real_gpu": {
+      "backends": [
+        "direct3d12",
+        "vulkan"
+      ],
+      "platform_suites_passed": true,
+      "coverage": [
+        "near/far clipping",
+        "both windings",
+        "retained indexed meshes",
+        "mesh/staging budget rejection",
+        "lightmap clamping and gutters",
+        "array/standalone parity",
+        "authored mips",
+        "palette/gamma invalidation",
+        "dynamic map reuse",
+        "immutable batches after cache trim"
+      ],
+      "array_conformance": "Explicit standalone-versus-array readbacks cover NPOT single-mip layouts, authored power-of-two mip chains, nearest/linear filtering, wrap/clamp, LOD bias, alpha/cutouts, palette replacement, immutable earlier batches and cache trim on D3D12 and Vulkan."
+    },
+    "installed_assets": {
+      "fixpack_cases": 3,
+      "trpg_cases": 3,
+      "failed": 0,
+      "coverage": [
+        "targeting and gameplay regressions",
+        "RPG inventory/combat/ferries/skins",
+        "first/third-person RPG weapons",
+        "rpgmap1 world rendering",
+        "mission transitions"
+      ]
+    },
+    "linux_wsl_clang_release_headless": {
+      "ctest_suites": 11,
+      "failed": 0,
+      "compiler": "Clang 23.1.1",
+      "archive_backing": [
+        "native Linux mapped files under /tmp",
+        "WSL 9p buffered fallback under /mnt/c"
+      ]
+    },
+    "native_memory_audit": {
+      "self_test_passed": true,
+      "catalogs_passed": true,
+      "fresh_gpu_missions": 6,
+      "instrumented_timings_used": false
+    }
+  },
+  "acceptance": {
+    "base-d3d12": {
+      "trim_preserved_frame": true,
+      "batch_survived_trim": true,
+      "software_rendered": true,
+      "transition_rendered": true,
+      "trim_max_channel_error": 0,
+      "missions": [
+        "Raindance",
+        "Broadside"
+      ],
+      "driver": "direct3d12"
+    },
+    "rpg-d3d12": {
+      "trim_preserved_frame": true,
+      "batch_survived_trim": true,
+      "software_rendered": true,
+      "transition_rendered": true,
+      "trim_max_channel_error": 0,
+      "missions": [
+        "rpgmap1",
+        "rpgmap5"
+      ],
+      "driver": "direct3d12"
+    },
+    "base-vulkan": {
+      "trim_preserved_frame": true,
+      "batch_survived_trim": true,
+      "software_rendered": true,
+      "transition_rendered": true,
+      "trim_max_channel_error": 1,
+      "missions": [
+        "Broadside",
+        "Raindance"
+      ],
+      "driver": "vulkan"
+    },
+    "rpg-vulkan": {
+      "trim_preserved_frame": true,
+      "batch_survived_trim": true,
+      "software_rendered": true,
+      "transition_rendered": true,
+      "trim_max_channel_error": 1,
+      "missions": [
+        "rpgmap5",
+        "rpgmap1"
+      ],
+      "driver": "vulkan"
+    }
+  },
+  "readbacks": {
+    "shared_terrain_topology": {
+      "base-Broadside-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Broadside-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Broadside-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Raindance-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Raindance-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Raindance-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap1-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap1-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap1-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap5-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap5-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap5-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      }
+    },
+    "bounded_bsp_scratch": {
+      "base-Broadside-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Broadside-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Broadside-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Raindance-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Raindance-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Raindance-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap1-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap1-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap1-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap5-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap5-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap5-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      }
+    },
+    "final_repeat": {
+      "base-Broadside-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Broadside-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Broadside-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Raindance-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Raindance-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "base-Raindance-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap1-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap1-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap1-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap5-rotate.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap5-stationary.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      },
+      "rpg-rpgmap5-travel.json.ppm": {
+        "changed_pixels": 0,
+        "pixels_over_2": 0,
+        "max_channel_error": 0,
+        "mean_channel_error": 0.0
+      }
+    },
+    "original_projection_difference_note": "GPU vertex transforms preserve the visual rules but are not pixel-identical to CPU projection/clipping. Nine available original case comparisons include isolated boundary pixels up to 94/255. Magnified stationary/travel rpgmap1 boundary crops were visually inspected. OPENT1_PROJECTED_INTERIORS=1 retains the compatibility path."
+  },
+  "bsp_box_microbenchmark": {
+    "host": "Linux WSL, Clang 23.1.1 -O3 -DNDEBUG, ordinary executable without allocation tracking",
+    "queries_per_run": 514000,
+    "checksum_all_runs": 308000,
+    "reference_revision": "ec95402^",
+    "reference_ms": [
+      862.805,
+      865.088,
+      873.538
+    ],
+    "bounded_scratch_ms": [
+      569.349,
+      560.057,
+      553.288
+    ],
+    "source_sha256": "85607874d7e6ff945f9418b12f9cf318bb2cb4a569f69a84f5dbcd28d5fe1d51",
+    "note": "Synthetic deterministic cube/corpus queries. This is not a measured whole-frame speedup or a mobile/device result."
+  },
+  "unavailable_validation": [
+    "Linux desktop Vulkan",
+    "macOS Metal runtime and native shader compilation",
+    "Android Vulkan devices and lifecycle behavior",
+    "iOS Metal devices and lifecycle behavior"
+  ],
+  "linux_gcc_build_limitation": "GCC 16.2.1 Release stops at an existing -Werror=maybe-uninitialized warning in src/platform/net_transport.cpp:202. Clang headless Release builds and passes all suites; networking source was not changed for that warning.",
+  "remaining_measurements": [
+    "GPU timestamps",
+    "remote-client-only timing",
+    "whole-process allocations/frame independent of render tagging",
+    "exhaustive traversal and long sustained gameplay",
+    "mobile/unified-memory headroom and practical budgets"
+  ]
+}

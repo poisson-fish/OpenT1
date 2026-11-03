@@ -1,4 +1,5 @@
 #include "test_support.hpp"
+#include <ranges>
 #include <opent1/console/lexer_parser.hpp>
 #include <array>
 #include <future>
@@ -218,36 +219,40 @@ void bounds() {
                                                   : DiagnosticCode::UnexpectedToken);
     }
     std::string assignments;
-    for (int i = 0; i < 2000; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(0, 2000)) {
         assignments += "$a=";
     }
     bad(assignments + "1;", DiagnosticCode::NestingLimit);
     std::string nested;
-    for (int i = 0; i < 2000; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(0, 2000)) {
         nested += "if(1)";
     }
     bad(nested + "break;", DiagnosticCode::NestingLimit);
     std::string wide;
-    for (int i = 0; i < 10000; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(0, 10000)) {
         wide += "$a=1;";
     }
     CHECK(good(wide).statements.size() == 10000);
     const std::string flat = "return 1" + [] {
         std::string s;
-        for (int i = 0; i < 10000; ++i) {
+        for ([[maybe_unused]] auto i : std::views::iota(0, 10000)) {
             s += "+1";
         }
         return s;
     }() + ";";
     CHECK(good(flat).nodes.size() == 20002); // destruction uses no recursive chain
     const std::string example = "function f(%a){ if(%a) %a.x[1,2]=3; else echo(\"x\"); }";
-    for (std::size_t n = 0; n <= example.size(); ++n) {
+    for (auto n : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t n) {
+                      return n <= example.size();
+                  })) {
         static_cast<void>(parse(std::string_view(example).substr(0, n)));
     }
     std::uint32_t rng = 1234;
-    for (int trial = 0; trial < 3000; ++trial) {
+    for (auto trial : std::views::iota(0, 3000)) {
         std::string input;
-        for (int i = 0; i < trial % 80; ++i) {
+        for ([[maybe_unused]] auto i : std::views::iota(0) | std::views::take_while([&](int i) {
+                                           return i < trial % 80;
+                                       })) {
             rng = rng * 1664525 + 1013904223;
             input += static_cast<char>(rng >> 24);
         }
@@ -255,9 +260,9 @@ void bounds() {
         CHECK(result.ok() || !result.diagnostics.empty());
     }
     std::vector<std::future<void>> jobs;
-    for (int i = 0; i < 4; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(0, 4)) {
         jobs.push_back(std::async(std::launch::async, [] {
-            for (int j = 0; j < 50; ++j) {
+            for ([[maybe_unused]] auto j : std::views::iota(0, 50)) {
                 CHECK(good("$a=1; echo($a);").statements.size() == 2);
             }
         }));

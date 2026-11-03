@@ -66,6 +66,7 @@ add_library(
     src/core/rle_stream.cpp
     src/core/lzh_stream.cpp
     src/core/vol_stream.cpp
+    src/core/mapped_file.cpp
     src/core/file_stream.cpp
     src/core/string_table.cpp
     src/core/timer.cpp
@@ -610,26 +611,14 @@ if(OPENT1_BUILD_PLATFORM)
         target_link_libraries(opent1_gui_tools_sdl PRIVATE shell32)
     endif()
     target_link_libraries(opent1_game INTERFACE opent1_gui_tools_sdl opent1_sim_gfx_sdl)
+    # The runtime source in this library includes SDL directly. Package aliases
+    # may forward their headers through SDL3::Headers rather than expose paths.
+    target_link_libraries(opent1_game PRIVATE SDL3::SDL3)
     set_property(
         SOURCE src/main/main.cpp
         APPEND
         PROPERTY COMPILE_DEFINITIONS OPENT1_HAS_SDL3_MAIN=1
     )
-    if(DEFINED sdl3_SOURCE_DIR)
-        set_property(
-            SOURCE src/main/main.cpp
-            APPEND
-            PROPERTY INCLUDE_DIRECTORIES "${sdl3_SOURCE_DIR}/include"
-        )
-    endif()
-    get_target_property(OPENT1_SDL3_INTERFACE_INCLUDES SDL3::SDL3 INTERFACE_INCLUDE_DIRECTORIES)
-    if(OPENT1_SDL3_INTERFACE_INCLUDES)
-        set_property(
-            SOURCE src/main/main.cpp
-            APPEND
-            PROPERTY INCLUDE_DIRECTORIES ${OPENT1_SDL3_INTERFACE_INCLUDES}
-        )
-    endif()
 endif()
 if(OPENT1_BUILD_AUDIO)
     target_link_libraries(opent1_game INTERFACE opent1_world_audio)
@@ -645,6 +634,45 @@ endif()
 add_executable(opent1 src/main/main.cpp)
 target_compile_definitions(opent1 PRIVATE OPENT1_STANDALONE_EXECUTABLE=1)
 target_link_libraries(opent1 PRIVATE opent1_game)
+if(OPENT1_BUILD_PLATFORM)
+    add_executable(opent1_render_benchmark EXCLUDE_FROM_ALL tools/render_benchmark.cpp)
+    target_link_libraries(opent1_render_benchmark PRIVATE opent1_game opent1_gfx_sdl)
+    if(WIN32 AND TARGET SDL3::SDL3-shared)
+        add_custom_command(
+            TARGET opent1_render_benchmark
+            POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared>
+                    $<TARGET_FILE_DIR:opent1_render_benchmark>
+        )
+    endif()
+endif()
+# Explicit diagnostic target: allocation tracking is confined to this executable.
+add_executable(opent1_memory_audit EXCLUDE_FROM_ALL tools/memory_audit.cpp src/audio/wave.cpp)
+target_link_libraries(opent1_memory_audit PRIVATE opent1_game)
+if(WIN32)
+    target_link_libraries(opent1_memory_audit PRIVATE psapi dxgi)
+endif()
+if(OPENT1_BUILD_PLATFORM)
+    target_compile_definitions(opent1_memory_audit PRIVATE OPENT1_MEMORY_GPU=1)
+    target_include_directories(opent1_memory_audit PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/gfx")
+    target_link_libraries(opent1_memory_audit PRIVATE opent1_gfx_sdl)
+endif()
+if(OPENT1_BUILD_AUDIO)
+    add_custom_command(
+        TARGET opent1_memory_audit
+        POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:OpenAL>
+                $<TARGET_FILE_DIR:opent1_memory_audit>
+    )
+endif()
+if(WIN32 AND TARGET SDL3::SDL3-shared)
+    add_custom_command(
+        TARGET opent1_memory_audit
+        POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared>
+                $<TARGET_FILE_DIR:opent1_memory_audit>
+    )
+endif()
 if(OPENT1_BUILD_AUDIO)
     add_custom_command(
         TARGET opent1

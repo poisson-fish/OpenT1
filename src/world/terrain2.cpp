@@ -1,4 +1,5 @@
 #include <opent1/world/terrain2.hpp>
+#include <ranges>
 #include <opent1/world/terrain_authoring.hpp>
 #include <opent1/world/terrain_textures.hpp>
 #include <opent1/math/trig.hpp>
@@ -30,15 +31,19 @@ struct NativeBitmap {
     NativeBitmap(Int32 w, Int32 h) : width(w), height(h), data(std::size_t(w) * h + 257) {}
 
     explicit NativeBitmap(const gfx::Bitmap& b) : NativeBitmap(b.width, b.height) {
-        for (Int32 y = 0; y < b.height; ++y) {
+        for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                          return y < b.height;
+                      })) {
             const auto row = b.row(y);
-            for (Int32 x = 0; x < b.width; ++x) {
+            for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                              return x < b.width;
+                          })) {
                 data[std::size_t(y) * width + x] =
                     UInt16(std::to_integer<UInt8>(row[std::size_t(x) * 2]) |
                            (UInt16(std::to_integer<UInt8>(row[std::size_t(x) * 2 + 1])) << 8));
             }
         }
-        for (UInt32 i = 0; i < 257; ++i) {
+        for (auto i : std::views::iota(UInt32{0}, UInt32{257})) {
             data[std::size_t(width) * height + i] = data[i];
         }
     }
@@ -64,7 +69,7 @@ struct NativeTerrainBlock {
     explicit NativeTerrainBlock(Terrain2Block& b)
         : heightMap(b.heights.data()), materialMap(b.materials.data()), low(b.lightMap),
           dynamic(16, 16), lightMap(&low), dynamicLightMap(&dynamic) {
-        for (UInt32 i = 0; i < 9; ++i) {
+        for (auto i : std::views::iota(UInt32{0}, UInt32{9})) {
             gridMap[i] = b.squares[i].data();
         }
     }
@@ -274,7 +279,7 @@ void configure(NativeTerrainRender& r, const Terrain2View& view, Projection& p) 
         s.clipPlane = *view.planes;
     }
     s.dynamicLightCount = UInt32(view.lights.size());
-    for (std::size_t i = 0; i < view.lights.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, view.lights.size())) {
         const auto& l = view.lights[i];
         r.terrainLights[i] = {
             l.position, l.radius, l.radius * l.radius, l.color.x, l.color.y, l.color.z};
@@ -299,7 +304,7 @@ std::vector<UInt32> fan(const NativeTerrainRender::State& s, const EmitSquare& s
             result.push_back(p);
         }
     };
-    for (UInt32 i = 0; i < 4; ++i) {
+    for (auto i : std::views::iota(UInt32{0}, UInt32{4})) {
         const auto edge = (i + UInt32((square.flags & 1) != 0)) & 3;
         append(append, square.edge[edge], edge >= 2, 0);
     }
@@ -307,7 +312,9 @@ std::vector<UInt32> fan(const NativeTerrainRender::State& s, const EmitSquare& s
 }
 
 void morph(NativeTerrainRender::State& s, bool water) {
-    for (Int32 i = 0; i < s.pointCount; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < s.pointCount;
+                  })) {
         auto& point = s.points[std::size_t(i)];
         const auto avg = (s.points[point.p1].avgHeight + s.points[point.p2].avgHeight) * .5f;
         point.avgHeight = point.pointHeight + point.minGrowFactor * (avg - point.pointHeight);
@@ -360,7 +367,7 @@ bool location(Point2I p) {
 std::optional<Terrain2> Terrain2::convert(const TerrainGridResources& resources) {
     if (!resources.grid || resources.grid->blockMap.empty() ||
         resources.blocks.size() != resources.grid->blocks.size() ||
-        resources.materials.textures.size() < 2 || !resources.materials.textures[1]) {
+        resources.materials.textures().size() < 2 || !resources.materials.textures()[1]) {
         return {};
     }
     const auto id = resources.grid->blockMap[0];
@@ -376,7 +383,7 @@ std::optional<Terrain2> Terrain2::convert(const TerrainGridResources& resources)
     auto b = std::make_shared<Terrain2Block>();
     b->heights.resize(257 * 257);
     b->materials.resize(256 * 256);
-    for (UInt32 i = 0; i < 9; ++i) {
+    for (auto i : std::views::iota(UInt32{0}, UInt32{9})) {
         const auto side = 256U >> i;
         b->squares[i].resize(std::size_t(side) * side);
     }
@@ -386,11 +393,11 @@ std::optional<Terrain2> Terrain2::convert(const TerrainGridResources& resources)
     }
     b->baseTexture = std::move(*base);
     b->lightMap = std::move(*light);
-    const auto palette = resources.materials.textures[1]->paletteIndex;
+    const auto palette = resources.materials.textures()[1]->paletteIndex;
     b->baseTexture.paletteIndex = palette;
-    std::vector<UInt8> texels(resources.materials.textures.size());
-    for (std::size_t i = 0; i < texels.size(); ++i) {
-        const auto& t = resources.materials.textures[i];
+    std::vector<UInt8> texels(resources.materials.textures().size());
+    for (auto i : std::views::iota(std::size_t{0}, texels.size())) {
+        const auto& t = resources.materials.textures()[i];
         if (t) {
             if (!t->valid() || t->bitDepth != 8) {
                 return {};
@@ -399,8 +406,12 @@ std::optional<Terrain2> Terrain2::convert(const TerrainGridResources& resources)
         }
     }
     const auto add = resources.grid->minimumHeight < 0 ? -resources.grid->minimumHeight : 0;
-    for (UInt32 y = 0; y <= 256; ++y) {
-        for (UInt32 x = 0; x <= 256; ++x) {
+    for (auto y : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 y) {
+                      return y <= 256;
+                  })) {
+        for (auto x : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 x) {
+                          return x <= 256;
+                      })) {
             const auto sx = x % input->width, sy = y % input->width;
             const auto h = input->heights[std::size_t(sy) * (input->width + 1) + sx] + add;
             b->heights[std::size_t(y) * 257 + x] = floatToFixed(std::clamp(h, 0.f, 2047.f));
@@ -446,8 +457,12 @@ bool Terrain2::setHeight(Point2I p, Flt32 h) {
     a.set(p1, p2, p3);
     c.set(p1, p3, p4);
     auto* square = native.findSquare(0, p);
-    for (Int32 y = 0; y <= 1; ++y) {
-        for (Int32 x = 0; x <= 1; ++x) {
+    for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                      return y <= 1;
+                  })) {
+        for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                          return x <= 1;
+                      })) {
             const auto value = native.getHeight(p.x + x, p.y + y);
             square->minimum = std::min(square->minimum, value);
             square->maximum = std::max(square->maximum, value);
@@ -458,7 +473,9 @@ bool Terrain2::setHeight(Point2I p, Flt32 h) {
             square->deviance = std::max(square->deviance, dev);
         }
     }
-    for (Int32 i = 1; i <= 8; ++i) {
+    for (auto i : std::views::iota(Int32{1}) | std::views::take_while([&](Int32 i) {
+                      return i <= 8;
+                  })) {
         auto* parent = native.findSquare(i, p);
         parent->minimum = std::min(parent->minimum, square->minimum);
         parent->maximum = std::max(parent->maximum, square->maximum);
@@ -469,7 +486,7 @@ bool Terrain2::setHeight(Point2I p, Flt32 h) {
 }
 
 bool Terrain2::setMaterial(Point2I p, TerrainGridMaterial m) {
-    if (!block_ || !location(p) || m.index >= materials_.textures.size()) {
+    if (!block_ || !location(p) || m.index >= materials_.textures().size()) {
         return false;
     }
     auto b = std::make_shared<Terrain2Block>(*block_);
@@ -538,14 +555,14 @@ std::optional<Terrain2Frame> Terrain2::render(const Terrain2View& view) const {
         auto& s = r->trs;
         s.currentBlock = &block;
         Int32 initial[4][4]{}, horizontal[4][3]{}, vertical[4][3]{};
-        for (Int32 i = 0; i < 4; ++i) {
-            for (Int32 j = 0; j < 4; ++j) {
+        for (auto i : std::views::iota(Int32{0}, Int32{4})) {
+            for (auto j : std::views::iota(Int32{0}, Int32{4})) {
                 initial[i][j] = r->allocInitialPoint(
                     {Flt32(i * 2048), Flt32(j * 2048), fixedToFloat(block.heightMap[0])});
             }
         }
-        for (Int32 i = 0; i < 4; ++i) {
-            for (Int32 j = 0; j < 3; ++j) {
+        for (auto i : std::views::iota(Int32{0}, Int32{4})) {
+            for (auto j : std::views::iota(Int32{0}, Int32{3})) {
                 auto e = r->allocEdges(1);
                 s.edges[std::size_t(e)].p1 = UInt16(initial[j][i]);
                 s.edges[std::size_t(e)].p2 = UInt16(initial[j + 1][i]);
@@ -556,8 +573,8 @@ std::optional<Terrain2Frame> Terrain2::render(const Terrain2View& view) const {
                 vertical[i][j] = e;
             }
         }
-        for (Int32 i = 0; i < 3; ++i) {
-            for (Int32 j = 0; j < 3; ++j) {
+        for (auto i : std::views::iota(Int32{0}, Int32{3})) {
+            for (auto j : std::views::iota(Int32{0}, Int32{3})) {
                 s.blockOffset = {i * 256, j * 256};
                 s.blockPos = {Flt32(i * 2048), Flt32(j * 2048)};
                 r->processCurrentBlock(
@@ -586,7 +603,7 @@ std::optional<Terrain2Frame> Terrain2::render(const Terrain2View& view) const {
             return {};
         }
         source->materials = block_->materials;
-        for (std::size_t i = 0; i < source->heights.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, source->heights.size())) {
             source->heights[i] = fixedToFloat(block_->heights[i]);
         }
         if (!rebuildTerrainHeightRange(*source)) {
@@ -608,9 +625,12 @@ std::optional<Terrain2Frame> Terrain2::render(const Terrain2View& view) const {
         }
         const auto baseHandle = owner.load<gfx::Bitmap>("terrain2-base.bmp");
         std::map<std::tuple<UInt32, UInt32, UInt32, UInt32>, UInt32> materialIds;
-        result.materials.list.details = 1;
-        result.materials.list.version = 4;
-        for (Int32 square = 0; square < s.squareCount; ++square) {
+        TsMaterialResources::Data materialData;
+        materialData.list.details = 1;
+        materialData.list.version = 4;
+        for (auto square : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 square) {
+                               return square < s.squareCount;
+                           })) {
             const auto& q = s.squares[std::size_t(square)];
             const auto indices = fan(s, q);
             if (indices.size() < 3 ||
@@ -639,10 +659,10 @@ std::optional<Terrain2Frame> Terrain2::render(const Terrain2View& view) const {
                 material.flags = 3; // native terrain is opaque texture shaded
                 if (!q.level) {
                     const auto m = block_->materials[std::size_t(y) * 256 + x];
-                    if (m.index >= materials_.textures.size() || !materials_.textures[m.index]) {
+                    if (m.index >= materials_.textures().size() || !materials_.textures()[m.index]) {
                         return {};
                     }
-                    texture = materials_.textures[m.index];
+                    texture = materials_.textures()[m.index];
                 } else if (q.mipLevel == 255) {
                     texture = baseHandle;
                 } else {
@@ -653,17 +673,29 @@ std::optional<Terrain2Frame> Terrain2::render(const Terrain2View& view) const {
                     auto mipmap = std::make_unique<gfx::Bitmap>(*tile->texture);
                     mipmap->detailLevels = q.mipLevel + 1;
                     std::size_t bytes{};
-                    for (Int32 mip = 0; mip < mipmap->detailLevels; ++mip) {
+                    for (auto mip :
+                         std::views::iota(Int32{0}) | std::views::take_while([&](Int32 mip) {
+                             return mip < mipmap->detailLevels;
+                         })) {
                         bytes += std::size_t(std::max(1, mipmap->width >> mip)) *
                                  std::max(1, mipmap->height >> mip);
                     }
                     mipmap->pixels.resize(bytes);
-                    for (Int32 mip = 1; mip < mipmap->detailLevels; ++mip) {
+                    for (auto mip :
+                         std::views::iota(Int32{1}) | std::views::take_while([&](Int32 mip) {
+                             return mip < mipmap->detailLevels;
+                         })) {
                         const auto side = mipmap->width >> mip;
-                        for (Int32 row = 0; row < side; ++row) {
+                        for (auto row :
+                             std::views::iota(Int32{0}) | std::views::take_while([&](Int32 row) {
+                                 return row < side;
+                             })) {
                             auto dest = mipmap->row(row, mip);
                             const auto src = mipmap->row(row * 2, mip - 1);
-                            for (Int32 col = 0; col < side; ++col) {
+                            for (auto col : std::views::iota(Int32{0}) |
+                                                std::views::take_while([&](Int32 col) {
+                                                    return col < side;
+                                                })) {
                                 dest[std::size_t(col)] = src[std::size_t(col) * 2];
                             }
                         }
@@ -674,17 +706,17 @@ std::optional<Terrain2Frame> Terrain2::render(const Terrain2View& view) const {
                     }
                     texture = owner.load<gfx::Bitmap>(name);
                 }
-                slot = UInt32(result.materials.textures.size());
+                slot = UInt32(materialData.textures.size());
                 if (slot >= 4096) {
                     return {};
                 }
-                result.materials.textures.push_back(texture);
-                result.materials.list.materials.push_back(material);
+                materialData.textures.push_back(texture);
+                materialData.list.materials.push_back(material);
                 materialIds.emplace(key, slot);
             } else {
                 slot = id->second;
             }
-            draw.texture = result.materials.textures[slot];
+            draw.texture = materialData.textures[slot];
             Point2F lightOffset{Flt32(x) + .5f, Flt32(y) + .5f};
             Flt32 lightScale = 1.f / 256;
             if (q.lightMask) {
@@ -725,7 +757,10 @@ std::optional<Terrain2Frame> Terrain2::render(const Terrain2View& view) const {
                 }
                 draw.vertices.push_back({point, uv, {1, 1, 1}, lightUv, distance, haze});
             }
-            for (std::size_t i = 1; i + 1 < draw.vertices.size(); ++i) {
+            for (auto i :
+                 std::views::iota(std::size_t{1}) | std::views::take_while([&](std::size_t i) {
+                     return i + 1 < draw.vertices.size();
+                 })) {
                 result.triangles.push_back(
                     {{draw.vertices[0], draw.vertices[i], draw.vertices[i + 1]},
                      slot,
@@ -737,7 +772,8 @@ std::optional<Terrain2Frame> Terrain2::render(const Terrain2View& view) const {
             }
             result.draws.push_back(std::move(draw));
         }
-        result.materials.list.materialsPerDetail = Int32(result.materials.textures.size());
+        materialData.list.materialsPerDetail = Int32(materialData.textures.size());
+        result.materials = TsMaterialResources(std::move(materialData));
         return result;
     } catch (const AssertException&) {
         return {};
@@ -818,12 +854,17 @@ std::optional<Terrain2WaterFrame> Terrain2::water(const Terrain2WaterView& view)
                                          s.waterTexCoords.begin() + s.pointCount);
         result.environmentCoordinates.assign(s.envTexCoords.begin(),
                                              s.envTexCoords.begin() + s.pointCount);
-        for (Int32 i = 0; i < s.squareCount; ++i) {
+        for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                          return i < s.squareCount;
+                      })) {
             const auto indices = fan(s, s.squares[std::size_t(i)]);
             if (result.triangles.size() + indices.size() - 2 > view.view.maximumTriangles) {
                 return {};
             }
-            for (std::size_t j = 1; j + 1 < indices.size(); ++j) {
+            for (auto j :
+                 std::views::iota(std::size_t{1}) | std::views::take_while([&](std::size_t j) {
+                     return j + 1 < indices.size();
+                 })) {
                 result.triangles.push_back(
                     result.underwater
                         ? std::array<UInt32, 3>{indices[0], indices[j + 1], indices[j]}
@@ -852,7 +893,7 @@ std::optional<gfx::HardwareBatch> Terrain2WaterFrame::hardware(const TsStaticVie
         return {};
     }
     ResourceManager owner;
-    TsMaterialResources materials;
+    TsMaterialResources::Data materials;
     materials.list.details = 1;
     materials.list.version = 4;
     materials.list.materialsPerDetail = 1;
@@ -883,9 +924,13 @@ std::optional<gfx::HardwareBatch> Terrain2WaterFrame::hardware(const TsStaticVie
         if (environment->bitDepth == 8 && (!colors || !colors->valid())) {
             return {};
         }
-        for (Int32 y = 0; y < environment->height; ++y) {
+        for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                          return y < environment->height;
+                      })) {
             const auto row = environment->row(y);
-            for (Int32 x = 0; x < environment->width; ++x) {
+            for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                              return x < environment->width;
+                          })) {
                 UInt16 rgb{};
                 if (environment->bitDepth == 16) {
                     rgb =
@@ -917,7 +962,7 @@ std::optional<gfx::HardwareBatch> Terrain2WaterFrame::hardware(const TsStaticVie
         t.repeatTexture = true;
         t.nativeFarSphere = true;
         t.lightMap = env;
-        for (UInt32 i = 0; i < 3; ++i) {
+        for (auto i : std::views::iota(UInt32{0}, UInt32{3})) {
             const auto index = tri[i];
             if (index >= points.size()) {
                 return {};

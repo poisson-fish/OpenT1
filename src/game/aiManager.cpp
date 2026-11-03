@@ -1,4 +1,5 @@
 #include <opent1/game/ai.hpp>
+#include <ranges>
 #include <opent1/core/text.hpp>
 #include <opent1/game/string_table.hpp>
 #include <opent1/game/data_block_manager.hpp>
@@ -89,32 +90,29 @@ bool AIManager::add(std::string_view aiName,
                     std::string_view markerName,
                     Int32 teamId,
                     std::string_view skinBase) {
-    if (aiName.empty() || findAI(aiName) != nullptr) {
+    auto* mgr = getManager();
+    auto* players = PlayerManager::get(mgr);
+    if (!players || aiName.empty() || findAI(aiName) != nullptr) {
         return false;
     }
 
     auto ai = std::make_unique<AIObj>(this);
-    ai->id = nextAiClientId_++;
+    ai->id = players->aiAdded(aiName, "male1", skinBase, true);
+    if (!ai->id) {
+        return false;
+    }
     ai->name.assign(aiName.data(), aiName.size());
     ai->team = teamId;
     ai->skinBase.assign(skinBase.data(), skinBase.size());
 
-    if (auto* mgr = getManager()) {
-        if (!markerName.empty()) {
-            if (auto* m = dynamic_cast<Marker*>(mgr->findObject(markerName))) {
-                ai->setMarker(m);
-                deleteNotify(*m);
-                ai->setCurDest(m->getLinearPosition());
-            }
-        }
-        if (auto* pm = dynamic_cast<PlayerManager*>(mgr->findObject(PlayerManagerId))) {
-            const Int32 pmId = pm->aiAdded(aiName, "male1", skinBase, true);
-            if (pmId > 0) {
-                ai->id = pmId;
-                pm->serverClientTeamChange(pmId, teamId);
-            }
+    if (!markerName.empty()) {
+        if (auto* m = dynamic_cast<Marker*>(mgr->findObject(markerName))) {
+            ai->setMarker(m);
+            deleteNotify(*m);
+            ai->setCurDest(m->getLinearPosition());
         }
     }
+    players->serverClientTeamChange(ai->id, teamId);
 
     aiList_.push_back(std::move(ai));
     return true;
@@ -200,7 +198,9 @@ bool AIManager::spawn(Console& console,
 }
 
 bool AIManager::remove(std::string_view aiName, bool deletePlayer) {
-    for (std::size_t i = 0; i < aiList_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < aiList_.size();
+                  })) {
         if (equalIgnoreCase(aiList_[i]->name, aiName)) {
             AIObj& ai = *aiList_[i];
             removeVariables(getManager() ? getManager()->console() : nullptr, ai.name);

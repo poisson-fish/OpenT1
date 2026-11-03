@@ -278,8 +278,6 @@ public:
 
 private:
     ReticleMetrics metrics_{};
-    Flt32 lastSniperFov_{-1};
-    UInt32 zoomChangeTime_{};
 };
 
 // -----------------------------------------------------------------------------

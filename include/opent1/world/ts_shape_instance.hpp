@@ -88,5 +88,10 @@ private:
     std::vector<TsTriggerEvent> triggers_;
     std::vector<Int32> materialRemap_;
     TMat3F rootMotion_, rootDelta_;
+    mutable std::optional<TsShapePose> evaluatedPose_;
+
+    void invalidatePose() noexcept {
+        evaluatedPose_.reset();
+    }
 };
 } // namespace opent1::world

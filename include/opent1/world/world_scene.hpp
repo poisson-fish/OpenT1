@@ -185,12 +185,14 @@ struct WorldSurfaceQuery : sim::SimQuery {
 
     std::optional<WorldSurfaceInstance> image;
     std::optional<sim::EnvironmentCamera> camera; // input for view-dependent providers
-    std::optional<sim::SimSceneLighting>
-        lighting; // owned world-space input; absent disables scene merging
+    std::shared_ptr<const sim::SimSceneLighting>
+        lighting; // shared immutable world-space input; absent disables scene merging
     // Override terrain lighting/cache policy for this capture. RetainedLru uses
     // current-size hardware tiles with OpenGL lightmaps. Absence
     // preserves the provider's explicit policy (including comparison viewers).
     std::optional<TerrainTextureTiming> terrainTiming;
+    bool retainedTerrain{};
+    bool trimCaches{};    // release disposable provider caches; no camera or image request
     bool linkRendering{}; // force automatic interior providers to their state's highest LOD
     bool failed{};        // a provider rejected preparation; capture must fail atomically
 private:
@@ -207,6 +209,8 @@ private:
     std::optional<LinkDetail> linkDetail_;
     bool deferLinkDetail_{};
 };
+
+void trimWorldRenderCaches(sim::SimWorld&);
 
 // Static RenderSet provider; pairs with the existing per-block/interior static
 // collision providers. Mesh snapshots and rigid placements survive removal.
@@ -255,6 +259,11 @@ private:
     TerrainLodState lodState_;
     std::shared_ptr<TerrainResourceStream> stream_;
     std::shared_ptr<Terrain2> terrain2_;
+    std::shared_ptr<const WorldSurfaceMesh> retainedMesh_;
+    std::optional<sim::EnvironmentCamera> retainedCamera_;
+    std::optional<TsLighting> retainedLights_;
+    std::optional<TerrainTextureTiming> retainedTiming_;
+    bool retainedPatchPolicy_{};
 };
 
 // Explicit simulation-clock interior playback. Render queries never advance
@@ -378,7 +387,8 @@ public:
                       const sim::EnvironmentCamera&,
                       const sim::VolumetricView&,
                       bool lighting = true,
-                      std::optional<TerrainTextureTiming> terrainTiming = std::nullopt);
+                      std::optional<TerrainTextureTiming> terrainTiming = std::nullopt,
+                      bool retainedHardware = false);
 
     // Present for explicit linked capture or automatic container capture.
     [[nodiscard]] std::optional<bool> interiorOutsideVisible() const {
@@ -398,7 +408,8 @@ public:
     }
 
     [[nodiscard]] const sim::SimSceneLighting& lighting() const {
-        return lighting_;
+        static const sim::SimSceneLighting empty;
+        return lighting_ ? *lighting_ : empty;
     }
 
     [[nodiscard]] std::optional<sim::ShadowGeometry>
@@ -430,7 +441,8 @@ private:
                 bool,
                 std::optional<std::span<const InteriorSceneRoot>>,
                 bool containers,
-                std::optional<TerrainTextureTiming>);
+                std::optional<TerrainTextureTiming>,
+                bool retainedHardware = false);
     sim::EnvironmentCamera camera_;
     std::vector<TsStaticShapeFrame> shapes_;
     std::vector<WorldShapeImage> shapeInputs_;
@@ -439,7 +451,8 @@ private:
     std::vector<sim::SimVolumetricRenderImage> volumes_;
     WorldVolumeMaterials materials_;
     std::optional<bool> outsideVisible_;
-    sim::SimSceneLighting lighting_;
+    std::shared_ptr<const sim::SimSceneLighting> lighting_;
     bool lightingEnabled_{};
+    bool retainedHardware_{};
 };
 } // namespace opent1::world

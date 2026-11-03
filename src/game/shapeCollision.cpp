@@ -67,23 +67,22 @@ void ShapeCollisionImage::syncCollisionSnapshots() const {
         return;
     }
     if (collisionDetail >= 0) {
-        if (auto built = world::TsShapeCollision::prepare(*poseOpt, collisionDetail)) {
-            detailCollision_ = std::make_shared<const world::TsShapeCollision>(std::move(*built));
+        if (auto built = world::TsShapeCollision::shared(*poseOpt, collisionDetail)) {
+            detailCollision_ = std::move(built);
         }
     }
     if (collisionDetail == 0 && detailCollision_) {
         lineCollision_ = detailCollision_;
-    } else if (auto built0 = world::TsShapeCollision::prepare(*poseOpt, 0)) {
-        lineCollision_ = std::make_shared<const world::TsShapeCollision>(std::move(*built0));
+    } else if (auto built0 = world::TsShapeCollision::shared(*poseOpt, 0)) {
+        lineCollision_ = std::move(built0);
     }
 }
 
 std::shared_ptr<const world::TsShapeCollision> ShapeCollisionImage::detailCollision() const {
     if (shapeInst_ && collisionDetail >= 0) {
         if (const auto poseOpt = shapeInst_->pose()) {
-            if (auto built = world::TsShapeCollision::prepare(*poseOpt, collisionDetail)) {
-                detailCollision_ =
-                    std::make_shared<const world::TsShapeCollision>(std::move(*built));
+            if (auto built = world::TsShapeCollision::shared(*poseOpt, collisionDetail)) {
+                detailCollision_ = std::move(built);
             }
         }
     }
@@ -93,9 +92,8 @@ std::shared_ptr<const world::TsShapeCollision> ShapeCollisionImage::detailCollis
 std::shared_ptr<const world::TsShapeCollision> ShapeCollisionImage::lineCollision() const {
     if (shapeInst_) {
         if (const auto poseOpt = shapeInst_->pose()) {
-            if (auto built0 = world::TsShapeCollision::prepare(*poseOpt, 0)) {
-                lineCollision_ =
-                    std::make_shared<const world::TsShapeCollision>(std::move(*built0));
+            if (auto built0 = world::TsShapeCollision::shared(*poseOpt, 0)) {
+                lineCollision_ = std::move(built0);
             }
         }
     }
@@ -205,7 +203,8 @@ bool ShapeCollisionImage::collide(const SimCollisionImage& image,
         if (!ti) {
             return false;
         }
-        mat = buildImageTransform(*ti);
+        // Terrain tests consume the shape in terrain space, as in 1.11.
+        mat = ti->buildImageTransform(*this);
         Point3F center{};
         m_mul(sphere.center, mat, center);
         const auto infoOpt = ti->nativeGeometry()
@@ -231,7 +230,7 @@ bool ShapeCollisionImage::collide(const SimCollisionImage& image,
         if (!ii) {
             return false;
         }
-        mat = buildImageTransform(*ii);
+        mat = ii->buildImageTransform(*this);
         if (ii->geometry().box(bbox, mat, list)) {
             list.tLocal = mat;
             list.tLocal.inverse();

@@ -5,6 +5,22 @@
 #include <ranges>
 
 namespace opent1::gfx {
+class HardwareMesh;
+
+struct HardwareTransform {
+    // Shader columns of the local-to-camera row-vector matrix, including translation.
+    std::array<std::array<Flt32, 4>, 3> camera{};
+    std::array<Flt32, 4> optics{}; // focal x/y, center x/y
+    std::array<Flt32, 4> clip{};   // near, far, camera perspective, unused
+    // Mode 1: eight native first-writer height/merge/fraction/distance inputs.
+    // Mode 2: two prepared TS lights, four vectors each (position/type,
+    // intensity/range, attenuation/point mode, direction/optimized attenuation).
+    std::array<std::array<Flt32, 4>, 8> parameters{};
+    std::array<Flt32, 4> ambient{};  // TS ambient RGB/count, or terrain haze start in W
+    std::array<Flt32, 4> geometry{}; // terrain extent/far/mode/topology, TS haze/unused/2/unused
+    std::array<Flt32, 4> mapping{};  // terrain lightmap origin XY, scale XY
+    bool operator==(const HardwareTransform&) const = default;
+};
 enum class HardwareBlend : UInt8 { Opaque, Alpha, Additive, Subtractive, Multiply };
 enum class HardwareDepth : UInt8 { TestAndWrite, TestOnly, Disabled, WriteOnly };
 enum class HardwareMipFilter : UInt8 { None, Nearest, Linear };
@@ -48,6 +64,9 @@ struct HardwarePolygon {
     // Native SimRenderImage sort key. Every polygon of an image uses the same
     // key; sorting individual triangles can interleave unrelated shapes.
     std::optional<Flt32> imageSortValue{};
+    std::shared_ptr<const HardwareMesh> mesh{};
+    HardwareTransform transform{};
+    UInt32 firstIndex{}, indexCount{};
 };
 
 struct HardwareVertex {
@@ -56,6 +75,47 @@ struct HardwareVertex {
     Flt32 haze{}, inverseDepth{1};
     Point2F lightMap{};
     Flt32 opacity{1};
+};
+
+// Validated, immutable local-space mesh. position holds XY; inverseDepth holds Z.
+// IDs never repeat within a process; replacement geometry receives a new revision.
+class HardwareMesh {
+public:
+    enum class Encoding { Color, TsNormals }; // TS color/opacity carry native normals/shading mode
+    [[nodiscard]] static std::shared_ptr<const HardwareMesh>
+        create(std::vector<HardwareVertex>, std::vector<UInt32>, Encoding = Encoding::Color);
+
+    [[nodiscard]] Encoding encoding() const {
+        return encoding_;
+    }
+
+    [[nodiscard]] std::size_t residentBytes() const {
+        return sizeof(*this) + vertices_.capacity() * sizeof(HardwareVertex) +
+               indices_.capacity() * sizeof(UInt32);
+    }
+
+    [[nodiscard]] std::span<const HardwareVertex> vertices() const {
+        return vertices_;
+    }
+
+    [[nodiscard]] std::span<const UInt32> indices() const {
+        return indices_;
+    }
+
+    [[nodiscard]] UInt64 revision() const {
+        return revision_;
+    }
+
+private:
+    std::vector<HardwareVertex> vertices_;
+    std::vector<UInt32> indices_;
+    UInt64 revision_{};
+    Encoding encoding_{};
+};
+
+struct HardwareMeshInstance {
+    std::shared_ptr<const HardwareMesh> mesh;
+    HardwareTransform transform;
 };
 
 struct HardwareMip {
@@ -69,6 +129,7 @@ struct HardwareTexture {
     std::vector<HardwareMip> mips; // remaining supplied levels, never generated
     UInt64 hash{};                 // computed once when immutable converted storage is created
     bool dynamic{};                // permits recycling unreferenced GPU allocation storage
+    bool lightMap{};               // single-mip clamp samples eligible for portable pages
 };
 
 struct HardwareDraw {
@@ -86,6 +147,7 @@ struct HardwareDraw {
     bool transparent{};
     bool deferredHaze{};
     bool magnificationLinear{};
+    UInt32 mesh{}; // 1-based HardwareMeshInstance; ranges then address indices
 };
 
 // Original ALPHA_FILL: normalized palette RGB and flags/255 constant opacity.
@@ -123,6 +185,12 @@ struct HardwareDraw {
 // remain UInt32, and malformed geometry or texture encodings are rejected.
 class HardwareBatch {
 public:
+    struct MemoryStats {
+        std::size_t batchBytes{}, meshBytes{},
+            textureBytes{}; // unique reachable allocations per batch
+    };
+
+    [[nodiscard]] MemoryStats memoryStats() const;
     [[nodiscard]] static std::optional<HardwareBatch> prepare(std::span<const HardwarePolygon>,
                                                               const Palette* = nullptr);
     // Combine independently prepared layers in draw order. Inputs remain owned
@@ -154,6 +222,10 @@ public:
         return draws_;
     }
 
+    [[nodiscard]] std::span<const HardwareMeshInstance> meshes() const noexcept {
+        return meshes_;
+    }
+
     // Deferred haze finishes within each layer before later HUD draws.
     [[nodiscard]] std::span<const UInt32> layerEnds() const noexcept {
         return layerEnds_;
@@ -165,5 +237,18 @@ private:
     std::vector<UInt64> textureHashes_; // stable content fingerprints; equality still checks bytes
     std::vector<HardwareDraw> draws_;
     std::vector<UInt32> layerEnds_;
+    std::vector<HardwareMeshInstance> meshes_;
 };
+
+// Discard this thread's disposable conversion LRU. Published batches remain owned.
+void clearHardwareTextureConversions();
+
+struct HardwareConversionCacheStats {
+    std::size_t entries{}, bytes{}, budgetBytes{}, budgetEntries{};
+    UInt64 hits{}, builds{};
+};
+
+[[nodiscard]] HardwareConversionCacheStats hardwareTextureConversionStats();
+// Per-thread disposable cache policy; zero disables retention, not conversion.
+void setHardwareTextureConversionBudget(std::size_t bytes, std::size_t entries = 4096);
 } // namespace opent1::gfx

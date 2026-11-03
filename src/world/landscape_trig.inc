@@ -19,7 +19,7 @@
 #define TRIG_VARS int t_lam;
 #define TRIG_INIT(k, c, s)                                                                         \
     {                                                                                              \
-        for (int i = 2; i <= k; i++) {                                                             \
+        for (const auto i : std::views::iota(2, std::max(2, (k) + 1))) {                           \
             coswrk[i] = costab[i];                                                                 \
             sinwrk[i] = sintab[i];                                                                 \
         }                                                                                          \
@@ -31,14 +31,13 @@
     {                                                                                              \
         int i, j;                                                                                  \
         (t_lam)++;                                                                                 \
-        for (i = 0; !((1 << i) & t_lam); i++)                                                      \
-            ;                                                                                      \
+        i = int(std::countr_zero(unsigned(t_lam)));                                                \
         i = k - i;                                                                                 \
         s = sinwrk[i];                                                                             \
         c = coswrk[i];                                                                             \
         if (i > 1) {                                                                               \
-            for (j = k - i + 2; (1 << j) & t_lam; j++)                                             \
-                ;                                                                                  \
+            j = (k) - i + 2;                                                                       \
+            j += int(std::countr_one(unsigned(t_lam) >> j));                                       \
             j = k - j;                                                                             \
             sinwrk[i] = halsec[i] * (sinwrk[i - 1] + sinwrk[j]);                                   \
             coswrk[i] = halsec[i] * (coswrk[i - 1] + coswrk[j]);                                   \

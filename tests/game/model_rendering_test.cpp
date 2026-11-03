@@ -1,4 +1,5 @@
 #include "test_registry.hpp"
+#include <ranges>
 #include "ts_test_support.hpp"
 #include <opent1/core/filename.hpp>
 #include <opent1/game/player.hpp>
@@ -30,6 +31,61 @@ void modelRendering() {
     CHECK(visibility && (*visibility & 0x80U));
     const auto rendered = world::TsStaticShapeFrame::prepare(*loaded, view);
     CHECK(rendered && rendered->polygonCount() == 1);
+    const auto pose = world::TsShapePose::sample(loaded->shape);
+    CHECK(pose);
+    const auto retained = world::TsStaticShapeFrame::prepare(*loaded, view, *pose, true);
+    gfx::Palette palette;
+    CHECK(retained);
+    const auto batch = retained->hardware(&palette);
+    CHECK(batch && !batch->meshes().empty());
+    const auto software = retained->softwarePolygons(&palette);
+    CHECK(software && software->size() == rendered->polygonCount());
+    auto litResources = *loaded;
+    auto litMaterials = litResources.materials.data();
+    litMaterials.list.materials[0].flags = 0x403;
+    litResources.materials = world::TsMaterialResources(std::move(litMaterials));
+    auto litView = view;
+    litView.lighting.emplace();
+    litView.lighting->ambient = {.1f, .1f, .1f};
+    world::TsLight sun;
+    sun.type = world::TsLight::Type::DirectionalWrap;
+    sun.shadowMap = std::make_shared<const gfx::DirectionalShadowMap>(
+        gfx::DirectionalShadowMap{4, {}, 1, std::vector<UInt8>(16, 96)});
+    litView.lighting->lights = {sun};
+    const auto litReference = world::TsStaticShapeFrame::prepare(litResources, litView, *pose);
+    const auto litSnapshot = world::TsStaticShapeFrame::prepare(litResources, litView, *pose, true);
+    CHECK(litReference && litSnapshot);
+    litView.lighting->lights[0].shadowMap = std::make_shared<const gfx::DirectionalShadowMap>(
+        gfx::DirectionalShadowMap{4, {}, 1, std::vector<UInt8>(16, 255)});
+    const auto expectedLighting = litReference->softwarePolygons(&palette);
+    const auto frozenLighting = litSnapshot->softwarePolygons(&palette);
+    CHECK(expectedLighting && frozenLighting && expectedLighting->size() == frozenLighting->size());
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < expectedLighting->size();
+                  }))
+        for (auto j : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t j) {
+                          return j < (*expectedLighting)[i].vertices.size();
+                      })) {
+            const auto& a = (*expectedLighting)[i].vertices[j];
+            const auto& b = (*frozenLighting)[i].vertices[j];
+            CHECK(a.position == b.position && a.color == b.color && a.texture == b.texture);
+        }
+    view.shapeToCamera.p.x += 1;
+    auto overridePose = *pose;
+    CHECK(overridePose.overrideParentTransform(1, TMat3F(EulerF{0, 0, .1f}, {})));
+    const auto moved = world::TsStaticShapeFrame::prepare(*loaded, view, overridePose, true);
+    CHECK(moved);
+    const auto movedBatch = moved->hardware(&palette);
+    CHECK(movedBatch && movedBatch->meshes()[0].mesh == batch->meshes()[0].mesh);
+    CHECK(world::tsHardwareCacheStats().bytes > 0 && world::tsHardwareCacheStats().hits > 0);
+    world::trimTsHardwareMeshes(1);
+    const auto limited = world::TsStaticShapeFrame::prepare(*loaded, view, overridePose, true);
+    CHECK(limited);
+    const auto limitedBatch = limited->hardware(&palette);
+    CHECK(limitedBatch && limitedBatch->meshes().empty());
+    world::trimTsHardwareMeshes();
+    world::clearTsHardwareMeshes();
+    CHECK(world::tsHardwareCacheStats().bytes == 0 && !batch->meshes()[0].mesh->vertices().empty());
 
     sim::SimManager manager;
     auto ownedPlayers = std::make_unique<PlayerManager>(false);
@@ -84,19 +140,18 @@ void installedModels() {
     }
     CHECK(palette.valid());
     for (const auto name : {"dagger", "sword", "axe"}) {
-        auto* imageData = dynamic_cast<ItemImageData*>(dbm.createDataBlock(
-            std::string(name) + "Image", DataBlockManager::ItemImageDataType));
-        auto* item = dynamic_cast<ItemData*>(
-            dbm.createDataBlock(name, DataBlockManager::ItemDataType));
+        auto* imageData = dynamic_cast<ItemImageData*>(
+            dbm.createDataBlock(std::string(name) + "Image", DataBlockManager::ItemImageDataType));
+        auto* item =
+            dynamic_cast<ItemData*>(dbm.createDataBlock(name, DataBlockManager::ItemDataType));
         CHECK(imageData && item);
         imageData->shapeFile = name;
         imageData->shape = resources->load<world::TsShape>(std::string(name) + ".dts");
         imageData->mountPoint = 0;
         CHECK(imageData->shape);
         Int32 imageId = -1, itemId = -1;
-        CHECK(dbm.lookupDataBlock(std::string(name) + "Image",
-                                  DataBlockManager::ItemImageDataType,
-                                  &imageId));
+        CHECK(dbm.lookupDataBlock(
+            std::string(name) + "Image", DataBlockManager::ItemImageDataType, &imageId));
         CHECK(dbm.lookupDataBlock(name, DataBlockManager::ItemDataType, &itemId));
         item->imageId = imageId;
         CHECK(player->mountItem(itemId, 0));
@@ -139,10 +194,40 @@ void installedModels() {
             const auto& rgba = hardware->textures()[1].rgba;
             // Embedded palettes in these weapons differ from the active
             // mission palette. Native OpenGL always uses the latter.
-            CHECK(rgba[0] == std::byte{21} && rgba[1] == std::byte{54} &&
-                  rgba[2] == std::byte{87});
+            CHECK(rgba[0] == std::byte{21} && rgba[1] == std::byte{54} && rgba[2] == std::byte{87});
         }
     }
+}
+
+void liveDatablockReplacement() {
+    auto resources = std::make_shared<ResourceManager>();
+    CHECK(resources->add("test.dts", test::ts::load(test::ts::shape())));
+    CHECK(resources->add("test.bmp", gfx::Bitmap::create(4, 4)));
+    DataBlockManager blocks(false, resources);
+    constexpr auto group = DataBlockManager::StaticShapeDataType;
+    auto* source = dynamic_cast<ShapeBaseData*>(blocks.createDataBlock("Original", group));
+    CHECK(source);
+    source->fileName = "test.dts";
+    ShapeBase shape;
+    shape.bindDataBlockManager(&blocks);
+    CHECK(shape.initResources(source));
+    std::weak_ptr<GameBaseData> owner = blocks.retainDataBlock(source);
+    CHECK(!owner.expired());
+    const auto snapshot = blocks.captureSnapshot();
+    CHECK(blocks.createBlock(group, 0, 1));
+    CHECK(!owner.expired() && shape.getDatPtr() == source);
+    blocks.restoreSnapshot(snapshot);
+    blocks.reset();
+    CHECK(!owner.expired() && shape.getDatPtr() == source);
+    CHECK(shape.initResources(source));
+    CHECK(!owner.expired() && shape.getDatPtr() == source);
+    // Force a new material preparation after the original registry owner leaves.
+    world::WorldShapeQuery query;
+    CHECK(shape.processQuery(query) && query.image);
+    CHECK(query.image->resources.materials.textures().size() == 1);
+    CHECK(source->fileName == "test.dts");
+    CHECK(shape.initResources(nullptr));
+    CHECK(owner.expired());
 }
 }
 
@@ -155,4 +240,9 @@ int opent1_test_installed_rpg_models() {
 }
 
 OPENT1_REGISTER_TEST("game", "model_rendering", opent1_test_model_rendering);
+int opent1_test_live_datablock_replacement() {
+    return opent1::test::run(liveDatablockReplacement);
+}
+
+OPENT1_REGISTER_TEST("game", "live_datablock_replacement", opent1_test_live_datablock_replacement);
 OPENT1_REGISTER_TEST("fixpack", "installed_rpg_models", opent1_test_installed_rpg_models);

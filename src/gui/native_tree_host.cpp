@@ -1,4 +1,5 @@
 #include <opent1/gui/native_tree_host.hpp>
+#include <ranges>
 #include <opent1/gui/containers.hpp>
 #include <opent1/gui/sdl_gui.hpp>
 #include <opent1/gui/sdl_presentation.hpp>
@@ -172,9 +173,9 @@ struct TreePanel : std::enable_shared_from_this<TreePanel> {
                     });
                     return true;
                 }
-                for (std::size_t i = 0; i < menuButtons.size(); ++i) {
-                    if (menuButtons[i].get() == &control) {
-                        const auto action = menuButtons[i]->text;
+                for (const auto& menuButton : menuButtons) {
+                    if (menuButton.get() == &control) {
+                        const auto action = menuButton->text;
                         canvas.afterDispatch([self = shared_from_this(), action] {
                             if (self->canvas.popDialog()) {
                                 self->action(action, {});
@@ -183,7 +184,7 @@ struct TreePanel : std::enable_shared_from_this<TreePanel> {
                         return true;
                     }
                 }
-                for (std::size_t i = 0; i < buttons.size(); ++i) {
+                for (auto i : std::views::iota(std::size_t{0}, buttons.size())) {
                     if (buttons[i].get() == &control) {
                         return run(i);
                     }
@@ -292,7 +293,10 @@ struct TreePanel : std::enable_shared_from_this<TreePanel> {
                                           "lock",
                                           "unlock",
                                           "cancel"};
-            for (std::size_t i = 0; i < commands.size(); ++i) {
+            for (auto i :
+                 std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                     return i < commands.size();
+                 })) {
                 auto b = std::make_unique<Button>();
                 b->text = commands[i];
                 b->font = b->highlightFont = font;
@@ -416,7 +420,7 @@ struct TreePanel : std::enable_shared_from_this<TreePanel> {
                         if (!tree.refresh()) {
                             return false;
                         }
-                        for (std::size_t i = 0; i < tree.rows().size(); ++i) {
+                        for (auto i : std::views::iota(std::size_t{0}, tree.rows().size())) {
                             if (tree.rows()[i].address.generation == candidate.generation()) {
                                 return tree.select({0, Int32(i)});
                             }
@@ -454,7 +458,7 @@ struct TreePanel : std::enable_shared_from_this<TreePanel> {
             return false;
         }
         gfx::Palette palette;
-        for (std::size_t i = 0; i < 256; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, std::size_t{256})) {
             palette.palettes[0].colors[i] = {UInt8(i), UInt8(i), UInt8(i), 0};
         }
         const auto scale = nativeUiScale(app.findWindow(parent), *console);

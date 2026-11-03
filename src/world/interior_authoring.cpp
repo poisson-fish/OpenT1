@@ -1,4 +1,5 @@
 #include <opent1/world/interior_authoring.hpp>
+#include <ranges>
 #include <opent1/core/lzh_stream.hpp>
 #include <opent1/core/mem_stream.hpp>
 #include <algorithm>
@@ -15,7 +16,10 @@ struct Bytes {
         if constexpr (std::is_floating_point_v<T>) {
             put(std::bit_cast<UInt32>(value));
         } else {
-            for (std::size_t i = 0; i < sizeof(T); ++i) {
+            for (auto i :
+                 std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                     return i < sizeof(T);
+                 })) {
                 data.push_back(std::byte((std::make_unsigned_t<T>(value) >> (i * 8)) & 255));
             }
         }
@@ -99,7 +103,7 @@ std::optional<std::vector<std::byte>> writeInteriorGeometry(const InteriorGeomet
         return {};
     }
     std::size_t solids = 0;
-    for (std::size_t index = 0; index < geometry.leaves.size(); ++index) {
+    for (auto index : std::views::iota(std::size_t{0}, geometry.leaves.size())) {
         if (geometry.leaves[index].solid) {
             if (index != 43 + solids) {
                 return {};
@@ -204,14 +208,17 @@ std::optional<std::vector<std::byte>> writeInteriorShape(const InteriorShape& sh
     std::vector<UInt32> stateNames(shape.states.size()), geometries(shape.lods.size()),
         files(shape.lightFiles.size()), profiles;
     std::vector<bool> seenLods(shape.lods.size()), seenFiles(shape.lightFiles.size());
-    for (std::size_t stateIndex = 0; stateIndex < shape.states.size(); ++stateIndex) {
+    for (auto stateIndex : std::views::iota(std::size_t{0}, shape.states.size())) {
         const auto& state = shape.states[stateIndex];
         if (!textValid(state.name) || !state.lodCount || state.firstLod > shape.lods.size() ||
             state.lodCount > shape.lods.size() - state.firstLod) {
             return {};
         }
         stateNames[stateIndex] = names.name(state.name);
-        for (UInt32 index = state.firstLod; index < state.firstLod + state.lodCount; ++index) {
+        for (auto index : std::views::iota(static_cast<UInt32>(state.firstLod)) |
+                              std::views::take_while([&](UInt32 index) {
+                                  return index < state.firstLod + state.lodCount;
+                              })) {
             const auto& lod = shape.lods[index];
             if (!textValid(lod.geometry) || lod.firstLightState > shape.lightFiles.size() ||
                 shape.lightStateNames.size() > shape.lightFiles.size() - lod.firstLightState) {
@@ -221,9 +228,11 @@ std::optional<std::vector<std::byte>> writeInteriorShape(const InteriorShape& sh
                 geometries[index] = names.name(lod.geometry);
                 seenLods[index] = true;
             }
-            for (UInt32 light = lod.firstLightState;
-                 light < lod.firstLightState + shape.lightStateNames.size();
-                 ++light) {
+            for (auto light : std::views::iota(static_cast<UInt32>(lod.firstLightState)) |
+                                  std::views::take_while([&](UInt32 light) {
+                                      return light <
+                                             lod.firstLightState + shape.lightStateNames.size();
+                                  })) {
                 if (!textValid(shape.lightFiles[light])) {
                     return {};
                 }
@@ -251,13 +260,13 @@ std::optional<std::vector<std::byte>> writeInteriorShape(const InteriorShape& sh
         profiles.push_back(names.name(name));
     }
     out.put(UInt32(shape.states.size()));
-    for (std::size_t index = 0; index < shape.states.size(); ++index) {
+    for (auto index : std::views::iota(std::size_t{0}, shape.states.size())) {
         out.put(stateNames[index]);
         out.put(shape.states[index].firstLod);
         out.put(shape.states[index].lodCount);
     }
     out.put(UInt32(shape.lods.size()));
-    for (std::size_t index = 0; index < shape.lods.size(); ++index) {
+    for (auto index : std::views::iota(std::size_t{0}, shape.lods.size())) {
         const auto& lod = shape.lods[index];
         out.put(lod.minPixels);
         out.put(geometries[index]);

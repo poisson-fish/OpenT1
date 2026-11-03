@@ -1,4 +1,5 @@
 #include <opent1/gui/mission_view.hpp>
+#include <ranges>
 #include <cmath>
 #include <charconv>
 #include <unordered_set>
@@ -195,7 +196,10 @@ std::vector<std::shared_ptr<void>> MissionView::install(Console& console) {
                                "Mission::snapRotation"};
     std::vector<std::shared_ptr<void>> leases;
     const auto token = lifetime();
-    for (std::size_t index = 0; index < names.size(); ++index) {
+    for (auto index :
+         std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t index) {
+             return index < names.size();
+         })) {
         leases.push_back(console.scopedCommand(
             Int32(index),
             names[index],
@@ -315,7 +319,7 @@ Int32 MissionTree::icon(const sim::SimObject& object, bool chosen) const {
                 continue;
             }
             bool same = true;
-            for (std::size_t i = 0; i < entry.name.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, entry.name.size())) {
                 const auto lower = [](char c) {
                     return c >= 'A' && c <= 'Z' ? char(c - 'A' + 'a') : c;
                 };

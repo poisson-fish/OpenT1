@@ -1,4 +1,6 @@
 #include <opent1/game/fear_plugin.hpp>
+#include <iterator>
+#include <ranges>
 #include <opent1/game/commander_huds.hpp>
 #include <opent1/game/fear_player_psc.hpp>
 #include <opent1/game/item.hpp>
@@ -75,15 +77,16 @@ void FearPlugin::installLegacyUtilityCommands(Console& console) {
                 return "false";
             }
             std::string result;
-            for (std::size_t i = 0; i < args[1].size(); ++i) {
-                if (args[1][i] != '%') {
-                    result += args[1][i];
+            for (auto characterIt = args[1].begin(); characterIt != args[1].end(); ++characterIt) {
+                if (*characterIt != '%') {
+                    result += *characterIt;
                     continue;
                 }
-                if (i + 1 == args[1].size() || args[1][i + 1] < '1' || args[1][i + 1] > '9') {
+                if (std::next(characterIt) == args[1].end() || *std::next(characterIt) < '1' ||
+                    *std::next(characterIt) > '9') {
                     return "false";
                 }
-                const auto index = std::size_t(args[1][++i] - '0' + 1);
+                const auto index = std::size_t(*++characterIt - '0' + 1);
                 if (index >= args.size()) {
                     return "false";
                 }
@@ -414,8 +417,10 @@ void FearPlugin::installLegacyUtilityCommands(Console& console) {
                 }
                 Int32 index = -1;
                 if (args.size() == 2 && cg_.dbm) {
-                    for (Int32 i = 0; i < cg_.dbm->getDataGroupSize(DataBlockManager::ItemDataType);
-                         ++i) {
+                    for (auto i :
+                         std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                             return i < cg_.dbm->getDataGroupSize(DataBlockManager::ItemDataType);
+                         })) {
                         const auto* data = dynamic_cast<ItemData*>(
                             cg_.dbm->lookupDataBlock(i, DataBlockManager::ItemDataType));
                         if (data && same(data->description, args[1])) {

@@ -1,4 +1,5 @@
 #include <opent1/game/star_field.hpp>
+#include <ranges>
 #include <opent1/game/string_table.hpp>
 #include <opent1/sim/sim_world_game.hpp>
 
@@ -81,13 +82,13 @@ void StarField::initialize() {
 
     Flt32 incidence = static_cast<Flt32>(-5.0 * (kRealDPi / 180.0));
     std::size_t region = 0;
-    for (Int32 i = 0; i < 3; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(Int32{0}, Int32{3})) {
         Flt32 azimuth = 0.0f;
         const Flt32 sinL = std::sin(incidence) * GLOBE_RADIUS;
         const Flt32 cosL = std::cos(incidence) * GLOBE_RADIUS;
         const Flt32 sinH = std::sin(incidence + incStep) * GLOBE_RADIUS;
         const Flt32 cosH = std::cos(incidence + incStep) * GLOBE_RADIUS;
-        for (Int32 j = 0; j < 12; ++j) {
+        for ([[maybe_unused]] auto j : std::views::iota(Int32{0}, Int32{12})) {
             regions_[region].stars.clear();
             regions_[region].corners[0].set(
                 std::cos(azimuth) * cosL, std::sin(azimuth) * cosL, sinL);
@@ -105,7 +106,9 @@ void StarField::initialize() {
 
     regions_[REGION_COUNT].stars.clear();
     Random randGen;
-    for (Int32 i = 0; i < 2 * MAX_STARS; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < 2 * MAX_STARS;
+                  })) {
         Point3F p{};
         do {
             // Preserve x86 __thiscall Point3F(x, y, z) argument evaluation order (z, y, x)
@@ -173,7 +176,7 @@ bool StarField::inspectRead(sim::Inspect& inspector) {
     }
     inFrontOfSky_ = std::get<bool>(v);
 
-    for (std::size_t i = 0; i < 3; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
         if (!inspector.read(
                 sim::Inspect::Type::Point3F, static_cast<Int32>(IDITG_STARS_COLOR1 + i), v)) {
             return false;

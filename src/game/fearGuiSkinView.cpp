@@ -1,4 +1,5 @@
 #include <opent1/game/shell_controls.hpp>
+#include <ranges>
 
 #include <format>
 #include <cmath>
@@ -81,7 +82,9 @@ bool SkinView::draw(gfx::SoftwareSurface& surface, Point2I offset, RectI clip) c
     }
     std::vector<world::TsAnimationSample> samples;
     const auto& shape = *preview_->shape;
-    for (std::size_t i = 0; i < shape.sequences.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < shape.sequences.size();
+                  })) {
         const auto name = shape.sequences[i].name;
         if (name >= 0 && std::size_t(name) < shape.names.size() && shape.names[name] == "run") {
             if (auto sample = world::TsAnimationSample::atTime(shape, Int32(i), animationTime_)) {

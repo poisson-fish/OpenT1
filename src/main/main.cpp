@@ -1,4 +1,6 @@
 #include <opent1/game/fear_player_psc.hpp>
+#include <iterator>
+#include <ranges>
 #include <opent1/game/game_app.hpp>
 #include <opent1/game/sound.hpp>
 #include <opent1/game/player.hpp>
@@ -77,8 +79,8 @@ struct RuntimeOptions {
 [[nodiscard]] RuntimeOptions parseRuntimeOptions(std::span<const std::string_view> args,
                                                  bool standaloneDefault) {
     RuntimeOptions opts{};
-    for (std::size_t i = 0; i < args.size(); ++i) {
-        const std::string_view arg = args[i];
+    for (auto argumentIt = args.begin(); argumentIt != args.end(); ++argumentIt) {
+        const std::string_view arg = *argumentIt;
         if (arg == "--smoke") {
             opts.smoke = true;
             opts.hidden = true;
@@ -87,8 +89,8 @@ struct RuntimeOptions {
             opts.hidden = true;
         } else if (arg == "--headless") {
             opts.headless = true;
-        } else if (arg == "--renderer" && (i + 1) < args.size()) {
-            opts.renderer = args[++i];
+        } else if (arg == "--renderer" && std::next(argumentIt) != args.end()) {
+            opts.renderer = *++argumentIt;
         } else if (arg == "--fullscreen") {
             opts.fullscreen = true;
         } else if (arg == "--windowed") {
@@ -114,15 +116,15 @@ struct RuntimeOptions {
             opts.spawnDemo = true;
         } else if (arg == "-dedicated") {
             opts.dedicated = true;
-        } else if (arg == "--frames" && (i + 1) < args.size()) {
-            opts.maxFrames = parsePositiveIntSv(args[++i], 2);
-        } else if (arg == "--driver" && (i + 1) < args.size()) {
-            opts.gpuDriver = std::string(args[++i]);
-        } else if (arg == "--assets" && (i + 1) < args.size()) {
-            opts.assetRoot = std::filesystem::path(args[++i]);
+        } else if (arg == "--frames" && std::next(argumentIt) != args.end()) {
+            opts.maxFrames = parsePositiveIntSv(*++argumentIt, 2);
+        } else if (arg == "--driver" && std::next(argumentIt) != args.end()) {
+            opts.gpuDriver = std::string(*++argumentIt);
+        } else if (arg == "--assets" && std::next(argumentIt) != args.end()) {
+            opts.assetRoot = std::filesystem::path(*++argumentIt);
             opts.mountAssets = true;
-        } else if (arg == "--mission" && (i + 1) < args.size()) {
-            opts.missionName = std::string(args[++i]);
+        } else if (arg == "--mission" && std::next(argumentIt) != args.end()) {
+            opts.missionName = std::string(*++argumentIt);
             opts.mountAssets = true;
         }
     }
@@ -158,7 +160,9 @@ countNonZeroSurfaceBytes(const gfx::SoftwareSurface& surface) noexcept {
     wave->rate = 22050;
     constexpr std::size_t kSampleCount = 512;
     wave->samples.resize(kSampleCount * sizeof(Int16));
-    for (std::size_t i = 0; i < kSampleCount; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < kSampleCount;
+                  })) {
         const Int16 sample = (i % 32u < 16u) ? static_cast<Int16>(3000) : static_cast<Int16>(-3000);
         const auto u = static_cast<UInt16>(sample);
         wave->samples[i * 2] = static_cast<std::byte>(u & 0xFFu);
@@ -296,6 +300,19 @@ protected:
                 gfx::GpuSurfaceConfig gpuCfg{};
                 gpuCfg.driver = opts_.gpuDriver;
                 gpuCfg.presentMode = gfx::GpuPresentMode::Immediate;
+                const auto cacheEntries =
+                    app_.console().getVariable("pref::GPUTextureCacheEntries");
+                if (!cacheEntries.empty()) {
+                    std::size_t entries{};
+                    const auto parsed = std::from_chars(
+                        cacheEntries.data(), cacheEntries.data() + cacheEntries.size(), entries);
+                    if (parsed.ec != std::errc{} ||
+                        parsed.ptr != cacheEntries.data() + cacheEntries.size() || !entries) {
+                        std::cerr << "Invalid pref::GPUTextureCacheEntries\n";
+                        return false;
+                    }
+                    gpuCfg.textureCacheEntries = entries;
+                }
                 try {
                     gpuSurface_ = gfx::SdlGpuSurface::create(win, 640, 480, gpuCfg);
                 } catch (...) {
@@ -358,7 +375,10 @@ protected:
                                auto** modes = SDL_GetFullscreenDisplayModes(
                                    SDL_GetDisplayForWindow(window->nativeHandle()), &count);
                                std::string result;
-                               for (int i = 0; modes && i < count; ++i) {
+                               for (auto i :
+                                    std::views::iota(0) | std::views::take_while([&](int i) {
+                                        return modes && i < count;
+                                    })) {
                                    if (modes[i]->w >= 640 && modes[i]->h >= 480) {
                                        result += std::to_string(modes[i]->w) + "x" +
                                                  std::to_string(modes[i]->h) + "\t";
@@ -691,6 +711,12 @@ protected:
     }
 
     void onEvent(const platform::Event& ev) override {
+        if (const auto* lifecycle = std::get_if<platform::AppEvent>(&ev.data);
+            lifecycle && (lifecycle->type == SDL_EVENT_WILL_ENTER_BACKGROUND ||
+                          lifecycle->type == SDL_EVENT_LOW_MEMORY)) {
+            if (gpuSurface_) (void)gpuSurface_->trimCaches();
+            app_.trimRenderCaches();
+        }
         bindInput();
         if (const auto* key = std::get_if<platform::KeyEvent>(&ev.data);
             key && key->scancode == SDL_SCANCODE_GRAVE) {
@@ -831,7 +857,9 @@ protected:
                 ? (static_cast<double>(framesRun_ + 1u) * 0.032)
                 : (static_cast<double>(SDL_GetTicks() - startTicksMs_) * 0.001);
 
-        const bool keepGoing = app_.stepFrame(wallTimeSeconds);
+        // The SDL host renders once below, after prediction, GUI and audio
+        // updates. Keep the canvas callback for explicit script redraws.
+        const bool keepGoing = app_.stepFrame(wallTimeSeconds, false);
         if (opts_.verifyInput && framesRun_ == 3) {
             const auto* player =
                 cg.playerPSC ? dynamic_cast<Player*>(cg.playerPSC->getControlObject()) : nullptr;
@@ -1158,7 +1186,9 @@ private:
 
     const Int32 targetFrames = (opts.maxFrames > 0) ? opts.maxFrames : 2;
     std::size_t nonZeroPixels = 0;
-    for (Int32 f = 0; f < targetFrames; ++f) {
+    for (auto f : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 f) {
+                      return f < targetFrames;
+                  })) {
         auto& cg = app.fearPlugin().clientGlobals();
         if (opts.spawnDemo && cg.playerPSC) {
             PlayerMove mv{};
@@ -1243,7 +1273,9 @@ int main(int argc, char** argv) {
     std::vector<std::string_view> args;
     if (argc > 1 && argv != nullptr) {
         args.reserve(static_cast<std::size_t>(argc - 1));
-        for (int i = 1; i < argc; ++i) {
+        for (auto i : std::views::iota(1) | std::views::take_while([&](int i) {
+                          return i < argc;
+                      })) {
             if (argv[i] != nullptr) {
                 args.emplace_back(argv[i]);
             }

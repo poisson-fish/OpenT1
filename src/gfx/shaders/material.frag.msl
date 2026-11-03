@@ -8,10 +8,14 @@ struct Input {
     float haze [[user(locn2)]];
     float2 lightMap [[user(locn3)]];
     float opacity [[user(locn4)]];
+    float cameraDepth [[user(locn5)]];
+    float sphereDistance [[user(locn6)]];
+    float4 lightRect [[user(locn7), flat]];
+    float3 imageArray [[user(locn8), flat]];
 };
 
 struct Material {
-    float4 tint, hazeColor, options, alphaControls;
+    float4 tint, hazeColor, options, alphaControls, geometryClip, lightRect, arrayControls;
 };
 
 fragment float4 main0(Input v [[stage_in]],
@@ -19,11 +23,22 @@ fragment float4 main0(Input v [[stage_in]],
                       sampler imageSampler [[sampler(0)]],
                       texture2d<float> lightMap [[texture(1)]],
                       sampler lightMapSampler [[sampler(1)]],
+                      texture2d_array<float> imageArray [[texture(2)]],
+                      sampler imageArraySampler [[sampler(2)]],
                       constant Material& m [[buffer(0)]]) {
+    if (m.geometryClip.z != 0 &&
+        (v.cameraDepth < m.geometryClip.x || v.cameraDepth > m.geometryClip.y))
+        discard_fragment();
+    if (v.sphereDistance > 1)
+        discard_fragment();
     if (m.alphaControls.z == 2)
         return float4(m.hazeColor.rgb, saturate(v.haze));
-    float4 texel = image.sample(imageSampler, v.uv, bias(m.options.z));
-    float3 light = lightMap.sample(lightMapSampler, v.lightMap).rgb;
+    float4 rect = v.imageArray.z != 0 ? v.lightRect : m.lightRect;
+    float2 array = v.imageArray.z != 0 ? v.imageArray.xy : m.arrayControls.xy;
+    float4 texel = array.y != 0
+        ? imageArray.sample(imageArraySampler, v.uv, uint(array.x), bias(m.options.z))
+        : image.sample(imageSampler, v.uv, bias(m.options.z));
+    float3 light = lightMap.sample(lightMapSampler, saturate(v.lightMap) * rect.xy + rect.zw).rgb;
     float alpha = m.options.w == 0   ? texel.a * m.tint.a
                   : m.options.w == 1 ? m.tint.a
                   : m.options.w == 2 ? saturate(v.opacity) * m.tint.a

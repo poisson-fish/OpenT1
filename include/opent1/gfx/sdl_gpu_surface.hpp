@@ -13,6 +13,15 @@ struct GpuSurfaceConfig {
     std::string driver; // empty selects an available SDL_GPU backend
     bool debug{};
     GpuPresentMode presentMode{GpuPresentMode::VSync};
+    // Retained content entries, not preallocated textures. Pixel payload and
+    // bounded lightmap pages have separate budgets; driver metadata is extra.
+    std::size_t textureCacheEntries{8192};
+    std::size_t meshCacheBytes{64U * 1024U * 1024U};
+    std::size_t textureCacheBytes{64U * 1024U * 1024U}; // logical RGBA payload
+    std::size_t lightMapPageBytes{16U * 1024U * 1024U}; // zero selects standalone maps
+    std::size_t textureArrayBytes{16U * 1024U * 1024U}; // compatible RGBA layouts; zero disables
+    UInt32 stagingBytes{128U * 1024U *
+                        1024U}; // transfer capacity, separate from resident resources
 };
 
 struct GpuFrameConfig {
@@ -25,17 +34,25 @@ struct GpuTextureCacheStats {
     std::size_t textures{}, bytes{};
     UInt64 hits{}, uploads{}, evictions{};
     UInt64 reuses{}; // uploads into recycled dynamic texture allocations
+    std::size_t physicalTextures{}, lightMapPages{}, lightMapPageBytes{};
+    std::size_t textureArrays{}, textureArrayBytes{}, allocatedPayloadBytes{};
 };
 
 struct GpuResourceStats {
     UInt64 targetAllocations{}, vertexAllocations{}, uploadAllocations{};
     UInt32 vertexCapacity{}, uploadCapacity{};
+    UInt32 instanceCapacity{}, peakInstanceCapacity{};
+    UInt64 instanceAllocations{}; // camera/pose inputs, separate from immutable meshes
+    UInt64 meshAllocations{}, meshUploads{}, meshUploadBytes{};
+    std::size_t meshBytes{}, peakMeshBytes{}, meshes{};
 };
 
 struct GpuSubmissionStats {
     UInt32 inputDraws{}, draws{}, pipelineBinds{}, samplerBinds{}, vertexUniformPushes{},
         fragmentUniformPushes{};
     double fenceWaitMs{}; // CPU time in the preceding hardware submission's fence wait
+    UInt64 vertexUploadBytes{}, textureUploadBytes{}, meshUploadBytes{};
+    UInt64 instanceUploadBytes{};
 };
 
 // Indexed software drawing/presentation and an RGBA/depth hardware material path.
@@ -76,16 +93,19 @@ public:
     // each material/haze layer, preserving primitive and transparency order.
     // Waits for this surface's preceding hardware submission to bound memory.
     bool render(const HardwareBatch&, const GpuFrameConfig& = {});
-    // Per-device content cache: 2048 entries, expanded when needed by
-    // the current frame's native lightmaps; 64 MiB of GPU RGBA with shared
+    // Per-device content cache: configurable retained entries (8192 by default),
+    // expanded when needed by the current frame; configurable RGBA payload with shared
     // immutable CPU snapshots for collision-safe comparison. Hits/uploads count
     // successful frames; evictions include explicit clears and failed frames.
+    // Payload bytes exclude driver allocation alignment, descriptors and metadata.
     [[nodiscard]] GpuTextureCacheStats textureCacheStats() const noexcept;
     // Cumulative successful allocation counts and retained buffer capacities.
     [[nodiscard]] GpuResourceStats resourceStats() const noexcept;
     // Last successfully submitted frame, including deferred haze and gamma.
     [[nodiscard]] GpuSubmissionStats submissionStats() const noexcept;
     void clearTextureCache() noexcept; // does not discard the published frame
+    bool
+    trimCaches(); // lifecycle/pressure hook: waits, releases disposable caches and upload buffers
     // Presents the last uploaded/rendered frame without uploading software again.
     PresentResult presentFrame();
     // Synchronous readback of the last successfully uploaded/rendered RGBA frame.

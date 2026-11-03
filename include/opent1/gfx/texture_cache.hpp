@@ -13,6 +13,7 @@ struct LightMap {
     std::vector<UInt16> samples;
     enum class Format { Rgb444, Rgb565 };
     Format format{Format::Rgb444}; // Terrain2's native Glide maps use RGB565
+    bool dynamic{}; // renderer hint; immutable published maps still own their samples
     [[nodiscard]] bool valid() const noexcept;
 };
 

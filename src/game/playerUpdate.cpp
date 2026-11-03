@@ -1,4 +1,5 @@
 #include <opent1/game/player.hpp>
+#include <ranges>
 #include <opent1/game/player_manager.hpp>
 #include <opent1/game/commander_huds.hpp>
 #include <opent1/game/decal_manager.hpp>
@@ -264,7 +265,9 @@ Int32 Player::possibleJetForces(std::span<Point3F, 4> forces,
 
     const Point3F otherForce = forceSumExcept(TribesJetForce);
     const Flt32 ts = getTimeSlice();
-    for (Int32 i = 0; i < numForces; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < numForces;
+                  })) {
         forces[static_cast<std::size_t>(i)] =
             (forces[static_cast<std::size_t>(i)] + otherForce) * ts;
     }
@@ -312,7 +315,9 @@ void Player::updateMove(const PlayerMove* curMove, bool server) {
 
     // Trigger and item requests are consumed by serverUpdateMove before the
     // delayed movement input. Never replay them from lastPlayerMove here.
-    for (Int32 slot = 0; slot < MaxImageSlots; ++slot) {
+    for (auto slot : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 slot) {
+                         return slot < MaxImageSlots;
+                     })) {
         updateImageState(slot, .032f);
     }
     deltaRot_ = localMove.turnRot;

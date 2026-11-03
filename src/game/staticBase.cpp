@@ -1,4 +1,5 @@
 #include <opent1/game/static_base.hpp>
+#include <ranges>
 #include <opent1/core/text.hpp>
 #include <opent1/game/sound.hpp>
 #include <algorithm>
@@ -9,7 +10,7 @@ namespace opent1::game {
 namespace {
 
 Int32 findSequenceIndex(const world::TsShape& shape, std::string_view seqName) noexcept {
-    for (std::size_t i = 0; i < shape.sequences.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, shape.sequences.size())) {
         const Int32 nameIdx = shape.sequences[i].name;
         if (nameIdx >= 0 && static_cast<std::size_t>(nameIdx) < shape.names.size() &&
             equalIgnoreCase(shape.names[static_cast<std::size_t>(nameIdx)], seqName)) {
@@ -20,7 +21,7 @@ Int32 findSequenceIndex(const world::TsShape& shape, std::string_view seqName) n
 }
 
 Int32 findDetailIndex(const world::TsShape& shape, std::string_view detailName) noexcept {
-    for (std::size_t i = 0; i < shape.details.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, shape.details.size())) {
         const Int32 rootNode = shape.details[i].root;
         if (rootNode >= 0 && static_cast<std::size_t>(rootNode) < shape.nodes.size()) {
             const Int32 nameIdx = shape.nodes[static_cast<std::size_t>(rootNode)].name;

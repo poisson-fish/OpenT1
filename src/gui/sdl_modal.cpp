@@ -1,4 +1,5 @@
 #include <opent1/gui/sdl_modal.hpp>
+#include <ranges>
 #include <opent1/gui/sdl_presentation.hpp>
 #include <SDL3/SDL.h>
 
@@ -60,7 +61,7 @@ bool SdlModalHost::run(ModalView view) {
             return input->synchronize();
         };
         gfx::Palette palette;
-        for (unsigned i = 0; i < 256; ++i) {
+        for (auto i : std::views::iota(unsigned{0}, unsigned{256})) {
             palette.palettes[0].colors[i] = {UInt8(i), UInt8(i), UInt8(i), 0};
         }
         const auto draw = [&] {

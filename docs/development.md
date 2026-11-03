@@ -118,11 +118,11 @@ exercise the affected GPU backends before distributing a shader change.
 
 ## Test suite
 
-The full build registers 45 standard C++ cases in one executable and 12 subsystem suites:
+The full build registers 50 standard C++ cases in one executable and 12 subsystem suites:
 core, math, console, network, simulation, graphics, world, GUI, game, video,
 and optional audio/platform.
 CTest also runs an application smoke check, for 13 CTest checks in total.
-Headless builds register 43 standard C++ cases in 10 subsystem suites plus the smoke
+Headless builds register 47 standard C++ cases in 10 subsystem suites plus the smoke
 check, for 11 CTest checks. They omit the audio and platform cases. Default
 checks use the bundled fixtures and do not need a game installation, Python,
 or an external reference executable.
@@ -152,6 +152,14 @@ and `opent1::test::run` helpers for new cases. Tests that need temporary files
 should use their working directory or a uniquely named temporary directory.
 CTest gives each subsystem a separate working directory so suites can run
 concurrently.
+
+The diagnostic Python tools have asset-free regression tests using only the
+Python standard library. CI runs these separately from CTest; Python is not
+required for a normal C++ build:
+
+```powershell
+python -m unittest discover -s tests/tools -v
+```
 
 Gameplay regressions include target filtering, impact delivery, player animation
 audio, looping weapon audio, target names and health fractions, mission clock
@@ -186,18 +194,29 @@ The optional `trpg` suite hosts `rpgmap5`, spawns an enemy through the installed
 RPG scripts, and checks that the player's mounted pickaxe and the enemy's weapon
 both deal damage. It also fires a bot's sling through the RPG scripts, collects
 a loot chest through player collision, checks repeated enemy-zone scans, and
-submits chat twice through the installed GUI. It uses the same asset variable
-and a temporary write directory:
+submits chat twice through the installed GUI. A second case checks town NPC
+positions and rendered skins, server/client ferry movement, inventory reentry
+through the installed key bindings and Escape, thrown loot collection, visible
+enemy death packs, and an AI caster completing a damaging spell. A third case
+hosts `rpgmap1` with its startup NPCs, verifies the local player's identity and
+camera, renders software and hardware frames, and completes character creation.
+These cases use the same asset variable and temporary write directories:
 
 ```powershell
 .\build\x64-debug\tests\opent1_tests.exe --suite trpg
 ```
 
-The ordinary `game` suite covers bot join announcements and teams, script weapon
+The ordinary `game` suite covers silent bot connection joins/drops, vanilla bot
+team callbacks, shared representative-pool exhaustion and reuse, native/script
+ownership transfers, ownership-based AI targeting/following, projectile/mine
+attribution across ID reuse, and script weapon
 callbacks and fallback lookup, pitched melee traces, crouch collision bounds,
 uphill acceleration and turn timing, the jump arc, and grounded prediction during smoothing.
 It also covers message recipients, sound-only chat, reopened chat and history
 editing, throw aiming and collision callbacks, and the thrower pickup blackout.
+Additional regressions cover item collisions with translated/rotated terrain and
+interiors, bot skin replication and score filtering, client-ID damage callbacks,
+zoom notifications triggered by input, and ferry waypoint arrival and reset.
 
 ## Continuous integration and validation limits
 

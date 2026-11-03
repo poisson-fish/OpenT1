@@ -1,4 +1,5 @@
 #include <opent1/game/chat_inventory_huds.hpp>
+#include <ranges>
 #include <opent1/game/hud_panel.hpp>
 
 #include <algorithm>
@@ -98,10 +99,14 @@ bool FearGuiChatDisplay::draw(gfx::SoftwareSurface& surface, Point2I offset, Rec
             return false;
         }
     }
-    for (auto i = start; i < end; ++i) {
+    for (auto i : std::views::iota(start) | std::views::take_while([&](auto i) {
+                      return i < end;
+                  })) {
         y -= lines[i].font->info.height;
     }
-    for (auto i = start; i < end; ++i) {
+    for (auto i : std::views::iota(start) | std::views::take_while([&](auto i) {
+                      return i < end;
+                  })) {
         if (!surface.text(*lines[i].font, {offset.x + 6, y}, lines[i].text)) {
             return false;
         }

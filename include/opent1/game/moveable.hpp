@@ -122,8 +122,7 @@ public:
     }
 
     [[nodiscard]] Flt32 getWaypointPosition() const noexcept {
-        return static_cast<Flt32>(currentWaypoint_) +
-               (pathTime_ != 0.0f ? (position_ / pathTime_) : 0.0f);
+        return static_cast<Flt32>(currentWaypoint_) + position_;
     }
 
     [[nodiscard]] GameBase* blockedObject() const noexcept {

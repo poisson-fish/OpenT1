@@ -1,4 +1,5 @@
 #include "interior_pvs.hpp"
+#include <ranges>
 #include "collision_geometry.hpp"
 #include <cstdio>
 #include <cstdlib>
@@ -45,7 +46,7 @@ std::optional<std::vector<UInt32>> interior_detail::visibleObjects(const Interio
     // Bucket zero holds all solid leaves; the others are leaf ID plus one.
     constexpr auto end = ~UInt32{0};
     std::vector<UInt32> heads(geometry.leaves.size() + 1, end), next(bounds.size());
-    for (std::size_t i = 0; i < bounds.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, bounds.size())) {
         if (!valid(bounds[i])) {
             if (std::getenv("OPENT1_SCENE_DIAGNOSTICS")) {
                 std::fprintf(stderr,
@@ -88,7 +89,9 @@ std::optional<std::vector<UInt32>> interior_detail::visibleObjects(const Interio
     const auto outside =
         leaf.pvsCount ? std::to_integer<UInt8>(geometry.bits[leaf.pvsIndex]) & 0xfcU : 0U;
     if (outside) {
-        for (std::size_t i = 0; i < std::min(std::size_t{43}, geometry.leaves.size()); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < std::min(std::size_t{43}, geometry.leaves.size());
+                      })) {
             append(i + 1);
         }
     }

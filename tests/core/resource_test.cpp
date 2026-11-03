@@ -177,6 +177,25 @@ void tests() {
         loadedText.reset();
         CHECK(manager.purge() == 1);
         CHECK(manager.load<std::string>("text.txt") && calls == 2);
+        const auto retainedText = manager.load<std::string>("text.txt");
+        int measuredCalls = 0;
+        CHECK(manager.registerLoader<std::string>(
+            ".txt",
+            [&](StreamIO& stream, UInt32 size) {
+                ++measuredCalls;
+                std::string value(size, ' ');
+                if (!stream.readBytes(std::as_writable_bytes(std::span(value)))) {
+                    return std::unique_ptr<std::string>{};
+                }
+                return std::make_unique<std::string>(value);
+            },
+            0ms,
+            true));
+        CHECK(!manager.registerLoader<Counted>(
+            ".txt", [](StreamIO&, UInt32) { return std::make_unique<Counted>(); }, 0ms, true));
+        CHECK(manager.load<std::string>("text.txt").get() == retainedText.get() && measuredCalls == 0);
+        CHECK(manager.setSearchPaths(roots));
+        CHECK(manager.load<std::string>("text.txt") && measuredCalls == 1 && *retainedText == second);
         int attempts = 0;
         CHECK(manager.registerLoader<Counted>(
             ".bad", [&](StreamIO&, UInt32) -> std::unique_ptr<Counted> {
@@ -244,6 +263,40 @@ void tests() {
             save(root / "first/sub/Asset.dat", std::as_bytes(std::span(disk)));
             save(root / "second/sub/Asset.dat", std::as_bytes(std::span(second)));
         });
+    {
+        ResourceManager manager;
+        CHECK(manager.setSearchPaths(std::span(roots).first(1)));
+        manager.setResidencyBudget(0);
+        auto first = manager.load<RawData>("sub/asset.dat");
+        CHECK(first);
+        const auto snapshot = first.immutable();
+        auto stats = manager.residencyStats();
+        CHECK(stats.decodedBytes == sizeof(RawData) + first->bytes.capacity());
+        CHECK(stats.liveBytes == stats.decodedBytes && stats.unusedBytes == 0 &&
+              stats.overBudgetBytes > 0);
+        CHECK(stats.incompleteEntries == 0 && stats.decodeStagingBytes == 0 &&
+              stats.peakDecodeStagingBytes >= disk.size());
+        first.reset();
+        CHECK(manager.setSearchPaths(std::span(roots).subspan(1)));
+        auto replacement = manager.load<RawData>("sub/asset.dat");
+        CHECK(replacement && text(snapshot->bytes) == disk && text(replacement->bytes) == second);
+        stats = manager.residencyStats();
+        CHECK(stats.entries == 2 && stats.liveBytes == stats.decodedBytes);
+        CHECK(stats.peakBytes >= stats.decodedBytes);
+        replacement.reset();
+        CHECK(manager.trimResidency() == 1);
+        stats = manager.residencyStats();
+        CHECK(stats.entries == 1 && stats.budgetEvictions == 1 &&
+              stats.overBudgetBytes == stats.liveBytes);
+        auto added = std::make_unique<RawData>();
+        added->bytes.resize(128);
+        CHECK(manager.add("pinned.raw", std::move(added)));
+        CHECK(manager.trimResidency() == 0 && manager.residencyStats().addedBytes >= 128);
+        CHECK(text(snapshot->bytes) == disk);
+        manager.setDecodeStagingBudget(0);
+        CHECK(!manager.load<RawData>("sub/asset.dat") && text(snapshot->bytes) == disk);
+        CHECK(manager.residencyStats().decodeStagingBytes == 0);
+    }
     CHECK(resourceType("a.DAT") == 0xFF746164U && resourceType("noext") == kInvalidResourceId);
     const std::string known = "123456789";
     CHECK(CRC::calculate(std::as_bytes(std::span(known))) == 0x340BC6D9U);

@@ -153,7 +153,9 @@ bool SoftwareSurface::blit(const Bitmap& input, RectI source, Point2I destinatio
     const auto* palette = palette_ ? &palette_->find(bitmap.paletteIndex) : nullptr;
     if (!transparent && !blend && flip == Flip::None &&
         (!palette || bitmap.paletteIndex == 0xffffffffU)) {
-        for (Int32 y = 0; y < source.height(); ++y) {
+        for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                          return y < source.height();
+                      })) {
             const auto src = bitmap.row(source.top + y)
                                  .subspan(std::size_t(source.left), std::size_t(source.width()));
             auto dst = bitmap_.row(target.top + y)
@@ -216,7 +218,10 @@ bool SoftwareSurface::stretch(const Bitmap& input, RectI destination, Flip flip)
         Int64 position = start;
         std::vector<Int32> result;
         result.reserve(std::size_t(count));
-        for (Int32 i = 0; i < count; ++i) {
+        for ([[maybe_unused]] auto i :
+             std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                 return i < count;
+             })) {
             if (position < 0 || position >= storageSize) {
                 return {};
             }
@@ -252,11 +257,15 @@ bool SoftwareSurface::stretch(const Bitmap& input, RectI destination, Flip flip)
     const bool transparent = (bitmap.attributes & drawMask) == BitmapTransparent,
                blend = translucent(bitmap);
     const auto* palette = palette_ ? &palette_->find(bitmap.paletteIndex) : nullptr;
-    for (std::size_t y = 0; y < ys->size(); ++y) {
+    for (auto y : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t y) {
+                      return y < ys->size();
+                  })) {
         const auto src = bitmap.level().subspan(
             std::size_t((*ys)[y]) * std::size_t(bitmap.stride()), std::size_t(bitmap.stride()));
         auto dst = bitmap_.row(target.top + Int32(y));
-        for (std::size_t x = 0; x < xs->size(); ++x) {
+        for (auto x : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t x) {
+                          return x < xs->size();
+                      })) {
             const auto value = std::to_integer<UInt8>(src[std::size_t((*xs)[x])]);
             auto& out = dst[std::size_t(flipX ? target.right - Int32(x) : target.left + Int32(x))];
             if (blend) {

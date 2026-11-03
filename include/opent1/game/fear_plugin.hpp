@@ -118,7 +118,7 @@ public:
     std::optional<sim::SimObjectId> spawnPlayer(std::string_view armorName,
                                                 const Point3F& pos,
                                                 const Point3F& rot,
-                                                Int32 clientId = 2049,
+                                                Int32 clientId = 0,
                                                 Int32 teamId = 0);
     std::size_t syncLoopbackState(bool deliverMoves = true);
     void processPendingLocalDisconnect();
@@ -243,6 +243,7 @@ private:
     std::unordered_map<sim::SimObjectId, sim::SimObjectId> pendingRemoteControls_;
     std::string sadPassword_;
     std::string connectAddress_;
+    Int32 localClientId_{};
     std::optional<std::string> pendingLocalKick_;
     bool quitRequested_{};
     bool cursorVisible_{true};

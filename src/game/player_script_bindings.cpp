@@ -24,7 +24,7 @@ Player* resolve(sim::SimManager* manager, PlayerManager* clients, std::string_vi
         return nullptr;
     if (auto* object = dynamic_cast<Player*>(manager->findObject(name)))
         return object;
-    if (auto* client = clients ? clients->findClient(integer(name)) : nullptr)
+    if (auto* client = clients ? clients->findBaseRep(integer(name)) : nullptr)
         return dynamic_cast<Player*>(client->ownedObject);
     return nullptr;
 }

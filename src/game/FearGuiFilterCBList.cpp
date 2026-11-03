@@ -1,4 +1,5 @@
 #include "opent1/game/shell_controls.hpp"
+#include <ranges>
 
 #include <string>
 
@@ -13,7 +14,9 @@ FGFilterCBListCtrl::FGFilterCBListCtrl() {
 void FGFilterCBListCtrl::loadFiltersFromConsole(Console& console) {
     clearEntries();
     addEntry("None", 0);
-    for (Int32 i = 1; i <= 64; ++i) {
+    for (auto i : std::views::iota(Int32{1}) | std::views::take_while([&](Int32 i) {
+                      return i <= 64;
+                  })) {
         const std::string varName = "pref::Filter" + std::to_string(i);
         const std::string spec(console.getVariable(varName));
         if (spec.empty()) {
@@ -46,7 +49,10 @@ bool FGFilterCBListCtrl::removeFilterFromConsole(Console& console, Int32 filterN
     if (filterNum <= 0) {
         return false;
     }
-    for (Int32 i = filterNum; i < 64; ++i) {
+    for (auto i :
+         std::views::iota(static_cast<Int32>(filterNum)) | std::views::take_while([&](Int32 i) {
+             return i < 64;
+         })) {
         const std::string nextVar = "pref::Filter" + std::to_string(i + 1);
         const std::string curVar = "pref::Filter" + std::to_string(i);
         const std::string nextVal(console.getVariable(nextVar));

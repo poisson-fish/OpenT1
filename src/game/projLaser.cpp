@@ -1,4 +1,5 @@
 #include <opent1/game/player.hpp>
+#include <ranges>
 #include <opent1/game/proj_laser.hpp>
 #include <opent1/game/sound.hpp>
 #include <opent1/world/scene_objects.hpp>
@@ -166,7 +167,7 @@ bool LaserProjectile::onAdd() {
             if (image->setResources(*m_hitResources_)) {
                 if (auto* instance = image->instance()) {
                     const auto& shape = *m_hitResources_->shape;
-                    for (std::size_t i = 0; i < shape.sequences.size(); ++i) {
+                    for (auto i : std::views::iota(std::size_t{0}, shape.sequences.size())) {
                         const auto& sequence = shape.sequences[i];
                         if (sequence.name >= 0 &&
                             static_cast<std::size_t>(sequence.name) < shape.names.size() &&

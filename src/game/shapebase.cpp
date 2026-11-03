@@ -1,4 +1,5 @@
 #include <opent1/game/shape_base.hpp>
+#include <ranges>
 #include <opent1/core/text.hpp>
 #include <opent1/world/scene_objects.hpp>
 #include <opent1/game/sound.hpp>
@@ -229,7 +230,8 @@ bool ShapeBase::initResources(GameBaseData* dat) {
             shieldShapeInstance_ =
                 std::make_shared<world::TsShapeInstance>(shapeData_->shieldShape);
             shieldImage_.setShapeInstance(shieldShapeInstance_.get(), shieldShapeInstance_);
-            for (std::size_t i = 0; i < shapeData_->shieldShape->sequences.size(); ++i) {
+            for (auto i :
+                 std::views::iota(std::size_t{0}, shapeData_->shieldShape->sequences.size())) {
                 const auto nameIdx = shapeData_->shieldShape->sequences[i].name;
                 if (nameIdx >= 0 &&
                     static_cast<std::size_t>(nameIdx) < shapeData_->shieldShape->names.size() &&
@@ -263,7 +265,9 @@ bool ShapeBase::initResources(GameBaseData* dat) {
         }
     }
 
-    for (Int32 i = 0; i < MaxScriptThreads; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < MaxScriptThreads;
+                  })) {
         auto& st = scriptThread_[static_cast<std::size_t>(i)];
         st.threadIndex.reset();
         if (st.sequence != -1) {
@@ -467,7 +471,9 @@ bool ShapeBase::setSequenceDir(Int32 slot, bool forward) {
 }
 
 void ShapeBase::updateScriptThreads(SimTime t) {
-    for (Int32 i = 0; i < MaxScriptThreads; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < MaxScriptThreads;
+                  })) {
         auto& st = scriptThread_[static_cast<std::size_t>(i)];
         if (!shapeInstance_ || !st.threadIndex) {
             continue;
@@ -641,6 +647,16 @@ Int32 ShapeBase::getDamageSkinLevel(Int32 detailLevel) const noexcept {
         }
     }
     return 0;
+}
+
+std::string_view ShapeBase::getSkinBase() const noexcept {
+    if (const auto* players = PlayerManager::get(getManager())) {
+        if (const auto* owner = players->findBaseRep(getLastOwnerClient())) {
+            return owner->skinBase;
+        }
+        return players->getTeamSkinBase(getTeam());
+    }
+    return "base";
 }
 
 void ShapeBase::reSkin(bool force) {
@@ -1141,8 +1157,11 @@ bool ShapeBase::onWorldShapeQuery(world::WorldShapeQuery& query) const {
             if (!dbm || !dbm->resources()) {
                 return false;
             }
-            auto materials =
-                world::TsMaterialResources::load(*dbm->resources(), *resources.shape->materials);
+            auto materials = world::TsMaterialResources::loadSkin(
+                *dbm->resources(),
+                *resources.shape->materials,
+                getSkinBase(),
+                shapeData_ ? shapeData_->fileName : "");
             if (!materials) {
                 return false;
             }
@@ -1210,6 +1229,7 @@ bool ShapeBase::processQuery(sim::SimQuery& query) {
         return onSimImageTransformQuery(*imgXformQ);
     }
     if (auto* shapeQ = dynamic_cast<world::WorldShapeQuery*>(&query)) {
+        reSkin();
         const auto now = getManager() ? UInt32(getManager()->getCurrentTime() * 1000.f) : 0U;
         (void)computeFadeFactor(now);
         if (!m_lastSunUpdated_ || now - m_lastSunUpdated_ >= 32) {
@@ -1232,7 +1252,9 @@ bool ShapeBase::packShapeBaseUpdate(UInt32 mask, BitStream& stream, UInt32 curre
     if ((mask & InitialUpdate) != 0) {
         mask &= ~ShieldMask;
         mask &= ~ThreadMask;
-        for (Int32 i = 0; i < MaxScriptThreads; ++i) {
+        for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                          return i < MaxScriptThreads;
+                      })) {
             if (scriptThread_[static_cast<std::size_t>(i)].sequence != -1) {
                 mask |= ThreadMask;
                 break;
@@ -1255,7 +1277,9 @@ bool ShapeBase::packShapeBaseUpdate(UInt32 mask, BitStream& stream, UInt32 curre
     }
 
     if (stream.writeFlag((mask & ThreadMask) != 0)) {
-        for (Int32 i = 0; i < MaxScriptThreads; ++i) {
+        for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                          return i < MaxScriptThreads;
+                      })) {
             const auto& st = scriptThread_[static_cast<std::size_t>(i)];
             if (stream.writeFlag(st.sequence != -1 && (mask & (ThreadNMask << i)) != 0)) {
                 stream.writeInt(st.sequence, ThreadSequenceBits);
@@ -1324,7 +1348,9 @@ bool ShapeBase::unpackShapeBaseUpdate(BitStream& stream, UInt32 currentTime) {
     }
 
     if (stream.readFlag()) {
-        for (Int32 i = 0; i < MaxScriptThreads; ++i) {
+        for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                          return i < MaxScriptThreads;
+                      })) {
             if (stream.readFlag()) {
                 auto& st = scriptThread_[static_cast<std::size_t>(i)];
                 const Int32 seq = stream.readInt(ThreadSequenceBits);

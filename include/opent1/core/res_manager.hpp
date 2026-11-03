@@ -1,6 +1,8 @@
 #pragma once
 #include <opent1/core/stream_io.hpp>
+#include <opent1/core/memory_size.hpp>
 #include <chrono>
+#include <atomic>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -23,6 +25,7 @@ namespace detail {
 struct ResourcePayload {
     virtual ~ResourcePayload() = default;
     virtual void* pointer() noexcept = 0;
+    virtual std::pair<std::size_t, bool> memory() const = 0;
 };
 
 template <class T> struct TypedPayload final : ResourcePayload {
@@ -32,15 +35,38 @@ template <class T> struct TypedPayload final : ResourcePayload {
         return value.get();
     }
 
+    std::pair<std::size_t, bool> memory() const override {
+        if constexpr (requires(const T& v) { resourceResidentBytes(v); })
+            return {resourceResidentBytes(*value), true};
+        else
+            return {sizeof(T), std::is_trivially_copyable_v<T>};
+    }
+
     std::unique_ptr<T> value;
 };
 
+struct ResourceMemoryLedger {
+    std::size_t bytes{}, peak{};
+};
+
 struct ResourceState {
+    ~ResourceState() {
+        if (memoryLedger)
+            memoryLedger->bytes -= accountedBytes;
+    }
+
+    const UInt64 revision = [] {
+        static std::atomic<UInt64> next{1};
+        return next.fetch_add(1, std::memory_order_relaxed);
+    }();
+    UInt64 volumeRevision{};
     std::unique_ptr<ResourcePayload> payload;
     std::type_index type{typeid(void)};
     std::string name;
     std::chrono::steady_clock::time_point released{std::chrono::steady_clock::now()};
     std::chrono::milliseconds timeout{0};
+    std::shared_ptr<ResourceMemoryLedger> memoryLedger;
+    std::size_t accountedBytes{};
 };
 }
 class ResourceManager;
@@ -100,6 +126,15 @@ public:
         return state_ ? state_->name : std::string_view{};
     }
 
+    [[nodiscard]] UInt64 revision() const noexcept {
+        return state_ ? state_->revision : 0;
+    }
+
+    // Aliasing const ownership keeps the published asset alive across unmounts.
+    [[nodiscard]] std::shared_ptr<const T> immutable() const noexcept {
+        return state_ ? std::shared_ptr<const T>(state_, get()) : std::shared_ptr<const T>{};
+    }
+
 private:
     friend class ResourceManager;
 
@@ -112,6 +147,10 @@ struct RawData {
     std::vector<std::byte> bytes;
 };
 
+inline std::size_t resourceResidentBytes(const RawData& value) {
+    return sizeof(value) + value.bytes.capacity();
+}
+
 struct ResourceMatch {
     UInt64 cursor{};
     std::string name;
@@ -121,10 +160,30 @@ struct ResourceMatch {
 // mounted wins), then added objects. ASCII case folding and both slashes match
 // legacy asset names. Virtual names reject traversal/absolute paths. All streams
 // returned here own their bytes. File/decoded-entry size defaults to 64 MiB.
-// Path/mount changes invalidate the cache; existing handles stay valid.
+// Path/mount changes invalidate changed resolutions; existing handles stay valid.
 // Loaders may load dependencies; cycles fail. Loaders must not mutate paths/mounts.
 class ResourceManager {
 public:
+    struct ResidencyStats {
+        std::size_t decodedBytes{}, liveBytes{}, unusedBytes{}, addedBytes{}, peakBytes{};
+        std::size_t entries{}, incompleteEntries{}, budgetBytes{}, overBudgetBytes{};
+        std::size_t decodeStagingBytes{}, peakDecodeStagingBytes{};
+        std::size_t decodeStagingBudgetBytes{};
+        UInt64 budgetEvictions{};
+    };
+
+    // Soft decoded-source budget. Added objects and externally owned snapshots
+    // stay valid; an oversized live mission reports debt instead of losing data.
+    [[nodiscard]] ResidencyStats residencyStats() const;
+    void setResidencyBudget(std::size_t);
+    void setDecodeStagingBudget(std::size_t);
+    std::size_t trimResidency(); // discard least-recently released reloadable entries
+
+    struct ArchiveMemoryStats {
+        UInt64 mappedBytes{}, ownedBufferBytes{}, decodeStagingBytes{};
+    };
+
+    [[nodiscard]] ArchiveMemoryStats archiveMemoryStats() const;
     ResourceManager();
     ~ResourceManager();
     ResourceManager(const ResourceManager&) = delete;
@@ -152,11 +211,19 @@ public:
     // Drop one unused decoded disk/volume cache entry. Live handles and added
     // objects remain intact; a later load can decode the source again.
     bool evict(std::string_view name);
+    // Opt in only for immutable decoders whose output depends solely on the input
+    // bytes (no ResourceManager dependencies). Live unchanged archive sources then
+    // preserve identity across mount changes. Loose files remain explicitly reloaded.
+    bool setSourceOnlyLoader(std::string_view extension, bool enabled = true);
 
+    // Explicit same-type replacement supports measured/decorated loaders.
+    // Existing decoded handles/cache entries are preserved; affects future loads.
+    // Configure registrations outside loader callbacks.
     template <class T, class Fn>
     bool registerLoader(std::string_view extension,
                         Fn loader,
-                        std::chrono::milliseconds timeout = kResDefaultTimeout) {
+                        std::chrono::milliseconds timeout = kResDefaultTimeout,
+                        bool replaceSameType = false) {
         return registerErased(
             resourceType(extension),
             typeid(T),
@@ -168,7 +235,8 @@ public:
                 }
                 return std::make_unique<detail::TypedPayload<T>>(std::move(value));
             },
-            timeout);
+            timeout,
+            replaceSameType);
     }
 
     template <class T> [[nodiscard]] Resource<T> load(std::string_view name) {
@@ -191,7 +259,8 @@ private:
     bool registerErased(UInt32 id,
                         std::type_index type,
                         Loader loader,
-                        std::chrono::milliseconds timeout);
+                        std::chrono::milliseconds timeout,
+                        bool replaceSameType);
     bool addErased(std::string_view name,
                    std::type_index type,
                    std::unique_ptr<detail::ResourcePayload> payload,

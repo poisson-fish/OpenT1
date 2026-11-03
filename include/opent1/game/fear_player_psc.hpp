@@ -9,6 +9,7 @@
 #include <opent1/sim/sim_net.hpp>
 #include <array>
 #include <map>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -191,6 +192,10 @@ public:
 
     void setTargetFov(Flt32 fov, UInt32 currentTimeMs = 0) noexcept;
     void updateFov(UInt32 currentTimeMs) noexcept;
+
+    [[nodiscard]] std::optional<UInt32> zoomChangeTime() const noexcept {
+        return zoomChangeTime_;
+    }
 
     // Move collection & replay
     void clientCollectInput(UInt32 startTime, UInt32 endTime, Flt32 explicitInputDt = -1.0f);
@@ -380,6 +385,7 @@ private:
     Int32 lastServerMove_{0};
     Int32 lastPlayerMoveCount_{0};
     UInt32 clientInputTime_{};
+    std::optional<UInt32> zoomChangeTime_;
 
     Int32 triggerCount_{0};
     Int32 prevTriggerCount_{0};

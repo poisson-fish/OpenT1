@@ -1,4 +1,5 @@
 #include <opent1/game/version.hpp>
+#include <ranges>
 #include <array>
 #include <bit>
 
@@ -28,7 +29,10 @@ std::optional<UInt32> getShapeCRC(ResourceManager& rm,
                                             ml.materials.size())
                     : ml.materials.size();
             const UInt32 mask = legacyBugCompatible ? 0x0F00U : 0x000FU;
-            for (std::size_t i = 0; i < count; ++i) {
+            for (auto i :
+                 std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                     return i < count;
+                 })) {
                 const auto& mat = ml.materials[i];
                 if ((mat.flags & mask) == 0x03U && !mat.mapFile.empty()) {
                     if (!rm.getCrc(mat.mapFile, crc, crc)) {

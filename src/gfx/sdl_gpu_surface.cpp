@@ -1,4 +1,5 @@
 #include <opent1/gfx/sdl_gpu_surface.hpp>
+#include <ranges>
 #include "sdl_gpu_material.hpp"
 #include <SDL3/SDL_gpu.h>
 #include <algorithm>
@@ -26,7 +27,9 @@ SDL_GPUPresentMode nativeMode(GpuPresentMode mode) {
 
 std::vector<std::string> gpuDrivers() {
     std::vector<std::string> result;
-    for (int i = 0; i < SDL_GetNumGPUDrivers(); ++i) {
+    for (auto i : std::views::iota(0) | std::views::take_while([&](int i) {
+                      return i < SDL_GetNumGPUDrivers();
+                  })) {
         if (const auto* name = SDL_GetGPUDriver(i)) {
             result.emplace_back(name);
         }
@@ -49,6 +52,10 @@ struct SdlGpuSurface::Impl {
     bool uploaded{};
     std::string driver;
     GpuPresentMode presentMode{GpuPresentMode::VSync};
+    std::size_t textureCacheEntries{};
+    std::size_t meshCacheBytes{}, textureCacheBytes{}, lightMapPageBytes{};
+    std::size_t textureArrayBytes{};
+    UInt32 stagingBytes{};
 
     ~Impl() {
         cleanup.reset();
@@ -148,11 +155,19 @@ std::unique_ptr<SdlGpuSurface> SdlGpuSurface::create(platform::SdlWindow& window
                                                      const GpuSurfaceConfig& config) {
     if (!window.nativeHandle() || !framebufferPitch(width, height) ||
         config.presentMode > GpuPresentMode::Mailbox ||
-        config.driver.find('\0') != config.driver.npos) {
+        config.driver.find('\0') != config.driver.npos || !config.textureCacheEntries ||
+        config.textureCacheBytes < 4 || config.stagingBytes < 4096 ||
+        config.stagingBytes > 128U * 1024U * 1024U) {
         SDL_SetError("Invalid GPU framebuffer configuration");
         return {};
     }
     auto impl = std::make_unique<Impl>();
+    impl->textureCacheEntries = config.textureCacheEntries;
+    impl->meshCacheBytes = config.meshCacheBytes;
+    impl->textureCacheBytes = config.textureCacheBytes;
+    impl->lightMapPageBytes = config.lightMapPageBytes;
+    impl->textureArrayBytes = config.textureArrayBytes;
+    impl->stagingBytes = config.stagingBytes;
     constexpr auto formats = SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXBC |
                              SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL;
     impl->device = SDL_CreateGPUDevice(
@@ -254,7 +269,9 @@ bool SdlGpuSurface::upload() {
     }
     std::memset(data, 0, s.transferBytes);
     const auto rowBytes = std::size_t(s.software->bitmap().width) * 4;
-    for (Int32 y = 0; y < s.software->bitmap().height; ++y) {
+    for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                      return y < s.software->bitmap().height;
+                  })) {
         std::memcpy(
             data + std::size_t(y) * s.pitch, s.rgba.data() + std::size_t(y) * rowBytes, rowBytes);
     }
@@ -294,7 +311,9 @@ bool SdlGpuSurface::uploadBitmap(const Bitmap& bitmap) {
         return false;
     }
     // Video pixels are opaque even when a caller's Bitmap carries GUI flags.
-    for (Int32 y = 0; y < bitmap.height; ++y) {
+    for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                      return y < bitmap.height;
+                  })) {
         const auto row = bitmap.row(y);
         auto target = software->pixels().subspan(std::size_t(y) * software->bitmap().stride(),
                                                  std::size_t(bitmap.width));
@@ -342,7 +361,9 @@ bool SdlGpuSurface::uploadBitmap(const Bitmap& bitmap) {
         return false;
     }
     std::memset(mapped, 0, ti.size);
-    for (Int32 y = 0; y < bitmap.height; ++y) {
+    for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                      return y < bitmap.height;
+                  })) {
         std::memcpy(mapped + std::size_t(y) * pitch,
                     rgba.data() + std::size_t(y) * std::size_t(bitmap.width) * 4,
                     std::size_t(bitmap.width) * 4);
@@ -403,7 +424,13 @@ bool SdlGpuSurface::render(const HardwareBatch& batch, const GpuFrameConfig& con
         return SDL_SetError("GPU material window is closed");
     }
     if (!s.materials) {
-        s.materials = detail::GpuMaterialRenderer::create(s.device);
+        s.materials = detail::GpuMaterialRenderer::create(s.device,
+                                                          s.textureCacheEntries,
+                                                          s.meshCacheBytes,
+                                                          s.textureCacheBytes,
+                                                          s.lightMapPageBytes,
+                                                          s.textureArrayBytes,
+                                                          s.stagingBytes);
         if (!s.materials) {
             return false;
         }
@@ -434,6 +461,12 @@ void SdlGpuSurface::clearTextureCache() noexcept {
     if (impl_->materials) {
         impl_->materials->clearTextureCache();
     }
+}
+
+bool SdlGpuSurface::trimCaches() {
+    if (!ready())
+        return SDL_SetError("GPU material window is closed");
+    return !impl_->materials || impl_->materials->trimCaches();
 }
 
 PresentResult SdlGpuSurface::presentFrame() {
@@ -524,7 +557,9 @@ bool SdlGpuSurface::readback(std::span<std::byte> output) {
         return false;
     }
     const auto rowBytes = std::size_t(s.software->bitmap().width) * 4;
-    for (Int32 y = 0; y < s.software->bitmap().height; ++y) {
+    for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                      return y < s.software->bitmap().height;
+                  })) {
         std::memcpy(
             output.data() + std::size_t(y) * rowBytes, data + std::size_t(y) * s.pitch, rowBytes);
     }

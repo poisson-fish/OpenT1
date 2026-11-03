@@ -1,4 +1,5 @@
 #include <opent1/gui/edit_control.hpp>
+#include <ranges>
 
 namespace opent1::gui {
 EditControl::~EditControl() {
@@ -56,7 +57,7 @@ UInt8 EditControl::sizingKnobs(Point2I p, RectI r) {
                                            {r.left, cy},
                                            {r.right, cy}};
     const std::array<UInt8, 8> modes = {5, 4, 6, 9, 8, 10, 1, 2};
-    for (std::size_t i = 0; i < points.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, points.size())) {
         if (std::abs(Int64(p.x) - points[i].x) <= 3 && std::abs(Int64(p.y) - points[i].y) <= 3) {
             return modes[i];
         }
@@ -209,7 +210,10 @@ bool EditControl::loadSelection(StreamIO& stream,
     Persistent::LoadContext load(registry);
     std::vector<Control*> roots;
     roots.reserve(count);
-    for (UInt32 i = 0; i < count; ++i) {
+    for ([[maybe_unused]] auto i :
+         std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+             return i < count;
+         })) {
         const auto result = load.load(stream);
         auto* c = result ? dynamic_cast<Control*>(result.object) : nullptr;
         if (!c || c->parent()) {

@@ -1,4 +1,5 @@
 #include <opent1/game/game_app.hpp>
+#include <ranges>
 #include <opent1/game/fear_player_psc.hpp>
 #include <opent1/game/item.hpp>
 #include <opent1/world/scene_objects.hpp>
@@ -65,7 +66,7 @@ bool FearGameApp::setupLiveDemoSession() {
                                                                   {1, 7, 5}}};
             for (const auto& indices : faces) {
                 world::TsFace face;
-                for (std::size_t i = 0; i < 3; ++i) {
+                for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
                     face.corners[i] = {indices[i], 0};
                 }
                 mesh.faces.push_back(face);

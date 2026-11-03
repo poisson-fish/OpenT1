@@ -1,4 +1,5 @@
 #include <opent1/game/player.hpp>
+#include <ranges>
 #include <opent1/game/projectile.hpp>
 #include <opent1/game/sound.hpp>
 #include <opent1/game/smoke_puff.hpp>
@@ -25,7 +26,7 @@ UInt32 currentTimeMs(const sim::SimManager* mgr, UInt32 fallback = 0) noexcept {
 
 std::optional<Int32> findSequenceByName(const world::TsShape& shape,
                                         std::string_view name) noexcept {
-    for (std::size_t i = 0; i < shape.sequences.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, shape.sequences.size())) {
         const Int32 nameIdx = shape.sequences[i].name;
         if (nameIdx >= 0 && static_cast<std::size_t>(nameIdx) < shape.names.size()) {
             if (shape.names[static_cast<std::size_t>(nameIdx)] == name) {
@@ -340,7 +341,7 @@ bool Projectile::onAdd() {
                     if (m_shooterClientId_ != 0) {
                         if (auto* pPM = PlayerManager::get(getManager())) {
                             if (auto* pCR = pPM->findBaseRep(m_shooterClientId_)) {
-                                m_shooterClientLoginId_ = pCR->loginStatus;
+                                m_shooterClientLoginId_ = pCR->loginId;
                             } else {
                                 m_shooterClientLoginId_ = 0xFFFFFFFFu;
                             }
@@ -789,7 +790,7 @@ Int32 Projectile::getDamageId() const noexcept {
     }
     if (auto* pPM = PlayerManager::get(getManager())) {
         if (const auto* pCR = pPM->findClient(m_shooterClientId_)) {
-            if (pCR->loginStatus == m_shooterClientLoginId_) {
+            if (pCR->loginId == m_shooterClientLoginId_) {
                 return m_shooterClientId_;
             }
         }

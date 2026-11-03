@@ -1,4 +1,5 @@
 #include <opent1/game/sound.hpp>
+#include <ranges>
 #include <opent1/core/text.hpp>
 #include <opent1/game/explosion.hpp>
 #include <opent1/world/scene_objects.hpp>
@@ -14,7 +15,7 @@ constexpr Flt32 kTwoPi = static_cast<Flt32>(2.0 * std::numbers::pi);
 Random g_expRandom{};
 
 Int32 findSequenceIndex(const world::TsShape& shape, std::string_view name) noexcept {
-    for (std::size_t i = 0; i < shape.sequences.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, shape.sequences.size())) {
         const Int32 nameIdx = shape.sequences[i].name;
         if (nameIdx >= 0 && static_cast<std::size_t>(nameIdx) < shape.names.size() &&
             equalIgnoreCase(shape.names[static_cast<std::size_t>(nameIdx)], name)) {

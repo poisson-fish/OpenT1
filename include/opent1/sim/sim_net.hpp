@@ -1,5 +1,6 @@
 #pragma once
 #include <opent1/sim/sim_base.hpp>
+#include <ranges>
 #include <opent1/math/point.hpp>
 #include <opent1/platform/net_transport.hpp>
 #include <opent1/sim/sim_net_browser.hpp>
@@ -271,8 +272,8 @@ struct PacketStats {
     }
 
     void add(const PacketStats& other) noexcept {
-        for (std::size_t d = 0; d < 2; ++d) {
-            for (std::size_t i = 0; i < 2048; ++i) {
+        for (auto d : std::views::iota(std::size_t{0}, std::size_t{2})) {
+            for (auto i : std::views::iota(std::size_t{0}, std::size_t{2048})) {
                 bitAccumulator[d][i] += other.bitAccumulator[d][i];
             }
         }
@@ -281,8 +282,8 @@ struct PacketStats {
     }
 
     void subtract(const PacketStats& other) noexcept {
-        for (std::size_t d = 0; d < 2; ++d) {
-            for (std::size_t i = 0; i < 2048; ++i) {
+        for (auto d : std::views::iota(std::size_t{0}, std::size_t{2})) {
+            for (auto i : std::views::iota(std::size_t{0}, std::size_t{2048})) {
                 bitAccumulator[d][i] -= other.bitAccumulator[d][i];
             }
         }
@@ -470,6 +471,9 @@ public:
     // for the duration of the callback. No game-global server/browser state.
     std::function<bool(std::span<const std::byte>)> acceptRequest;
     std::function<bool(std::string_view, std::span<const std::byte>)> acceptAddressedRequest;
+    // Game-specific IDs can share a pool with non-connection representatives.
+    // The returned slot is committed synchronously by configureStream.
+    std::function<SimObjectId()> selectClientId;
     std::function<void(PacketStream&)> configureStream;
     std::function<void(const net::Event&)> onConnection;
     std::function<void(std::string_view, std::span<const std::byte>)> onRawPacket;

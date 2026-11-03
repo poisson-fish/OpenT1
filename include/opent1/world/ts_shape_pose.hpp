@@ -2,6 +2,8 @@
 #include <opent1/world/ts_shape.hpp>
 
 namespace opent1::world {
+class TsShapeCollision;
+
 struct TsAnimationSample {
     Int32 sequence{};
     Flt32 position{};                // normalized, inclusive 0..1
@@ -9,6 +11,7 @@ struct TsAnimationSample {
     std::optional<Int32> priority{}; // thread override; otherwise authored sequence
     // Instance-owned external native transition; takes precedence over index.
     std::shared_ptr<const TsTransition> runtimeTransition{};
+    bool operator==(const TsAnimationSample&) const = default;
     // Cyclic time wraps (including negative time); other sequences clamp.
     // Zero-duration sequences hold at position zero.
     [[nodiscard]] static std::optional<TsAnimationSample>
@@ -41,21 +44,22 @@ public:
     }
 
     [[nodiscard]] std::span<const TMat3F> nodeTransforms() const noexcept {
-        return transforms_;
+        return data_ ? std::span<const TMat3F>(data_->transforms) : std::span<const TMat3F>{};
     }
 
     [[nodiscard]] std::span<const UInt8> nodeVisibility() const noexcept {
-        return visible_;
+        return data_ ? std::span<const UInt8>(data_->visible) : std::span<const UInt8>{};
     }
 
     [[nodiscard]] std::span<const TsObjectPose> objects() const noexcept {
-        return objects_;
+        return data_ ? std::span<const TsObjectPose>(data_->objects)
+                     : std::span<const TsObjectPose>{};
     }
 
     // Identity for default materials, with sampled IFL substitutions. Smaller
     // priority wins, then earlier sample, then later track within a sequence.
     [[nodiscard]] std::span<const Int32> materialRemap() const noexcept {
-        return materialRemap_;
+        return data_ ? std::span<const Int32>(data_->materialRemap) : std::span<const Int32>{};
     }
 
     // Shape-space bounds of visible triangle vertices in one detail + always
@@ -72,12 +76,25 @@ public:
     // and all descendant animation, as used by the legacy player look override.
     bool overrideParentTransform(Int32 node, const TMat3F& parent);
 
+    [[nodiscard]] UInt64 revision() const noexcept {
+        return data_ ? data_->revision : 0;
+    }
+
 private:
+    friend class TsShapeCollision;
     Resource<TsShape> shape_;
-    std::vector<TMat3F> transforms_;
-    std::vector<UInt8> visible_;
-    std::vector<TsObjectPose> objects_;
-    std::vector<Int32> materialRemap_;
+
+    struct Data {
+        std::vector<TMat3F> transforms;
+        std::vector<UInt8> visible;
+        std::vector<TsObjectPose> objects;
+        std::vector<Int32> materialRemap;
+        UInt64 revision{};
+        mutable std::vector<std::pair<Int32, std::shared_ptr<const TsShapeCollision>>> collisions;
+    };
+
+    // Copies share evaluated data; a parent override publishes a fresh revision.
+    std::shared_ptr<Data> data_;
     TMat3F root_;
 };
 } // namespace opent1::world

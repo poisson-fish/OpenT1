@@ -1,4 +1,5 @@
 #include <opent1/world/terrain_editor.hpp>
+#include <ranges>
 #include <opent1/core/file_stream.hpp>
 #include <opent1/core/mem_stream.hpp>
 #include <algorithm>
@@ -80,8 +81,8 @@ bool height(TerrainDocument& d, Point2I p, Flt32 h) {
     const auto width = 1U << (d.grid.detailCount - 1), x = UInt32(p.x), y = UInt32(p.y),
                bx = x / width, by = y / width;
     bool changed = false;
-    for (UInt32 j = 0; j < 2; ++j) {
-        for (UInt32 i = 0; i < 2; ++i) {
+    for (auto j : std::views::iota(UInt32{0}, UInt32{2})) {
+        for (auto i : std::views::iota(UInt32{0}, UInt32{2})) {
             if ((i && (!bx || x % width)) || (j && (!by || y % width))) {
                 continue;
             }
@@ -210,15 +211,15 @@ bool writeFiles(std::span<const OutputFile> files) {
     std::size_t total{};
     std::set<std::string> paths;
     const auto rollback = [&] {
-        for (auto i = staged.rbegin(); i != staged.rend(); ++i) {
+        for (const auto& entry : staged | std::views::reverse) {
             std::error_code ec;
-            if (i->published) {
-                std::filesystem::remove(i->path, ec);
+            if (entry.published) {
+                std::filesystem::remove(entry.path, ec);
             }
-            if (i->old) {
-                std::filesystem::rename(i->backup, i->path, ec);
+            if (entry.old) {
+                std::filesystem::rename(entry.backup, entry.path, ec);
             }
-            std::filesystem::remove(i->temp, ec);
+            std::filesystem::remove(entry.temp, ec);
         }
     };
     for (const auto& [path, bytes] : files) {
@@ -425,8 +426,12 @@ bool TerrainEditor::brush(Point2I p) {
         p.y &= ~(dim - 1);
     }
     std::vector<Point2I> points;
-    for (Int32 y = 0; y < dim; ++y) {
-        for (Int32 x = 0; x < dim; ++x) {
+    for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                      return y < dim;
+                  })) {
+        for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                          return x < dim;
+                      })) {
             const Point2I q{p.x + x, p.y + y};
             if (pointValid(*d, q)) {
                 points.push_back(q);
@@ -451,8 +456,12 @@ bool TerrainEditor::region(Point2I first, Point2I last, bool add) {
         return false;
     }
     std::vector<Point2I> p;
-    for (auto y = top; y <= bottom; ++y) {
-        for (auto x = left; x <= right; ++x) {
+    for (auto y : std::views::iota(top) | std::views::take_while([&](auto y) {
+                      return y <= bottom;
+                  })) {
+        for (auto x : std::views::iota(left) | std::views::take_while([&](auto x) {
+                          return x <= right;
+                      })) {
             p.push_back({x, y});
         }
     }
@@ -535,7 +544,10 @@ bool TerrainEditor::loadSelection(std::span<const std::byte> bytes) {
         return false;
     }
     std::vector<Point2I> points;
-    for (UInt32 j = 0; j < count; ++j) {
+    for ([[maybe_unused]] auto j :
+         std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 j) {
+             return j < count;
+         })) {
         TerrainSelectionInfo i;
         UInt16 padding{};
         if (!f.read(i.point.x) || !f.read(i.point.y) || !f.read(i.height) ||
@@ -593,7 +605,10 @@ bool TerrainEditor::loadNamedSelections(std::span<const std::byte> bytes) {
         return false;
     }
     std::map<std::string, std::vector<Point2I>, std::less<>> staged;
-    for (UInt32 s = 0; s < count; ++s) {
+    for ([[maybe_unused]] auto s :
+         std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 s) {
+             return s < count;
+         })) {
         UInt32 len{}, n{};
         if (!f.read(len) || !len || len > 254) {
             return false;
@@ -608,7 +623,10 @@ bool TerrainEditor::loadNamedSelections(std::span<const std::byte> bytes) {
         }
         std::vector<Point2I> points;
         std::set<std::pair<Int32, Int32>> used;
-        for (UInt32 j = 0; j < n; ++j) {
+        for ([[maybe_unused]] auto j :
+             std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 j) {
+                 return j < n;
+             })) {
             Point2I p{};
             if (!f.read(p.x) || !f.read(p.y) || !pointValid(*d, p)) {
                 return false;
@@ -682,8 +700,12 @@ bool TerrainEditor::mutate(TerrainDocument& d,
         if (!initial) {
             return true;
         }
-        for (Int32 y = 0; y < dim; ++y) {
-            for (Int32 x = 0; x < dim; ++x) {
+        for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                          return y < dim;
+                      })) {
+            for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                              return x < dim;
+                          })) {
                 const Point2I p{brush.x + x, brush.y + y};
                 const auto old = info(d, p);
                 if (!old) {
@@ -738,8 +760,12 @@ bool TerrainEditor::mutate(TerrainDocument& d,
         const auto target = a == "adjustcorner"
                                 ? grabbed->height - Flt32(delta) * settings_.mouseAdjust
                                 : settings_.height;
-        for (Int32 y = -1; y <= 0; ++y) {
-            for (Int32 x = -1; x <= 0; ++x) {
+        for (auto y : std::views::iota(Int32{-1}) | std::views::take_while([&](Int32 y) {
+                          return y <= 0;
+                      })) {
+            for (auto x : std::views::iota(Int32{-1}) | std::views::take_while([&](Int32 x) {
+                              return x <= 0;
+                          })) {
                 const Point2I p{brush_.x + x * dim, brush_.y + y * dim};
                 if (pointValid(d, p) && !adjustControl(p, target, y == 0, x == 0)) {
                     return false;
@@ -761,16 +787,24 @@ bool TerrainEditor::mutate(TerrainDocument& d,
         if (!apply(grab_, change)) {
             return false;
         }
-        for (Int32 i = 1; i < dim; ++i) {
+        for (auto i : std::views::iota(Int32{1}) | std::views::take_while([&](Int32 i) {
+                          return i < dim;
+                      })) {
             const auto step = Flt32(dim - i) / Flt32(dim) * change;
-            for (Int32 x = -i; x <= i; ++x) {
+            for (auto x :
+                 std::views::iota(static_cast<Int32>(-i)) | std::views::take_while([&](Int32 x) {
+                     return x <= i;
+                 })) {
                 for (Int32 s : {-1, 1}) {
                     if (!apply({grab_.x + x, grab_.y + s * i}, step)) {
                         return false;
                     }
                 }
             }
-            for (Int32 y = -i + 1; y < i; ++y) {
+            for (auto y : std::views::iota(static_cast<Int32>(-i + 1)) |
+                              std::views::take_while([&](Int32 y) {
+                                  return y < i;
+                              })) {
                 for (Int32 s : {-1, 1}) {
                     if (!apply({grab_.x + s * i, grab_.y + y}, step)) {
                         return false;
@@ -892,8 +926,12 @@ bool TerrainEditor::mutate(TerrainDocument& d,
                                 : a == "lowerheight"  ? -settings_.adjust
                                 : a == "adjustheight" ? -Flt32(delta) * settings_.mouseAdjust
                                                       : settings_.adjust;
-            for (Int32 n = -1; n <= 1; ++n) {
-                for (Int32 m = -1; m <= 1; ++m) {
+            for (auto n : std::views::iota(Int32{-1}) | std::views::take_while([&](Int32 n) {
+                              return n <= 1;
+                          })) {
+                for (auto m : std::views::iota(Int32{-1}) | std::views::take_while([&](Int32 m) {
+                                  return m <= 1;
+                              })) {
                     if (!m && !n) {
                         continue;
                     }
@@ -903,7 +941,10 @@ bool TerrainEditor::mutate(TerrainDocument& d,
                     }
                     if (!m || !n) {
                         const UInt32 side = !m ? (n == -1 ? 4U : 1U) : (m == -1 ? 2U : 8U);
-                        for (Int32 i = 0; i < dim; ++i) {
+                        for (auto i :
+                             std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                                 return i < dim;
+                             })) {
                             Point2I dest{};
                             if (side == 2) {
                                 dest = {p.x + dim - 1, p.y + i};
@@ -920,7 +961,10 @@ bool TerrainEditor::mutate(TerrainDocument& d,
                             }
                             const auto step = raise ? amount / Flt32(dim - 1)
                                                     : (amount - old->height) / Flt32(dim);
-                            for (Int32 j = 0; j < dim; ++j) {
+                            for (auto j :
+                                 std::views::iota(Int32{0}) | std::views::take_while([&](Int32 j) {
+                                     return j < dim;
+                                 })) {
                                 Point2I q{};
                                 if (side == 2) {
                                     q = {p.x + j, dest.y};
@@ -955,8 +999,12 @@ bool TerrainEditor::mutate(TerrainDocument& d,
         std::vector<Point2I> touched;
         std::set<std::pair<Int32, Int32>> used;
         for (auto p : selected) {
-            for (Int32 j = -1; j <= 1; ++j) {
-                for (Int32 i = -1; i <= 1; ++i) {
+            for (auto j : std::views::iota(Int32{-1}) | std::views::take_while([&](Int32 j) {
+                              return j <= 1;
+                          })) {
+                for (auto i : std::views::iota(Int32{-1}) | std::views::take_while([&](Int32 i) {
+                                  return i <= 1;
+                              })) {
                     Point2I q{p.x + i, p.y + j};
                     if ((i || j) && pointValid(d, q) && !contains(selected, q) &&
                         used.emplace(q.x, q.y).second) {
@@ -969,8 +1017,12 @@ bool TerrainEditor::mutate(TerrainDocument& d,
         for (auto p : touched) {
             float sum{};
             UInt32 count{};
-            for (Int32 j = -1; j <= 1; ++j) {
-                for (Int32 i = -1; i <= 1; ++i) {
+            for (auto j : std::views::iota(Int32{-1}) | std::views::take_while([&](Int32 j) {
+                              return j <= 1;
+                          })) {
+                for (auto i : std::views::iota(Int32{-1}) | std::views::take_while([&](Int32 i) {
+                                  return i <= 1;
+                              })) {
                     const auto q = info(d, {p.x + i, p.y + j});
                     if (q) {
                         sum += q->height;
@@ -980,7 +1032,7 @@ bool TerrainEditor::mutate(TerrainDocument& d,
             }
             values.push_back(sum / Flt32(count));
         }
-        for (std::size_t i = 0; i < touched.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, touched.size())) {
             if (!height(d, touched[i], values[i])) {
                 return false;
             }
@@ -1186,8 +1238,14 @@ bool TerrainEditor::mirror(UInt32 sides) {
         const auto major = (sides & 10) ? n : n / 2;
         const Point2I ss{(sides & 2) ? -1 : 1, (sides & 4) ? -1 : 1},
             ds{(sides & 8) ? -1 : 1, (sides & 1) ? -1 : 1};
-        for (Int32 i = 0; i < major; ++i) {
-            for (Int32 j = 0; j < minor; ++j) {
+        for ([[maybe_unused]] auto i :
+             std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                 return i < major;
+             })) {
+            for ([[maybe_unused]] auto j :
+                 std::views::iota(Int32{0}) | std::views::take_while([&](Int32 j) {
+                     return j < minor;
+                 })) {
                 const auto h = info(d, src);
                 if (!h || !height(d, dest, h->height)) {
                     return false;
@@ -1247,8 +1305,8 @@ bool TerrainEditor::applyLandscape() {
             if (matrices[0].size != width * UInt32(d.grid.size.x)) {
                 return false;
             }
-            for (Int32 y = 0; y < d.grid.size.y; ++y) {
-                for (Int32 x = 0; x < d.grid.size.x; ++x) {
+            for (auto y : std::views::iota(Int32{0}, std::max(Int32{0}, d.grid.size.y))) {
+                for (auto x : std::views::iota(Int32{0}, std::max(Int32{0}, d.grid.size.x))) {
                     if (!apply(d.grid.blockMap[std::size_t(y) * d.grid.size.x + x],
                                {x * Int32(width), y * Int32(width)})) {
                         return false;
@@ -1260,7 +1318,7 @@ bool TerrainEditor::applyLandscape() {
         if (matrices[0].size != width * 4) {
             return false;
         }
-        for (Int32 i = 0; i < 16; ++i) {
+        for (auto i : std::views::iota(Int32{0}, Int32{16})) {
             const Point2I origin{(i & 3) * Int32(width), (i >> 2) * Int32(width)};
             if (!apply(i, origin) || !apply(16 + i, origin)) {
                 return false;
@@ -1728,7 +1786,7 @@ std::optional<std::string> TerrainEditor::command(std::string_view name,
             return yes(false);
         }
         std::array<double, 12> v{};
-        for (UInt32 j = 0; j < 12; ++j) {
+        for (auto j : std::views::iota(UInt32{0}, UInt32{12})) {
             const auto n = j == 5 || j == 11 ? boolean(argv[j + 1]) : number(argv[j + 1]);
             if (!n) {
                 return yes(false);
@@ -1874,7 +1932,7 @@ std::optional<std::string> TerrainEditor::command(std::string_view name,
             return yes(false);
         }
         std::array<Int32, 5> v{};
-        for (std::size_t j = 0; j < 5; ++j) {
+        for (auto j : std::views::iota(std::size_t{0}, std::size_t{5})) {
             auto n = number(argv[j]);
             if (!n || *n != std::floor(*n)) {
                 return yes(false);

@@ -1,4 +1,5 @@
 #include <opent1/console/lexer_parser.hpp>
+#include <ranges>
 
 #include <algorithm>
 #include <array>
@@ -293,7 +294,8 @@ struct Scanner {
                 } else {
                     for (const auto& [word, kind] : operators) {
                         if (source.substr(at.offset).starts_with(word)) {
-                            for (std::size_t n = 0; n < word.size(); ++n) {
+                            for ([[maybe_unused]] auto n :
+                                 std::views::iota(std::size_t{0}, word.size())) {
                                 advance();
                             }
                             token.kind = kind;

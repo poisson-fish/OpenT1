@@ -1,4 +1,5 @@
 #include <opent1/game/chat_inventory_huds.hpp>
+#include <ranges>
 #include <opent1/core/text.hpp>
 
 #include <algorithm>
@@ -12,7 +13,7 @@ void insertCategorizedRow(std::vector<InventoryDisplayRow>& rows, InventoryDispl
     const char catKey = item.heading.empty() ? '\0' : item.heading[0];
     std::size_t insertPos = rows.size();
     bool foundCategory = false;
-    for (std::size_t i = 0; i < rows.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, rows.size())) {
         const char existingKey = rows[i].heading.empty() ? '\0' : rows[i].heading[0];
         if (existingKey == catKey) {
             foundCategory = true;
@@ -98,7 +99,9 @@ void FearGuiInventory::populateFromPSC(const PlayerPSC* psc,
         return;
     }
     const Int32 numItemTypes = dbm->getDataGroupSize(DataBlockManager::ItemDataType);
-    for (Int32 i = 0; i < numItemTypes; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < numItemTypes;
+                  })) {
         const Int32 count = psc->itemCount(i);
         if (count <= 0) {
             continue;
@@ -123,7 +126,9 @@ void FearGuiInventory::populateFromPSC(const PlayerPSC* psc,
 void FearGuiInventory::restoreSelection(Int32 item) {
     setSize({1, static_cast<Int32>(rows_.size())});
     selected = {-1, -1};
-    for (std::size_t row = 0; item >= 0 && row < rows_.size(); ++row) {
+    for (auto row : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t row) {
+                        return item >= 0 && row < rows_.size();
+                    })) {
         if (rows_[row].itemIndex == item && rows_[row].enabled) {
             selected = {0, Int32(row)};
             break;
@@ -218,7 +223,9 @@ void FearGuiPurchase::populateFromShoppingList(const PlayerPSC* psc,
         return;
     }
     const Int32 numItemTypes = dbm->getDataGroupSize(DataBlockManager::ItemDataType);
-    for (Int32 i = 0; i < numItemTypes; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < numItemTypes;
+                  })) {
         if (!psc->isInShoppingList(i)) {
             continue;
         }
@@ -255,7 +262,9 @@ std::vector<Int32> FearGuiPurchase::parseFavoritesList(std::span<const std::stri
     }
     const Int32 numItemTypes = dbm->getDataGroupSize(DataBlockManager::ItemDataType);
     for (const auto& arg : args) {
-        for (Int32 i = 0; i < numItemTypes; ++i) {
+        for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                          return i < numItemTypes;
+                      })) {
             const auto* itemData = dynamic_cast<const ItemData*>(
                 dbm->lookupDataBlock(i, DataBlockManager::ItemDataType));
             if (itemData == nullptr) {

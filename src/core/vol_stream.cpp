@@ -1,4 +1,5 @@
 #include <opent1/core/vol_stream.hpp>
+#include <ranges>
 #include <opent1/core/file_stream.hpp>
 #include <opent1/core/mem_stream.hpp>
 #include <opent1/core/rle_stream.hpp>
@@ -62,6 +63,7 @@ VolumeRStream::VolumeRStream(VolumeRStream&& other) noexcept : VolumeRStream() {
 VolumeRStream& VolumeRStream::operator=(VolumeRStream&& other) noexcept {
     if (this != &other) {
         archive_ = std::move(other.archive_);
+        mapped_ = std::move(other.mapped_);
         decoded_ = std::move(other.decoded_);
         entries_ = std::move(other.entries_);
         error_ = std::move(other.error_);
@@ -83,6 +85,11 @@ Bool VolumeRStream::reject(std::string_view message) {
 
 Bool VolumeRStream::openVolume(const std::filesystem::path& path) {
     closeVolume();
+    auto mapping = std::make_unique<ReadOnlyMappedFile>();
+    if (mapping->open(path, std::size_t(std::numeric_limits<Int32>::max()))) {
+        mapped_ = std::move(mapping);
+        return parse();
+    }
     FileRStream file(path);
     if (file() != STRM_OK) {
         return reject("Cannot open volume file");
@@ -108,7 +115,7 @@ Bool VolumeRStream::openVolume(std::span<const std::byte> bytes) {
 }
 
 Bool VolumeRStream::parse() {
-    const auto bytes = std::span<const std::byte>(archive_);
+    const auto bytes = archiveBytes();
     const auto invalid = [&](std::string_view message) {
         closeVolume();
         return reject(message);
@@ -188,6 +195,9 @@ void VolumeRStream::close() {
 void VolumeRStream::closeVolume() {
     close();
     archive_.clear();
+    std::vector<std::byte>{}.swap(archive_);
+    std::vector<std::byte>{}.swap(decoded_);
+    mapped_.reset();
     entries_.clear();
     error_.clear();
     volumeOpen_ = false;
@@ -217,8 +227,10 @@ Bool VolumeRStream::openEntry(std::size_t index, UInt32 maxDecodedBytes) {
     if (entry.size > maxDecodedBytes) {
         return reject("Volume entry exceeds decoded size limit");
     }
-    // parse() validated every block; archive_ is immutable while the volume is open.
-    const auto payload = block(archive_, entry.blockOffset, kVolFileBlockTag)->bytes;
+    if (mapped_ && !mapped_->unchanged())
+        return reject("Mounted volume changed in place");
+    // parse() validated every block; backing remains immutable while mounted.
+    const auto payload = block(archiveBytes(), entry.blockOffset, kVolFileBlockTag)->bytes;
     if (entry.compression == STRM_COMPRESS_NONE) {
         current_ = payload;
     } else {
@@ -316,7 +328,9 @@ bool VolumeRWStream::openVolume(std::span<const std::byte> bytes) {
     }
     std::vector<Entry> next;
     std::size_t total = 0;
-    for (std::size_t i = 0; i < input.getVolumeItems().size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < input.getVolumeItems().size();
+                  })) {
         const auto& item = input.getVolumeItems()[i];
         if (item.size > MaxArchiveBytes - total ||
             !input.openEntry(i, static_cast<UInt32>(MaxArchiveBytes - total))) {
@@ -346,17 +360,17 @@ bool VolumeRWStream::replace(Entry entry) {
         return entry.name ? old.name && sameName(*entry.name, *old.name) : entry.id == old.id;
     });
     std::size_t total = entry.bytes.size();
-    for (auto it = entries_.begin(); it != entries_.end(); ++it) {
-        if (it == found) {
+    for (const auto& old : entries_) {
+        if (found != entries_.end() && &old == &*found) {
             continue;
         }
-        if (entry.id && it->id == entry.id) {
+        if (entry.id && old.id == entry.id) {
             return false;
         }
-        if (it->bytes.size() > MaxArchiveBytes - total) {
+        if (old.bytes.size() > MaxArchiveBytes - total) {
             return false;
         }
-        total += it->bytes.size();
+        total += old.bytes.size();
     }
     if (found == entries_.end()) {
         entries_.push_back(std::move(entry));
@@ -465,7 +479,7 @@ std::optional<std::vector<std::byte>> VolumeRWStream::encode() const {
         putBlock(kVolFileBlockTag, payload);
     }
     const auto stringsOffset = static_cast<UInt32>(output.size());
-    for (unsigned byte = 0; byte < 4; ++byte) {
+    for (auto byte : std::views::iota(unsigned{0}, unsigned{4})) {
         output[4 + byte] = static_cast<std::byte>((stringsOffset >> (byte * 8)) & 255);
     }
     putBlock(kVolStringTag, names);
@@ -493,9 +507,42 @@ bool VolumeRWStream::save(const std::filesystem::path& destination) const {
         }
     }
 #if defined(_WIN32)
-    const bool success = MoveFileExW(temporary.c_str(),
-                                     destination.c_str(),
-                                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+    bool success = MoveFileExW(temporary.c_str(),
+                               destination.c_str(),
+                               MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+    if (!success) {
+        // Mapped readers keep the old file object. POSIX replacement updates the
+        // name while preserving those readers; unsupported filesystems use buffered I/O.
+        // https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-fscc/4217551b-d2c0-42cb-9dc1-69a716cf6d0c
+        const auto file = CreateFileW(temporary.c_str(),
+                                      GENERIC_WRITE | DELETE,
+                                      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                      nullptr,
+                                      OPEN_EXISTING,
+                                      FILE_ATTRIBUTE_NORMAL,
+                                      nullptr);
+        if (file != INVALID_HANDLE_VALUE) {
+            std::error_code ec;
+            const auto target = std::filesystem::absolute(destination, ec).native();
+            const auto nameBytes = target.size() * sizeof(wchar_t);
+            // The Win32 rename path can inspect a trailing NUL even with an
+            // explicit FileNameLength. Include it rather than relying on the
+            // alignment padding of the allocation to terminate the filename.
+            const auto bytesNeeded =
+                offsetof(FILE_RENAME_INFO, FileName) + nameBytes + sizeof(wchar_t);
+            if (!ec && bytesNeeded <= std::numeric_limits<DWORD>::max() && FlushFileBuffers(file)) {
+                std::vector<UInt64> storage((bytesNeeded + sizeof(UInt64) - 1) / sizeof(UInt64));
+                auto* rename = reinterpret_cast<FILE_RENAME_INFO*>(storage.data());
+                rename->Flags =
+                    FILE_RENAME_FLAG_REPLACE_IF_EXISTS | FILE_RENAME_FLAG_POSIX_SEMANTICS;
+                rename->FileNameLength = DWORD(nameBytes);
+                std::memcpy(rename->FileName, target.data(), nameBytes);
+                success = SetFileInformationByHandle(
+                              file, FileRenameInfoEx, rename, DWORD(bytesNeeded)) != 0;
+            }
+            CloseHandle(file);
+        }
+    }
 #else
     std::error_code renameError;
     std::filesystem::rename(temporary, destination, renameError);

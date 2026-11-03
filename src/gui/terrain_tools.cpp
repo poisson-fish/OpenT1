@@ -1,4 +1,5 @@
 #include <opent1/gui/terrain_tools.hpp>
+#include <ranges>
 #include <charconv>
 #include <cmath>
 #include <unordered_set>
@@ -77,7 +78,7 @@ bool TerrainView::projection(std::optional<sim::EnvironmentCamera> camera,
         }
     }
     camera_ = std::move(camera);
-    if (!materials.list.materials.empty()) {
+    if (!materials.list().materials.empty()) {
         materials_ = std::move(materials);
     }
     return true;
@@ -99,16 +100,16 @@ world::TsStaticView terrainCamera(const sim::EnvironmentCamera& c, Point2I exten
 }
 
 world::TsMaterialResources flatTerrainMaterials() {
-    world::TsMaterialResources materials;
+    world::TsMaterialResources::Data materials;
     materials.list.details = 1;
     materials.list.materialsPerDetail = 256;
     materials.list.materials.resize(256);
     materials.textures.resize(256);
-    for (int i = 0; i < 256; ++i) {
+    for (auto i : std::views::iota(0, 256)) {
         materials.list.materials[i].flags = 1;
         materials.list.materials[i].index = i;
     }
-    return materials;
+    return world::TsMaterialResources(std::move(materials));
 }
 }
 
@@ -121,7 +122,7 @@ std::shared_ptr<const world::TsStaticShapeFrame> TerrainView::projectedFrame() c
         return {};
     }
     auto resources =
-        d->resources(materials_.list.materials.empty() ? flatTerrainMaterials() : materials_);
+        d->resources(materials_.list().materials.empty() ? flatTerrainMaterials() : materials_);
     if (!resources) {
         return {};
     }
@@ -317,8 +318,12 @@ std::optional<std::pair<std::string, std::string>> TerrainView::brushStatus(Poin
         corner->block->heights[std::size_t(corner->y) * (corner->block->width + 1) + corner->x];
     float total{};
     Int32 count{};
-    for (Int32 x = 0; x < dim; ++x) {
-        for (Int32 y = 0; y < dim; ++y) {
+    for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                      return x < dim;
+                  })) {
+        for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                          return y < dim;
+                      })) {
             if (const auto c = at(*d, {point.x + x, point.y + y})) {
                 total += c->block->heights[std::size_t(c->y) * (c->block->width + 1) + c->x];
                 ++count;
@@ -356,8 +361,12 @@ void TerrainView::updateShadow(Point2I point) {
             }
         }
     } else {
-        for (Int32 y = 0; y < dim; ++y) {
-            for (Int32 x = 0; x < dim; ++x) {
+        for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                          return y < dim;
+                      })) {
+            for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                              return x < dim;
+                          })) {
                 const Point2I p{point.x + x, point.y + y};
                 if (at(*d, p)) {
                     next.push_back(p);
@@ -421,8 +430,12 @@ bool TerrainView::draw(gfx::SoftwareSurface& s, Point2I p, RectI clip) const {
         return false;
     }
     s.fill({p.x, p.y, p.x + fields_.extent.x - 1, p.y + fields_.extent.y - 1}, 0);
-    for (Int32 y = 0; y < size.y; ++y) {
-        for (Int32 x = 0; x < size.x; ++x) {
+    for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                      return y < size.y;
+                  })) {
+        for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                          return x < size.x;
+                      })) {
             const auto c = at(*d, {x, y});
             if (!c) {
                 continue;
@@ -485,8 +498,12 @@ bool TerrainView::draw(gfx::SoftwareSurface& s, Point2I p, RectI clip) const {
     };
     if (display.blockOutline) {
         const auto width = Int32(d->blocks.front().width);
-        for (Int32 y = 0; y < d->grid.size.y; ++y) {
-            for (Int32 x = 0; x < d->grid.size.x; ++x) {
+        for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                          return y < d->grid.size.y;
+                      })) {
+            for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                              return x < d->grid.size.x;
+                          })) {
                 s.rectangle({p.x + Int32(Int64(x * width) * fields_.extent.x / size.x),
                              p.y + Int32(Int64(y * width) * fields_.extent.y / size.y),
                              p.x + Int32(Int64((x + 1) * width) * fields_.extent.x / size.x) - 1,
@@ -528,8 +545,8 @@ bool TerrainView::projectedDraw(gfx::SoftwareSurface& destination, Point2I p, Re
         [&](std::array<Point3F, 4> corners, UInt8 mask, UInt8 color, UInt8 border) -> bool {
         if (mask & 2) {
             std::array<world::StaticSurfaceTriangle, 2> triangles;
-            for (std::size_t i = 0; i < 2; ++i) {
-                for (std::size_t j = 0; j < 3; ++j) {
+            for (auto i : std::views::iota(std::size_t{0}, std::size_t{2})) {
+                for (auto j : std::views::iota(std::size_t{0}, std::size_t{3})) {
                     triangles[i].vertices[j].position =
                         corners[std::array<std::size_t, 6>{0, 2, 3, 0, 3, 1}[i * 3 + j]];
                 }
@@ -571,7 +588,7 @@ bool TerrainView::projectedDraw(gfx::SoftwareSurface& destination, Point2I p, Re
                     }
                 };
                 bool visible = true;
-                for (int plane = 0; plane < 6; ++plane) {
+                for (auto plane : std::views::iota(0, 6)) {
                     const auto da = distance(a, plane), db = distance(b, plane);
                     if (da < 0 && db < 0) {
                         visible = false;
@@ -624,7 +641,7 @@ bool TerrainView::projectedDraw(gfx::SoftwareSurface& destination, Point2I p, Re
             }
             const auto& block = *cell->block;
             std::array<Point3F, 4> corners;
-            for (UInt32 i = 0; i < 4; ++i) {
+            for (auto i : std::views::iota(UInt32{0}, UInt32{4})) {
                 corners[i] = {float(q.x + Int32(i & 1)) * square,
                               float(q.y + Int32(i >> 1)) * square,
                               block.heights[std::size_t(cell->y + (i >> 1)) * (block.width + 1) +
@@ -639,8 +656,12 @@ bool TerrainView::projectedDraw(gfx::SoftwareSurface& destination, Point2I p, Re
     if (display.grid) {
         const auto size = gridSize(*d);
         std::vector<Point2I> cells;
-        for (Int32 y = 0; y < size.y; ++y) {
-            for (Int32 x = 0; x < size.x; ++x) {
+        for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                          return y < size.y;
+                      })) {
+            for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                              return x < size.x;
+                          })) {
                 cells.push_back({x, y});
             }
         }
@@ -650,8 +671,12 @@ bool TerrainView::projectedDraw(gfx::SoftwareSurface& destination, Point2I p, Re
     }
     if (display.blockOutline) {
         const auto width = Int32(d->blocks.front().width);
-        for (Int32 by = 0; by < d->grid.size.y; ++by) {
-            for (Int32 bx = 0; bx < d->grid.size.x; ++bx) {
+        for (auto by : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 by) {
+                           return by < d->grid.size.y;
+                       })) {
+            for (auto bx : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 bx) {
+                               return bx < d->grid.size.x;
+                           })) {
                 const auto cell = at(*d, {bx * width, by * width});
                 if (!cell) {
                     return false;
@@ -665,7 +690,9 @@ bool TerrainView::projectedDraw(gfx::SoftwareSurface& destination, Point2I p, Re
                 const auto edge = [&](Point3F a, Point3F b) {
                     return polygon({a, b, a, b}, 1, 0, display.blockFrameColor);
                 };
-                for (Int32 i = 0; i < width; ++i) {
+                for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                                  return i < width;
+                              })) {
                     if (!edge(point(i, 0), point(i + 1, 0)) ||
                         !edge(point(i, width), point(i + 1, width)) ||
                         !edge(point(0, i), point(0, i + 1)) ||
@@ -771,7 +798,7 @@ TerrainTools::TerrainTools(std::shared_ptr<world::TerrainEditor> editor)
         if (message == 7) {
             auto next = displayDraft_.value_or(view.display);
             std::array<UInt8, 3> modes{};
-            for (std::size_t i = 0; i < 9; ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, std::size_t{9})) {
                 if (displayChecks_[i]->checked) {
                     modes[i / 3] |= UInt8(1U << (i % 3));
                 }
@@ -855,8 +882,8 @@ bool TerrainTools::displayDialog() {
     displayChecks_.clear();
     const auto modes =
         std::array{view.display.selection, view.display.highlight, view.display.shadow};
-    for (int row = 0; row < 3; ++row) {
-        for (int bit = 0; bit < 3; ++bit) {
+    for (auto row : std::views::iota(0, 3)) {
+        for (auto bit : std::views::iota(0, 3)) {
             auto c = std::make_unique<Check>();
             c->checked = (modes[row] & (1 << bit)) != 0;
             c->text = std::array{"Frame", "Fill", "Outline"}[bit];

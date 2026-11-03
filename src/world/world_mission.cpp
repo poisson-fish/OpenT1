@@ -1,4 +1,5 @@
 #include <opent1/world/world_mission.hpp>
+#include <ranges>
 #include "collision_geometry.hpp"
 #include <opent1/core/crc16.hpp>
 #include <limits>
@@ -383,7 +384,7 @@ bool SimMissionInterior::apply(const InteriorMissionState& input, ResourceManage
     const auto& authored = r->lighting[r->shape->lods[0].firstLightState]->lights;
     if (next.lights.empty()) {
         next.lights.resize(authored.size());
-        for (std::size_t i = 0; i < authored.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, authored.size())) {
             next.lights[i].time = authored[i].duration;
             next.lights[i].active = (authored[i].flags & 1U) != 0;
         }
@@ -405,7 +406,7 @@ bool SimMissionInterior::apply(const InteriorMissionState& input, ResourceManage
             return false;
         }
     }
-    for (std::size_t i = 0; i < authored.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, authored.size())) {
         if (!sameShape || i >= state_.lights.size() ||
             state_.lights[i].time != next.lights[i].time) {
             if ((authored[i].duration > 0 && next.lights[i].time <= 0) ||
@@ -434,7 +435,7 @@ bool SimMissionInterior::apply(const InteriorMissionState& input, ResourceManage
         return false;
     }
     std::vector<sim::SimCollisionMaterial> collisionMaterials;
-    for (const auto& material : r->materials.list.materials) {
+    for (const auto& material : r->materials.list().materials) {
         collisionMaterials.push_back(
             {material.friction, material.elasticity, material.surfaceType});
     }
@@ -514,7 +515,7 @@ bool SimMissionInterior::setState(const InteriorMissionState& state) {
             previous.lights.size() != state_.lights.size()) {
             mask |= 0x80000000U;
         } else {
-            for (std::size_t i = 0; i < state_.lights.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, state_.lights.size())) {
                 if (previous.lights[i].time != state_.lights[i].time) {
                     mask |= 0x80000000U;
                 }
@@ -674,7 +675,7 @@ bool SimMissionTerrain::apply(const TerrainMissionState& input,
     policy.lightMapDensity = TerrainLightMapDensity::Native;
     policy.sceneLighting = true;
     std::vector<sim::SimCollisionMaterial> collisionMaterials;
-    for (const auto& material : resources->materials.list.materials) {
+    for (const auto& material : resources->materials.list().materials) {
         collisionMaterials.push_back(
             {material.friction, material.elasticity, material.surfaceType});
     }
@@ -880,7 +881,7 @@ bool TerrainMissionPolicy::renderChild(const sim::EnvironmentCamera& camera,
     // Preserve that deliberately conservative historical admission.
     const std::array<Point3F, 6> normals{
         {{1, -right, 0}, {-1, left, 0}, {0, -top, 1}, {0, bottom, -1}, {0, -1, 0}, {0, 1, 0}}};
-    for (std::size_t i = 0; i < normals.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, normals.size())) {
         const auto n = normals[i];
         const auto d = m_dot(center, n) + (i == 4   ? camera.nearDistance
                                            : i == 5 ? -containerFarDistance
@@ -891,7 +892,7 @@ bool TerrainMissionPolicy::renderChild(const sim::EnvironmentCamera& camera,
         }
         if (signedSquare > -bound) {
             Flt32 projected{};
-            for (std::size_t j = 0; j < 3; ++j) {
+            for (auto j : std::views::iota(std::size_t{0}, std::size_t{3})) {
                 const Point3F row{camera.worldToCamera.m[j][0],
                                   camera.worldToCamera.m[j][1],
                                   camera.worldToCamera.m[j][2]};
@@ -950,6 +951,8 @@ bool SimMissionTerrain::processQuery(sim::SimQuery& query) {
         return true;
     }
     if (auto* q = dynamic_cast<WorldSurfaceQuery*>(&query)) {
+        if (q->trimCaches)
+            return surface_ ? surface_->processQuery(query) : true;
         if (state_.suspend) {
             q->image.reset();
             return true;

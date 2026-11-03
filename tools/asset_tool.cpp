@@ -1,4 +1,5 @@
 #include <opent1/core/file_stream.hpp>
+#include <ranges>
 #include <opent1/core/vol_stream.hpp>
 #include <opent1/gfx/palette.hpp>
 #include <opent1/world/ts_shape.hpp>
@@ -103,7 +104,7 @@ void palette(Args args) {
     auto p = args[1] == "-" ? std::make_unique<gfx::Palette>()
                             : load<gfx::Palette>(std::filesystem::path(args[1]));
     if (args[1] == "-") {
-        for (unsigned i = 0; i < 256; ++i) {
+        for (auto i : std::views::iota(unsigned{0}, unsigned{256})) {
             p->palettes[0].colors[i] = {UInt8(i), UInt8(i), UInt8(i), 0};
         }
     }
@@ -124,7 +125,10 @@ void palette(Args args) {
             const auto first = byte(take()), last = byte(take());
             require(first <= last, "Invalid matching range");
             p->allowedMatches.fill(0);
-            for (unsigned i = first; i <= last; ++i) {
+            for (auto i : std::views::iota(static_cast<unsigned>(first)) |
+                              std::views::take_while([&](unsigned i) {
+                                  return i <= last;
+                              })) {
                 p->allowedMatches[i / 32] |= 0x80000000U >> (i % 32);
             }
             edit = true;
@@ -170,11 +174,11 @@ void run(Args args) {
         const auto p = load<gfx::Palette>(std::filesystem::path(args[1]));
         std::cout << "palettes " << p->palettes.size() << " shadeShift " << p->shadeShift
                   << " hazeLevels " << p->hazeLevels << '\n';
-        for (std::size_t sub = 0; sub < p->palettes.size(); ++sub) {
+        for (auto sub : std::views::iota(std::size_t{0}, p->palettes.size())) {
             const auto& s = p->palettes[sub];
             std::cout << "palette " << sub << " id " << s.index << " type " << UInt32(s.type)
                       << " remapBytes " << s.remap.size() << '\n';
-            for (unsigned i = 0; i < 256; ++i) {
+            for (auto i : std::views::iota(unsigned{0}, unsigned{256})) {
                 const auto c = s.colors[i];
                 std::cout << i << ' ' << unsigned(c.red) << ' ' << unsigned(c.green) << ' '
                           << unsigned(c.blue) << ' ' << unsigned(c.flags) << '\n';
@@ -301,7 +305,9 @@ void run(Args args) {
 int main(int argc, char** argv) {
     try {
         std::vector<std::string_view> args;
-        for (int i = 1; i < argc; ++i) {
+        for (auto i : std::views::iota(1) | std::views::take_while([&](int i) {
+                          return i < argc;
+                      })) {
             args.emplace_back(argv[i]);
         }
         run(args);

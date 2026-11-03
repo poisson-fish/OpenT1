@@ -1,4 +1,5 @@
 #include <opent1/game/sky.hpp>
+#include <ranges>
 #include <opent1/game/string_table.hpp>
 #include <opent1/sim/sim_world_game.hpp>
 
@@ -84,10 +85,11 @@ bool Sky::processArguments(std::span<const std::string> args) {
             featurePosition_ = fp;
             ++idx;
         }
-        for (std::size_t i = 0; i < TEXTURES && idx < args.size(); ++i, ++idx) {
+        for (auto& texture : textures_ | std::views::take(args.size() - idx)) {
             Int32 tex = 0;
             std::from_chars(args[idx].data(), args[idx].data() + args[idx].size(), tex);
-            textures_[i] = tex & 0x0F;
+            texture = tex & 0x0F;
+            ++idx;
         }
     }
     return true;
@@ -119,7 +121,7 @@ bool Sky::onAdd() {
         std::from_chars(sz->data(), sz->data() + sz->size(), val);
         size_ = val;
     }
-    for (std::size_t i = 0; i < textures_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, textures_.size())) {
         if (const auto value = getFieldValue("textures" + std::to_string(i)); value) {
             Int32 texture{};
             const auto parsed =
@@ -153,7 +155,9 @@ void Sky::onRemove() {
 
 void Sky::initialize() {
     Flt32 a = 90.0f + featurePosition_ - 22.5f;
-    for (std::size_t i = 0; i < TEXTURES; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < TEXTURES;
+                  })) {
         const RealD rad = static_cast<RealD>(a) * kRealDPi / static_cast<RealD>(180.0f);
         points_[i] = Point3F(static_cast<Flt32>(std::cos(rad) * static_cast<RealD>(distance_)),
                              static_cast<Flt32>(std::sin(rad) * static_cast<RealD>(distance_)),
@@ -191,7 +195,9 @@ bool Sky::inspectWrite(sim::Inspect& inspector) const {
                     Point3F{hazeColor_.red, hazeColor_.green, hazeColor_.blue});
     inspector.write(IDITG_SKY_SIZE, size_);
     inspector.write(IDITG_SKY_FEATURE_POS, featurePosition_);
-    for (std::size_t i = 0; i < TEXTURES; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < TEXTURES;
+                  })) {
         inspector.write(static_cast<Int32>(IDITG_SKY_ROT_0 + i),
                         sim::Inspect::Integer{textures_[i], sim::Inspect::Display::Decimal});
     }
@@ -235,7 +241,9 @@ bool Sky::inspectRead(sim::Inspect& inspector) {
     }
     featurePosition_ = std::get<Flt32>(v);
 
-    for (std::size_t i = 0; i < TEXTURES; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < TEXTURES;
+                  })) {
         if (!inspector.read(
                 sim::Inspect::Type::Int32, static_cast<Int32>(IDITG_SKY_ROT_0 + i), v)) {
             return false;
@@ -253,7 +261,9 @@ Sky::packUpdate(sim::network::GhostManager& /*gm*/, UInt32 /*mask*/, BitStream& 
     stream.writeBytes(std::as_bytes(std::span(&hazeColor_, 1)));
     stream.write(featurePosition_);
     stream.write(size_);
-    for (std::size_t i = 0; i < TEXTURES; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < TEXTURES;
+                  })) {
         stream.writeInt(textures_[i], 4);
     }
     return 0;
@@ -274,7 +284,9 @@ bool Sky::unpackUpdate(sim::network::GhostManager& /*gm*/, BitStream& stream) {
         stream.setCurPos(savedPos);
         return false;
     }
-    for (std::size_t i = 0; i < TEXTURES; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < TEXTURES;
+                  })) {
         newTextures[i] = stream.readInt(4);
     }
     if (!stream.isValid()) {
@@ -309,7 +321,9 @@ Sky::read(StreamIO& sio, Int32 version, Int32 user, Persistent::LoadContext& ctx
     if (!sio.read(tag) || !sio.read(sz)) {
         return Persistent::Error::ReadError;
     }
-    for (std::size_t i = 0; i < TEXTURES; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < TEXTURES;
+                  })) {
         Int32 index = 0;
         if (!sio.read(index)) {
             return Persistent::Error::ReadError;
@@ -354,7 +368,9 @@ Sky::write(StreamIO& sio, Int32 version, Int32 user, Persistent::StoreContext& c
     }
     sio.write(matListTag_);
     sio.write(size_);
-    for (std::size_t i = 0; i < TEXTURES; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < TEXTURES;
+                  })) {
         sio.write(static_cast<Int32>(textures_[i]));
     }
     sio.write(featurePosition_);

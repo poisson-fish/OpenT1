@@ -1,4 +1,5 @@
 #include <opent1/gui/native_object_hosts.hpp>
+#include <ranges>
 #include <opent1/sim/sim_gpu_canvas.hpp>
 #include <opent1/core/file_stream.hpp>
 #include <charconv>
@@ -148,7 +149,9 @@ struct NativeConsole {
                 input, records.data(), std::min<DWORD>(available, DWORD(records.size())), &count)) {
             throw std::runtime_error("console input");
         }
-        for (DWORD i = 0; i < count && lines.size() < 64; ++i) {
+        for (auto i : std::views::iota(DWORD{0}) | std::views::take_while([&](DWORD i) {
+                          return i < count && lines.size() < 64;
+                      })) {
             if (records[i].EventType != KEY_EVENT || !records[i].Event.KeyEvent.bKeyDown) {
                 continue;
             }
@@ -446,8 +449,12 @@ world::ObjectHost nativeGraphicsHost(platform::SdlApplication& application,
             bitmap.height = source.height;
             bitmap.bitDepth = 24;
             bitmap.pixels.resize(std::size_t(bitmap.stride()) * bitmap.height);
-            for (Int32 y = 0; y < bitmap.height; ++y) {
-                for (Int32 x = 0; x < bitmap.width; ++x) {
+            for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                              return y < bitmap.height;
+                          })) {
+                for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                                  return x < bitmap.width;
+                              })) {
                     const auto from = (std::size_t(y) * bitmap.width + x) * 4,
                                to = std::size_t(y) * bitmap.stride() + std::size_t(x) * 3;
                     bitmap.pixels[to] = rgba[from + 2];

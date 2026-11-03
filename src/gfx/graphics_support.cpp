@@ -1,4 +1,5 @@
 #include <opent1/gfx/graphics_support.hpp>
+#include <ranges>
 #include <opent1/core/mem_stream.hpp>
 #include <algorithm>
 #include <cmath>
@@ -161,7 +162,7 @@ std::unique_ptr<PaletteMap> PaletteMap::load(StreamIO& input, UInt32 size) {
         return {};
     }
     auto map = std::make_unique<PaletteMap>();
-    for (std::size_t i = 0; i < 256; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{256})) {
         for (auto* range : {&map->haze, &map->shade}) {
             if (!stream.read(range->inclusion[i][0]) || !stream.read(range->inclusion[i][1])) {
                 return {};
@@ -189,7 +190,7 @@ bool PaletteMap::write(StreamIO& output) const {
     if (!stream.write(mapTag) || !stream.write(mapPayload) || !stream.write(UInt32{1})) {
         return false;
     }
-    for (std::size_t i = 0; i < 256; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{256})) {
         for (const auto* range : {&haze, &shade}) {
             if (!stream.write(range->inclusion[i][0]) || !stream.write(range->inclusion[i][1])) {
                 return false;

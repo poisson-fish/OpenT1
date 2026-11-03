@@ -1,4 +1,5 @@
 #include "test_registry.hpp"
+#include <ranges>
 #include "test_support.hpp"
 #include <opent1/game/game_app.hpp>
 #include <opent1/game/ai.hpp>
@@ -6,6 +7,9 @@
 #include <opent1/game/player_manager.hpp>
 #include <opent1/game/chat_inventory_huds.hpp>
 #include <opent1/game/item.hpp>
+#include <opent1/game/mine.hpp>
+#include <opent1/game/proj_bullet.hpp>
+#include <opent1/game/commander_huds.hpp>
 #include <opent1/world/world_collision_sim.hpp>
 #include <cstdlib>
 #include <cmath>
@@ -21,16 +25,48 @@ void botRoster() {
     auto& plugin = app.fearPlugin();
     CHECK(plugin.createServerWorld({}, true));
     CHECK(app.console().execute("localConnect").value == "True");
-    CHECK(app.console().evaluate("function onClientJoin(%id) { $BotTestJoins++; }").ok());
+    CHECK(app.console()
+              .evaluate(R"(
+        function onClientJoin(%id) { $BotTestJoins++; }
+        function onClientDrop(%id) { $BotTestDrops++; }
+        function onClientChangeTeam(%id) { $BotTestTeamChanges++; }
+    )")
+              .ok());
     auto* server = plugin.serverGlobals().playerManager;
     auto* client = plugin.clientGlobals().playerManager;
+    std::vector<std::string> messages;
+    client->onChatMessage = [&](Int32, std::string_view text) { messages.emplace_back(text); };
     const auto humans = client->getNumClients();
     const auto bot = server->aiAdded("Enemy zone bot", "male2", "base", true);
     CHECK(bot > 0);
     plugin.syncLoopbackState(false);
     CHECK(client->findBaseRep(bot));
-    CHECK(client->findBaseRep(bot)->loginStatus == 0);
+    CHECK(!server->findClient(bot) && !client->findClient(bot));
+    CHECK(!client->findBaseRep(bot)->isClientRep());
     CHECK(client->getNumClients() == humans);
+    CHECK(app.console().getVariable("BotTestJoins").empty());
+    CHECK(messages.empty());
+    CHECK(server->getClientList() && !server->getClientList()->nextClient);
+    CHECK(client->getClientList() && !client->getClientList()->nextClient);
+    CHECK(!server->findBaseRep(bot)->playerPSC && !server->findBaseRep(bot)->packetStream);
+    server->teamAdded("Bots");
+    const auto botTeam = server->getNumTeams() - 1;
+    plugin.syncLoopbackState(false);
+    server->serverClientTeamChange(bot, botTeam);
+    CHECK(client->findBaseRep(bot)->team == botTeam);
+    // Vanilla team events notify scripts for BaseReps too; only connection
+    // join/drop callbacks are restricted to connected clients.
+    CHECK(app.console().getVariable("BotTestTeamChanges") == "1");
+    CHECK(messages == std::vector<std::string>{"Enemy zone bot joined team Bots."});
+    messages.clear();
+    server->clientDropped(bot);
+    CHECK(!server->findBaseRep(bot) && !client->findBaseRep(bot));
+    CHECK(client->getNumClients() == humans);
+    CHECK(app.console().getVariable("BotTestDrops").empty());
+    CHECK(messages.empty());
+    const auto replacement = server->aiAdded("Replacement bot", "male1", "base", true);
+    CHECK(replacement == bot && client->findBaseRep(replacement));
+    CHECK(!client->findClient(replacement));
     CHECK(app.console().getVariable("BotTestJoins").empty());
 }
 
@@ -62,6 +98,16 @@ void botTeams() {
     target->setTeam(0);
     bot->player()->setTeam(1);
     CHECK(globals.playerManager->findBaseRep(bot->id)->team == 1);
+    auto* botRep = globals.playerManager->findBaseRep(bot->id);
+    botRep->curCommand = 5;
+    botRep->curCommandTarget = 4;
+    globals.playerManager->serverClientTeamChange(bot->id, 1);
+    CHECK(botRep->curCommand == 5 && botRep->curCommandTarget == 4);
+    globals.playerManager->serverClientTeamChange(bot->id, 999);
+    CHECK(botRep->team == 1 && botRep->curCommand == 5);
+    globals.playerManager->serverClientTeamChange(bot->id, 0);
+    CHECK(botRep->team == 0 && botRep->curCommand == 5 && botRep->curCommandTarget == 4);
+    bot->player()->setTeam(1);
     CHECK(console.evaluate(std::format("return Player::isAiControlled({});", bot->id)).value ==
           "True");
     CHECK(console.evaluate(std::format("return Player::isAiControlled({});", human)).value ==
@@ -71,12 +117,169 @@ void botTeams() {
     bot->setVar("triggerPct", "1");
     bot->player()->setRot({0, 0, std::numbers::pi_v<float>});
     bool fired = false;
-    for (int tick = 1; tick <= 96; ++tick) {
+    for (auto tick : std::views::iota(1) | std::views::take_while([&](int tick) {
+                         return tick <= 96;
+                     })) {
         globals.aiManager->doServerProcesses(tick * .032f);
         bot->player()->serverProcess(tick * 32);
         fired |= bot->lastGeneratedMove().trigger;
     }
     CHECK(fired);
+}
+
+void botIdentityAndOwnership() {
+    AIManager detached;
+    CHECK(!detached.add("Unregistered"));
+    FearGameApp app;
+    CHECK(app.init());
+    auto& plugin = app.fearPlugin();
+    CHECK(plugin.createServerWorld({}, true));
+    auto& globals = plugin.serverGlobals();
+    auto* players = globals.playerManager;
+    auto* aiManager = globals.aiManager;
+    players->teamAdded("Players", "base");
+    CHECK(app.console().evaluate(R"(
+        newObject(MissionCleanup, SimGroup);
+        PlayerData OwnershipArmor { mass = 9; boxWidth = 0.5; boxDepth = 0.5; boxNormalHeight = 2.3; };
+        AI::spawn(OwnerBot, OwnershipArmor, "0 0 100");
+        AI::spawn(FollowerBot, OwnershipArmor, "0 8 100");
+        newObject(ReplacementBody, Player, OwnershipArmor);
+        function AI::onCommand(%name, %commander, %icon, %waypoint, %target, %text,
+                               %status, %sequence) { $CommandedBot = %name; }
+    )").ok());
+    auto* bot = aiManager->findAI("OwnerBot");
+    auto* follower = aiManager->findAI("FollowerBot");
+    auto* replacement = dynamic_cast<Player*>(globals.manager->findObject("ReplacementBody"));
+    CHECK(bot && follower && replacement);
+    const auto id = bot->id;
+    auto* originalBody = bot->player();
+    CHECK(players->findBaseRep(id)->ownedObject == originalBody);
+    CHECK(app.console().evaluate(std::format(
+        "return AI::DirectiveFollow(FollowerBot, {});", id)).value == "true");
+
+    // Both native and script transfers go through the same owner links.
+    replacement->setPos({0, 4, 100});
+    replacement->setOwnerClient(id);
+    CHECK(originalBody->getOwnerClient() == 0);
+    CHECK(players->findBaseRep(id)->ownedObject == replacement);
+    follower->setAutomaticTargets(true);
+    follower->setVar("iq", "100");
+    for (auto tick : std::views::iota(1) | std::views::take_while([&](int tick) {
+                         return tick <= 16;
+                     }))
+        aiManager->doServerProcesses(tick * .032f);
+    CHECK(follower->currentTarget().obj == replacement);
+    CHECK(app.console().evaluate(std::format(
+        "return Client::setOwnedObject({}, {});", id, originalBody->getId())).value == "true");
+    CHECK(replacement->getOwnerClient() == 0);
+    CHECK(players->findBaseRep(id)->ownedObject == originalBody);
+
+    struct AttributedProjectile : Bullet {
+        using Projectile::getDamageId;
+    };
+    BulletData projectileData;
+    auto projectile = std::make_unique<AttributedProjectile>();
+    CHECK(projectile->initResources(&projectileData));
+    projectile->initProjectile(originalBody->getTransform(), {}, originalBody->getId());
+    auto* shot = dynamic_cast<AttributedProjectile*>(globals.manager->addObject(std::move(projectile)));
+    auto* mine = dynamic_cast<Mine*>(globals.manager->addObject(std::make_unique<Mine>()));
+    CHECK(shot && mine);
+    mine->throwObject(originalBody, 1, false);
+    // Vanilla projectile attribution requires a real client. Thrown items
+    // capture only the control client, so an owner-only AI has neither credit.
+    CHECK(shot->getDamageId() == 0 && mine->getDamageId() == 0);
+
+    CHECK(app.console().evaluate(std::format(
+        "return Client::setOwnedObject({}, -1);", id)).value == "true");
+    CHECK(!players->findBaseRep(id)->ownedObject);
+    CHECK(app.console().evaluate(std::format(
+        "return AI::DirectiveFollow(FollowerBot, {});", id)).value == "false");
+    // Neither an AI body pointer nor a client's PSC substitutes for ownership.
+    const auto controlOnly = players->clientAdded("Observer", "male1", "base", true);
+    players->findClient(controlOnly)->playerPSC = globals.playerPSC;
+    globals.playerPSC->setControlObject(replacement);
+    for (auto tick : std::views::iota(17) | std::views::take_while([&](int tick) {
+                         return tick <= 32;
+                     }))
+        aiManager->doServerProcesses(tick * .032f);
+    CHECK(follower->currentTarget().id == -1);
+
+    // A bot remains a commander target, while events go only to real clients.
+    players->serverClientTeamChange(controlOnly, 0);
+    follower->player()->setTeam(0);
+    players->findClient(controlOnly)->curGuiMode = PlayerPSC::CommandGuiMode;
+    std::size_t commandEvents = 0;
+    players->onLocalEvent = [&](std::unique_ptr<sim::SimEvent> event) {
+        CHECK(event->address.managerId == UInt32(controlOnly));
+        CHECK(event->type == PlayerCommandEventType);
+        ++commandEvents;
+    };
+    players->setCommander(follower->id, controlOnly);
+    players->issueCommand(controlOnly, follower->id, 5, "Move", {20, 30}, -1);
+    CHECK(commandEvents == 1 && app.console().getVariable("CommandedBot") == "FollowerBot");
+    CHECK(!players->commandStatusReport(follower->id, 1, "Acknowledged"));
+    players->onLocalEvent = {};
+    replacement->setControlClient(controlOnly);
+    follower->player()->setVisibleToTeam(0, true);
+    auto center = std::make_unique<MissionCenterPos>();
+    center->pos = {};
+    center->extent = {1024, 1024};
+    CHECK(globals.manager->addObject(std::move(center)));
+    auto* receiver = dynamic_cast<PlayerPSC*>(
+        globals.manager->addObject(std::make_unique<PlayerPSC>(false)));
+    CHECK(receiver);
+    std::array<std::byte, 8192> bytes{};
+    BitStream output{std::span<std::byte>(bytes)};
+    UInt32 packetKey{};
+    CHECK(globals.playerPSC->writePacket(output, packetKey));
+    BitStream input{std::span<const std::byte>(bytes)};
+    input.setLimits(std::size_t(output.getCurPos()), 0);
+    CHECK(receiver->readPacket(input, 1024));
+    const auto targetSlot = std::size_t(follower->id - PlayerManager::BaseClientId);
+    CHECK(receiver->commandTargets()[targetSlot].dataId == follower->player()->getDatFileId());
+    TSCommander commander;
+    commander.refreshTargets(*receiver, *players, *globals.dbm, nullptr, controlOnly);
+    CHECK(commander.targets()[targetSlot].name == "FollowerBot");
+    CHECK(commander.targets()[targetSlot].command == 5);
+
+    auto controlledProjectile = std::make_unique<AttributedProjectile>();
+    CHECK(controlledProjectile->initResources(&projectileData));
+    controlledProjectile->initProjectile(replacement->getTransform(), {}, replacement->getId());
+    auto* controlledShot = dynamic_cast<AttributedProjectile*>(
+        globals.manager->addObject(std::move(controlledProjectile)));
+    auto* controlledMine = dynamic_cast<Mine*>(
+        globals.manager->addObject(std::make_unique<Mine>()));
+    CHECK(controlledShot && controlledMine);
+    controlledMine->throwObject(replacement, 1, false);
+    CHECK(controlledShot->getDamageId() == controlOnly);
+    CHECK(controlledMine->getDamageId() == controlOnly);
+    players->clientDropped(controlOnly);
+    CHECK(players->clientAdded("Reused player", "male1", "base", true) == controlOnly);
+    CHECK(controlledShot->getDamageId() == 0 && controlledMine->getDamageId() == 0);
+    players->clientDropped(controlOnly);
+
+    const auto incarnation = players->findBaseRep(id)->loginId;
+    CHECK(aiManager->remove("OwnerBot", true));
+    CHECK(players->clientAdded("New player", "male1", "base", true) == id);
+    CHECK(players->findClient(id)->loginId != incarnation);
+    CHECK(shot->getDamageId() == 0 && mine->getDamageId() == 0);
+    players->clientDropped(id);
+    CHECK(aiManager->add("ReusedBot"));
+    CHECK(aiManager->findAI("ReusedBot")->id == id);
+    CHECK(!players->findClient(id));
+    CHECK(app.stepFrame(0, false));
+    CHECK(app.stepFrame(.032, false));
+    CHECK(aiManager->findAI("ReusedBot")->player());
+    CHECK(players->findBaseRep(id)->ownedObject == aiManager->findAI("ReusedBot")->player());
+    while (players->getFreeId())
+        CHECK(players->aiAdded("Pool member", "male1", "base", true));
+    const auto count = aiManager->aiList().size();
+    CHECK(!aiManager->add("Pool overflow"));
+    CHECK(aiManager->aiList().size() == count);
+    CHECK(!aiManager->findAI("Pool overflow"));
+    CHECK(aiManager->remove("ReusedBot", true));
+    CHECK(aiManager->add("After removal"));
+    CHECK(aiManager->findAI("After removal")->id == id);
 }
 
 void aimedMelee() {
@@ -208,7 +411,7 @@ void movementTrajectory() {
     player.setPos({16, 16, 8.1f});
     player.addForce(sim::MovementGravityForce, {0, 0, -20}, true);
     PlayerMove idle;
-    for (int tick = 0; tick < 8; ++tick)
+    for ([[maybe_unused]] auto tick : std::views::iota(0, 8))
         player.updateMove(&idle, true);
     CHECK(player.didContact());
     player.setLinearVelocity({});
@@ -231,7 +434,7 @@ void movementTrajectory() {
     CHECK(player.getLinearVelocity().x < -.1f);
     run.turnRot = 0;
     const auto start = player.getPos();
-    for (int tick = 0; tick < 24; ++tick)
+    for ([[maybe_unused]] auto tick : std::views::iota(0, 24))
         player.updateMove(&run, true);
     CHECK(player.getPos().y > start.y + 4 && player.getPos().z > start.z + 2);
 
@@ -242,7 +445,7 @@ void movementTrajectory() {
     PlayerMove jump;
     jump.jumpAction = true;
     float z = 100, velocity = 75.f / 9.f;
-    for (int tick = 0; tick < 28; ++tick) {
+    for (auto tick : std::views::iota(0, 28)) {
         z += (velocity + velocity - .64f) * .016f;
         velocity -= .64f;
         player.updateMove(tick == 0 ? &jump : &idle, true);
@@ -285,7 +488,7 @@ void installedRpgCombat() {
     console.setVariable("PCFG::Script", "");
     console.setVariable("PCFG::Info", "combat-test-password");
     CHECK(app.loadMission("rpgmap5"));
-    for (int tick = 0; tick < 8; ++tick)
+    for (auto tick : std::views::iota(0, 8))
         CHECK(app.stepFrame(tick * .032));
     CHECK(app.fearPlugin().focusServer());
     CHECK(console.evaluate("processMenupickgroup(2049, 3); processMenupickclass(2049, 1);").ok());
@@ -314,7 +517,9 @@ void installedRpgCombat() {
               .ok());
     const auto damage = bot->player()->getDamageLevel();
     player->setImageTriggerDown(0);
-    for (int tick = 1; tick <= 640 && bot->player()->getDamageLevel() == damage; ++tick) {
+    for (auto tick : std::views::iota(1) | std::views::take_while([&](int tick) {
+                         return tick <= 640 && bot->player()->getDamageLevel() == damage;
+                     })) {
         globals.currentTime = 10000 + tick * 32;
         player->updateImageState(0, .032f);
     }
@@ -324,7 +529,9 @@ void installedRpgCombat() {
     bot->player()->setRot({0, 0, std::numbers::pi_v<float>});
     bool fired = false;
     const auto playerDamage = player->getDamageLevel();
-    for (int tick = 1; tick <= 640 && player->getDamageLevel() == playerDamage; ++tick) {
+    for (auto tick : std::views::iota(1) | std::views::take_while([&](int tick) {
+                         return tick <= 640 && player->getDamageLevel() == playerDamage;
+                     })) {
         globals.currentTime = 40000 + tick * 32;
         globals.aiManager->doServerProcesses(globals.currentTime * .001f);
         bot->player()->serverProcess(globals.currentTime);
@@ -414,7 +621,7 @@ void installedRpgCombat() {
     CHECK(chat);
     auto surface = gfx::SoftwareSurface::create(640, 480);
     CHECK(surface && app.renderFrame(*surface));
-    for (int i = 0; i < 2; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(0, 2)) {
         chat->activate();
         CHECK(app.renderFrame(*surface));
         gui::Event input;
@@ -439,6 +646,10 @@ int opent1_test_bot_teams() {
     return opent1::test::run(botTeams);
 }
 
+int opent1_test_bot_identity_and_ownership() {
+    return opent1::test::run(botIdentityAndOwnership);
+}
+
 int opent1_test_aimed_melee() {
     return opent1::test::run(aimedMelee);
 }
@@ -461,6 +672,7 @@ int opent1_test_scripted_weapon_fire() {
 
 OPENT1_REGISTER_TEST("game", "bot_roster", opent1_test_bot_roster);
 OPENT1_REGISTER_TEST("game", "bot_teams", opent1_test_bot_teams);
+OPENT1_REGISTER_TEST("game", "bot_identity_and_ownership", opent1_test_bot_identity_and_ownership);
 OPENT1_REGISTER_TEST("game", "aimed_melee", opent1_test_aimed_melee);
 OPENT1_REGISTER_TEST("game", "movement_bounds", opent1_test_movement_bounds);
 OPENT1_REGISTER_TEST("game", "movement_trajectory", opent1_test_movement_trajectory);

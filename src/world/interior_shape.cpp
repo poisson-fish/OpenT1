@@ -1,4 +1,5 @@
 #include <opent1/world/interior_shape.hpp>
+#include <ranges>
 #include "asset_reader.hpp"
 #include <opent1/core/lzh_stream.hpp>
 #include <opent1/core/mem_stream.hpp>
@@ -240,7 +241,7 @@ Point3F InteriorGeometry::boundaryPoint(Point3F p) const {
     if (!expandBoundaryVertices) {
         return p;
     }
-    for (Int32 axis = 0; axis < 3; ++axis) {
+    for (auto axis : std::views::iota(Int32{0}, Int32{3})) {
         if (p[axis] == bounds.fMin[axis]) {
             p[axis] -= .0125f;
         }
@@ -600,13 +601,13 @@ InteriorLighting::lightmap(std::size_t surface,
                 colors.size() > mapData.size() - std::size_t(slot.map)) {
                 return {};
             }
-            for (std::size_t i = 0; i < colors.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, colors.size())) {
                 const auto intensity = std::to_integer<UInt8>(mapData[std::size_t(slot.map) + i]);
                 if (intensity < 16) {
                     continue;
                 }
                 UInt16 result{};
-                for (UInt32 channel = 0; channel < 4; ++channel) {
+                for (auto channel : std::views::iota(UInt32{0}, UInt32{4})) {
                     const auto shift = channel == 3 ? 12U : 8U - channel * 4U;
                     const auto add = (UInt32(slot.color[channel]) * intensity) >> 12;
                     result |=
@@ -623,6 +624,12 @@ bool registerInteriorLoaders(ResourceManager& manager) {
     const auto shape = manager.registerLoader<InteriorShape>(".dis", InteriorShape::load);
     const auto geometry = manager.registerLoader<InteriorGeometry>(".dig", InteriorGeometry::load);
     const auto lighting = manager.registerLoader<InteriorLighting>(".dil", InteriorLighting::load);
+    if (shape)
+        manager.setSourceOnlyLoader(".dis");
+    if (geometry)
+        manager.setSourceOnlyLoader(".dig");
+    if (lighting)
+        manager.setSourceOnlyLoader(".dil");
     return shape && geometry && lighting;
 }
 
@@ -653,7 +660,7 @@ std::optional<InteriorShapeResources> InteriorShapeResources::load(ResourceManag
         auto g = manager.load<InteriorGeometry>(lod.geometry);
         if (!g || g->surfaces.size() > 1'048'576 - work ||
             std::ranges::any_of(g->surfaces, [&](auto s) {
-                return s.material != 255 && s.material >= result.materials.list.materialsPerDetail;
+                return s.material != 255 && s.material >= result.materials.list().materialsPerDetail;
             })) {
             return {};
         }
@@ -664,7 +671,9 @@ std::optional<InteriorShapeResources> InteriorShapeResources::load(ResourceManag
     if (mission) {
         candidates.resize(result.shape->lightFiles.size());
     }
-    for (std::size_t i = 0; i < result.shape->lightFiles.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < result.shape->lightFiles.size();
+                  })) {
         const auto& file = result.shape->lightFiles[i];
         auto l = manager.load<InteriorLighting>(baseLightName(file));
         if (!l || l->mission) {
@@ -675,14 +684,14 @@ std::optional<InteriorShapeResources> InteriorShapeResources::load(ResourceManag
             candidates[i] = manager.load<InteriorLighting>(file);
         }
     }
-    for (std::size_t i = 0; i < result.geometry.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, result.geometry.size())) {
         const auto& lod = result.shape->lods[i];
         const auto& g = *result.geometry[i];
         if (lod.firstLightState > result.lighting.size() ||
             result.shape->lightStateNames.size() > result.lighting.size() - lod.firstLightState) {
             return {};
         }
-        for (std::size_t j = 0; j < result.shape->lightStateNames.size(); ++j) {
+        for (auto j : std::views::iota(std::size_t{0}, result.shape->lightStateNames.size())) {
             const auto& l = *result.lighting[lod.firstLightState + j];
             if (l.buildId != g.buildId || l.surfaces.size() != g.surfaces.size()) {
                 return {};
@@ -694,7 +703,10 @@ std::optional<InteriorShapeResources> InteriorShapeResources::load(ResourceManag
         // the selected light state. Apply that policy independently per state.
         const auto states = result.shape->lightStateNames.size();
         result.missionLighting.resize(result.geometry.size() * states);
-        for (std::size_t state = 0; state < states; ++state) {
+        for (auto state :
+             std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t state) {
+                 return state < states;
+             })) {
             const auto valid = std::ranges::all_of(
                 std::views::iota(std::size_t{}, result.geometry.size()), [&](auto lod) {
                     const auto& override =
@@ -703,7 +715,7 @@ std::optional<InteriorShapeResources> InteriorShapeResources::load(ResourceManag
                            override->buildId == result.geometry[lod]->buildId;
                 });
             if (valid) {
-                for (std::size_t lod = 0; lod < result.geometry.size(); ++lod) {
+                for (auto lod : std::views::iota(std::size_t{0}, result.geometry.size())) {
                     result.missionLighting[lod * states + state] =
                         candidates[result.shape->lods[lod].firstLightState + state];
                 }

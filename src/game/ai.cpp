@@ -1,4 +1,5 @@
 #include <opent1/game/ai.hpp>
+#include <ranges>
 #include <opent1/core/text.hpp>
 #include <opent1/game/projectile.hpp>
 #include <opent1/game/proj_target_laser.hpp>
@@ -97,7 +98,7 @@ void AIObj::IQVariables::scale(Flt32 unitScale) noexcept {
     pitchInc.init(scaleBetween(0.008f, 0.03f, unitScale));
     turnInc.init(scaleBetween(0.05f, 0.07f, unitScale));
 
-    for (std::size_t i = 0; i < 2; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{2})) {
         vertDope[i] = scaleBetween(worst.vertDope[i], best.vertDope[i], unitScale);
     }
 
@@ -248,7 +249,9 @@ bool AIObj::JetSkill::jetToPoint(AIObj& ai, PlayerMove& pm, const Point3F& dest)
             const auto count =
                 player->possibleJetForces(forces, lateral > .001f ? &direction : nullptr);
             Int32 best = 0;
-            for (Int32 n = 1; n < count; ++n) {
+            for (auto n : std::views::iota(Int32{1}) | std::views::take_while([&](Int32 n) {
+                              return n < count;
+                          })) {
                 if ((forces[n] - desired).len() < (forces[best] - desired).len()) {
                     best = n;
                 }
@@ -678,7 +681,7 @@ void AIObj::fireAtLaserOwner(PlayerMove* pm, Int32 playerId) {
     }
     auto* manager = player_->getManager();
     auto* players = PlayerManager::get(manager);
-    auto* client = players ? players->findClient(playerId) : nullptr;
+    auto* client = players ? players->findBaseRep(playerId) : nullptr;
     auto* owner = client ? dynamic_cast<Player*>(client->ownedObject) : nullptr;
     if (!owner) {
         return;

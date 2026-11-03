@@ -75,7 +75,7 @@ bool moveSequence(const TsShape& shape, TsAnimationThread& t, Flt32 delta, Path&
 bool move(const TsShape& shape, TsAnimationThread& t, Flt64 seconds, Path& path) {
     // One pending edge, one transition, then one destination sequence. Clearing
     // pending edges on completion bounds this walk without recursive calls.
-    for (int step = 0; step < 3; ++step) {
+    for ([[maybe_unused]] auto step : std::views::iota(0, 3)) {
         if (!sequence(shape, t.sequence) || !position(t.position)) {
             return false;
         }
@@ -213,7 +213,9 @@ controlsRoot(const TsShape& shape, const TsAnimationThread& t, std::size_t& work
         return {};
     }
     work -= std::size_t(node.subSequenceCount);
-    for (Int32 i = 0; i < node.subSequenceCount; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < node.subSequenceCount;
+                  })) {
         const auto seq = shape.subSequences[std::size_t(node.firstSubSequence + i)].sequence;
         if (t.state == TsThreadState::Transition) {
             const auto& edge = edgeFor(shape, t, t.transition);
@@ -248,7 +250,9 @@ bool collectTriggers(const TsShape& shape,
         }
         work -= std::size_t(seq.triggerCount);
         const bool forward = s.repeats > 0 || (!s.repeats && s.to.position > s.from.position);
-        for (Int32 i = 0; i < seq.triggerCount; ++i) {
+        for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                          return i < seq.triggerCount;
+                      })) {
             const auto& trigger = shape.triggers[std::size_t(seq.firstTrigger + i)];
             if (!std::isfinite(trigger.position) || std::abs(trigger.position) > 1) {
                 return false;
@@ -276,7 +280,9 @@ bool collectTriggers(const TsShape& shape,
 
 TsShapeInstance::TsShapeInstance(Resource<TsShape> shape) : shape_(std::move(shape)) {
     if (shape_ && shape_->defaultMaterials >= 0 && shape_->defaultMaterials <= 65536) {
-        for (Int32 i = 0; i < shape_->defaultMaterials; ++i) {
+        for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                          return i < shape_->defaultMaterials;
+                      })) {
             materialRemap_.push_back(i);
         }
     }
@@ -291,6 +297,7 @@ std::optional<UInt32> TsShapeInstance::addThread(Int32 seq, Flt32 p) {
     t.position = p;
     t.priority = shape_->sequences[std::size_t(seq)].priority;
     threads_.push_back(t);
+    invalidatePose();
     return UInt32(threads_.size() - 1);
 }
 
@@ -305,6 +312,7 @@ bool TsShapeInstance::setSequence(UInt32 thread, Int32 seq, Flt32 p) {
     t.timeScale = scale;
     t.priority = shape_->sequences[std::size_t(seq)].priority;
     threads_[thread] = t;
+    invalidatePose();
     return true;
 }
 
@@ -321,6 +329,7 @@ bool TsShapeInstance::setPriority(UInt32 thread, Int32 priority) {
         return false;
     }
     threads_[thread].priority = priority;
+    invalidatePose();
     return true;
 }
 
@@ -334,6 +343,7 @@ bool TsShapeInstance::cancelTransition(UInt32 thread) {
     t.runtimeTransition.reset();
     t.forwardRuntimeTransition.reset();
     t.backwardRuntimeTransition.reset();
+    invalidatePose();
     return true;
 }
 
@@ -367,6 +377,7 @@ bool TsShapeInstance::setTransition(UInt32 thread, Int32 index) {
         t.backwardRuntimeTransition.reset();
     }
     t.state = TsThreadState::Pending;
+    invalidatePose();
     return true;
 }
 
@@ -400,6 +411,7 @@ bool TsShapeInstance::setTransition(UInt32 thread, const TsTransition& edge) {
         next.backwardTransition = -1;
     }
     next.state = TsThreadState::Pending;
+    invalidatePose();
     return true;
 }
 
@@ -425,7 +437,7 @@ bool TsShapeInstance::transitionToSequence(UInt32 thread, Int32 seq) {
     }
     Int32 forward = -1, backward = -1;
     Flt32 forwardDistance = 2, backwardDistance = 2;
-    for (std::size_t i = 0; i < shape_->transitions.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, shape_->transitions.size())) {
         const auto& edge = shape_->transitions[i];
         const bool f = edge.startSequence == t.sequence && edge.endSequence == seq;
         const bool b = edge.endSequence == t.sequence && edge.startSequence == seq;
@@ -460,16 +472,20 @@ bool TsShapeInstance::transitionToSequence(UInt32 thread, Int32 seq) {
     t.forwardTransition = forward;
     t.backwardTransition = backward;
     t.state = TsThreadState::Pending;
+    invalidatePose();
     return true;
 }
 
 std::optional<TsShapePose> TsShapeInstance::pose() const {
+    if (evaluatedPose_)
+        return evaluatedPose_;
     std::vector<TsAnimationSample> samples;
     samples.reserve(threads_.size());
     for (const auto& thread : threads_) {
         samples.push_back(thread.sample());
     }
-    return TsShapePose::sample(shape_, samples, std::span<const Int32>(materialRemap_));
+    evaluatedPose_ = TsShapePose::sample(shape_, samples, std::span<const Int32>(materialRemap_));
+    return evaluatedPose_;
 }
 
 bool TsShapeInstance::advance(Flt64 seconds, bool bidirectional) {
@@ -495,7 +511,7 @@ bool TsShapeInstance::advanceSelected(std::optional<UInt32> selected,
     std::vector<TsTriggerEvent> events;
     std::size_t work = MaxWork;
     std::optional<std::size_t> rootThread;
-    for (std::size_t i = 0; i < next.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, next.size())) {
         if (!selected || *selected == i) {
             const auto delta = seconds * next[i].timeScale;
             if (!std::isfinite(delta) || !move(*shape_, next[i], delta, paths[i]) ||
@@ -527,9 +543,18 @@ bool TsShapeInstance::advanceSelected(std::optional<UInt32> selected,
     for (const auto& t : next) {
         samples.push_back(t.sample());
     }
-    if (!TsShapePose::sample(shape_, samples, std::span<const Int32>(remap))) {
+    const bool samePose =
+        remap == materialRemap_ && samples.size() == threads_.size() &&
+        std::ranges::equal(samples, threads_, [](const auto& sample, const auto& thread) {
+            return sample == thread.sample();
+        });
+    auto evaluated = samePose && evaluatedPose_
+                         ? evaluatedPose_
+                         : TsShapePose::sample(shape_, samples, std::span<const Int32>(remap));
+    if (!evaluated) {
         return false;
     }
+    evaluatedPose_ = std::move(evaluated);
     materialRemap_ = std::move(remap);
     threads_ = std::move(next);
     triggers_ = std::move(events);

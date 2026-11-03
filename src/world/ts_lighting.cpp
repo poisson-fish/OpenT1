@@ -178,6 +178,7 @@ std::optional<TsPreparedLighting> TsPreparedLighting::prepare(const TsLighting& 
     TsPreparedLighting result;
     result.lighting_.ambient = lighting.ambient;
     result.lighting_.lights.reserve(lighting.lights.size());
+    result.states_.reserve(lighting.lights.size());
     auto inverse = objectToShape;
     inverse.inverse();
     TMat3F toWorld;

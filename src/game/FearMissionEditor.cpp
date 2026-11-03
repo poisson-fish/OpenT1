@@ -1,4 +1,5 @@
 #include <opent1/game/fear_mission_editor.hpp>
+#include <ranges>
 #include <opent1/game/string_table.hpp>
 
 #include <algorithm>
@@ -81,7 +82,9 @@ bool appendObjectScript(sim::SimGame& game,
         if (!fieldIdentifier(field.name)) {
             return false;
         }
-        for (std::size_t i = 0; i < field.elementCount; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < field.elementCount;
+                      })) {
             if (const auto value = field.get(object, i, game.dataFields())) {
                 if (field.elementCount == 1) {
                     fields[field.name] = *value;
@@ -750,7 +753,10 @@ bool FearMissionEditor::pasteSelection() {
         if (!original.empty()) {
             object.assignName("");
             std::string name = original;
-            for (UInt32 i = 1; destination->findObject(name); ++i) {
+            for (auto i : std::views::iota(UInt32{1}) |
+                              std::views::take_while([&]([[maybe_unused]] UInt32 i) {
+                                  return destination->findObject(name);
+                              })) {
                 name = original + std::to_string(i);
             }
             object.assignName(name);

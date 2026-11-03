@@ -1,5 +1,6 @@
 #define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL.h>
+#include <ranges>
 #include <SDL3/SDL_main.h>
 #include <opent1/video/sdl_player.hpp>
 #include <opent1/core/file_stream.hpp>
@@ -46,7 +47,9 @@ private:
         duration_ = movie->durationUs();
         PlayerOptions options;
         gfx::GpuSurfaceConfig gpu;
-        for (std::size_t i = 2; i < args.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{2}) | std::views::take_while([&](std::size_t i) {
+                          return i < args.size();
+                      })) {
             if (args[i] == "--loop") {
                 options.loop = true;
             } else if (args[i] == "--smoke") {

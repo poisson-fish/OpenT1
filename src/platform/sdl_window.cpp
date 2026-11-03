@@ -1,4 +1,5 @@
 #include <opent1/platform/sdl_window.hpp>
+#include <ranges>
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <deque>
@@ -663,7 +664,10 @@ bool SdlApplication::runModal(WindowId owner,
             // SDL's callback watcher already delivers these lifecycle events
             // synchronously. Polling must not deliver them a second time.
             SDL_Event e{};
-            for (unsigned n = 0; n < 64 && live() && modal->active() && SDL_PollEvent(&e); ++n) {
+            for ([[maybe_unused]] auto n :
+                 std::views::iota(unsigned{0}) | std::views::take_while([&](unsigned n) {
+                     return n < 64 && live() && modal->active() && SDL_PollEvent(&e);
+                 })) {
                 const bool immediate = e.type == SDL_EVENT_TERMINATING ||
                                        e.type == SDL_EVENT_LOW_MEMORY ||
                                        (e.type >= SDL_EVENT_WILL_ENTER_BACKGROUND &&

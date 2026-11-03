@@ -1,4 +1,5 @@
 #include <opent1/game/shell_controls.hpp>
+#include <ranges>
 #include <cmath>
 #include <algorithm>
 
@@ -177,10 +178,14 @@ bool SmackerCtrl::draw(gfx::SoftwareSurface& surface, Point2I offset, RectI clip
             surface.setClip(saved);
             return false;
         }
-        for (Int32 y = 0; y < bitmap->height; ++y) {
+        for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                          return y < bitmap->height;
+                      })) {
             const auto row =
                 frame->bitmap.row(Int32(Int64(y) * frame->bitmap.height / bitmap->height));
-            for (Int32 x = 0; x < bitmap->width; ++x) {
+            for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                              return x < bitmap->width;
+                          })) {
                 bitmap->row(y)[std::size_t(x)] =
                     row[std::size_t(Int64(x) * frame->bitmap.width / bitmap->width)];
             }

@@ -1,4 +1,5 @@
 #include "opent1/game/server_irc_controls.hpp"
+#include <ranges>
 
 #include <algorithm>
 #include <cctype>
@@ -194,7 +195,7 @@ void ServerListCtrl::tick(double time) {
         servers_ = discoverServers();
         rebuildVisibleList();
         selected = {-1, -1};
-        for (std::size_t i = 0; i < visibleIndices_.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, visibleIndices_.size())) {
             if (servers_[visibleIndices_[i]].transportAddress == selectedAddress) {
                 selected = {0, static_cast<Int32>(i)};
                 break;
@@ -260,7 +261,9 @@ std::string ServerListCtrl::getCellText(Point2I cell) const {
 void ServerListCtrl::rebuildVisibleList() {
     const auto address = selectedServer() ? selectedServer()->transportAddress : std::string{};
     visibleIndices_.clear();
-    for (std::size_t i = 0; i < servers_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < servers_.size();
+                  })) {
         if (matchesFilter(servers_[i], activeConditions_, activeBuddyList_)) {
             visibleIndices_.push_back(i);
         }
@@ -343,7 +346,7 @@ void ServerListCtrl::rebuildVisibleList() {
 
     setSize({1, static_cast<Int32>(visibleIndices_.size())});
     refresh_ = false;
-    for (std::size_t i = 0; i < visibleIndices_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, visibleIndices_.size())) {
         if (!address.empty() && servers_[visibleIndices_[i]].transportAddress == address) {
             selected = {0, Int32(i)};
             return;
@@ -396,7 +399,7 @@ bool ServerListCtrl::event(const gui::Event& e) {
         if (const auto* server = selectedServer()) {
             Int32 x{};
             bool favoriteColumn{};
-            for (std::size_t position = 0; position < columnInfo_.size(); ++position) {
+            for (auto position : std::views::iota(std::size_t{0}, columnInfo_.size())) {
                 for (const auto& column : columnInfo_) {
                     if (column.position != static_cast<Int32>(position) || !column.active) {
                         continue;
@@ -426,7 +429,7 @@ bool ServerListCtrl::draw(gfx::SoftwareSurface& surface, Point2I offset, gui::Re
         return false;
     }
     Int32 x = offset.x;
-    for (std::size_t position = 0; position < columnInfo_.size(); ++position) {
+    for (auto position : std::views::iota(std::size_t{0}, columnInfo_.size())) {
         for (const auto& column : columnInfo_) {
             if (column.position != static_cast<Int32>(position) || !column.active) {
                 continue;
@@ -455,7 +458,7 @@ bool ServerListCtrl::drawCell(
         return true;
     }
     Int32 x = offset.x;
-    for (std::size_t position = 0; position < columnInfo_.size(); ++position) {
+    for (auto position : std::views::iota(std::size_t{0}, columnInfo_.size())) {
         for (const auto& column : columnInfo_) {
             if (column.position != static_cast<Int32>(position) || !column.active) {
                 continue;

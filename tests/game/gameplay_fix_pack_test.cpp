@@ -1,4 +1,5 @@
 #include "test_registry.hpp"
+#include <ranges>
 #include "test_support.hpp"
 #include "ts_collision_test_support.hpp"
 #include <opent1/game/game_app.hpp>
@@ -115,7 +116,7 @@ void gameplayRegressions() {
     const auto loopHandle = mounted.animSound;
     CHECK(loopHandle && mounted.animLoopingSound);
     const auto playCount = played.size();
-    for (int i = 0; i < 40; ++i)
+    for ([[maybe_unused]] auto i : std::views::iota(0, 40))
         body->updateImageState(0, .1f);
     CHECK(mounted.animSound == loopHandle && played.size() == playCount && stopped.empty());
     mounted.triggerDown = false;
@@ -290,8 +291,8 @@ void installedGameplay() {
         CHECK(target->processQuery(query) && !query.images.empty());
         std::optional<Point3F> shotStart;
         const auto box = target->getBoundingBox();
-        for (int x = 1; x < 10; ++x)
-            for (int z = 1; z < 10; ++z) {
+        for (auto x : std::views::iota(1, 10))
+            for (auto z : std::views::iota(1, 10)) {
                 sim::SimCollisionLineImage line;
                 line.start = {box.fMin.x + box.len_x() * float(x) / 10,
                               box.fMin.y - 5,
@@ -342,7 +343,9 @@ void installedGameplay() {
     }
     auto surface = gfx::SoftwareSurface::create(640, 480);
     CHECK(app.console().evaluate("schedule(\"Server::loadMission(Broadside);\",0.032);").ok());
-    for (int i = 1; i <= 650; ++i) {
+    for (auto i : std::views::iota(1) | std::views::take_while([&](int i) {
+                      return i <= 650;
+                  })) {
         CHECK(app.stepFrame(i * .032));
         if (i % 60 == 0)
             CHECK(app.renderFrame(*surface));

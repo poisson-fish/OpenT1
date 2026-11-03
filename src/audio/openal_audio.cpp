@@ -1,4 +1,5 @@
 #include <opent1/audio/audio.hpp>
+#include <ranges>
 #include <AL/al.h>
 #include <AL/alc.h>
 #include <AL/alext.h>
@@ -401,7 +402,7 @@ Device::queue(std::span<const std::shared_ptr<const Buffer>> buffers) {
         throw std::invalid_argument("invalid audio queue");
     }
     std::array<ALuint, 16> ids{};
-    for (std::size_t i = 0; i < buffers.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, buffers.size())) {
         if (!buffers[i] || buffers[i]->state_ != state_) {
             throw std::invalid_argument("foreign audio queue buffer");
         }
@@ -542,7 +543,7 @@ void QueuedSource::recycle(std::span<const std::shared_ptr<const Buffer>> replac
     alGetBufferi(buffers_.front()->id_, AL_CHANNELS, &channels);
     alGetBufferi(buffers_.front()->id_, AL_BITS, &bits);
     check();
-    for (std::size_t i = 0; i < replacements.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, replacements.size())) {
         const auto& buffer = replacements[i];
         if (!buffer || buffer->state_ != state_) {
             throw std::invalid_argument("foreign audio queue replacement");

@@ -1,4 +1,5 @@
 #include <opent1/sim/sim_native_media.hpp>
+#include <ranges>
 #include <charconv>
 #include <cmath>
 
@@ -118,7 +119,9 @@ bool Redbook::playAll() {
     UInt32 end = from;
     const auto count = getTrackCount();
     // Preserve the shipped range: track lengths [1, count), not the final track.
-    for (UInt32 i = 1; i < count; ++i) {
+    for (auto i : std::views::iota(UInt32{1}) | std::views::take_while([&](UInt32 i) {
+                      return i < count;
+                  })) {
         UInt32 unused{};
         if (!backend_->track(i, unused, length) || length > UINT32_MAX - end) {
             return false;

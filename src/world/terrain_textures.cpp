@@ -6,12 +6,12 @@
 namespace opent1::world {
 namespace {
 bool supported(const TsMaterialResources& materials, UInt32 index) {
-    if (index >= UInt32(std::max(0, materials.list.materialsPerDetail)) ||
-        index >= materials.list.materials.size() || index >= materials.textures.size()) {
+    if (index >= UInt32(std::max(0, materials.list().materialsPerDetail)) ||
+        index >= materials.list().materials.size() || index >= materials.textures().size()) {
         return false;
     }
-    const auto& m = materials.list.materials[index];
-    const auto* b = materials.textures[index].get();
+    const auto& m = materials.list().materials[index];
+    const auto* b = materials.textures()[index].get();
     return m.type() == 3 && !(m.flags & 0x3000U) && b && b->valid() && b->bitDepth == 8 &&
            b->width == b->height && b->width >= 2 && b->width <= 256 &&
            std::has_single_bit(UInt32(b->width)) &&
@@ -144,11 +144,11 @@ void TerrainTextureCache::rebuildIndexes() {
     mapReferences_.clear();
     sharedMaps_.clear();
     decodedSamples_.clear();
-    for (auto at = entries_.begin(); at != entries_.end(); ++at) {
+    for (const auto at : std::views::iota(entries_.begin(), entries_.end())) {
         entryIndex_.emplace(lookupKey(at->key), at);
         retain(*at);
     }
-    for (auto at = handles_.begin(); at != handles_.end(); ++at) {
+    for (const auto at : std::views::iota(handles_.begin(), handles_.end())) {
         handleIndex_.emplace(lookupKey(at->requested), at);
     }
 }
@@ -164,36 +164,38 @@ void TerrainTextureCache::clear() {
     cursor_ = 0;
     wrap_ = 0;
     bytes_ = 0;
-    supported_.resize(resources_.materials.list.materials.size());
-    for (UInt32 i = 0; i < supported_.size(); ++i) {
+    supported_.resize(resources_.materials.list().materials.size());
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < supported_.size();
+                  })) {
         supported_[i] = supported(resources_.materials, i);
     }
 }
 
 bool TerrainTextureCache::matches(const TerrainGridResources& r) const {
     if (r.grid.get() != resources_.grid.get() || r.blocks.size() != resources_.blocks.size() ||
-        r.materials.textures.size() != resources_.materials.textures.size() ||
-        r.materials.list.materials.size() != resources_.materials.list.materials.size()) {
+        r.materials.textures().size() != resources_.materials.textures().size() ||
+        r.materials.list().materials.size() != resources_.materials.list().materials.size()) {
         return false;
     }
-    for (std::size_t i = 0; i < r.blocks.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, r.blocks.size())) {
         if (r.blocks[i].get() != resources_.blocks[i].get()) {
             return false;
         }
     }
-    for (std::size_t i = 0; i < r.materials.textures.size(); ++i) {
-        if (r.materials.textures[i].get() != resources_.materials.textures[i].get()) {
+    for (auto i : std::views::iota(std::size_t{0}, r.materials.textures().size())) {
+        if (r.materials.textures()[i].get() != resources_.materials.textures()[i].get()) {
             return false;
         }
     }
     // Material records are copied into the bound snapshot; compare rendering
     // policy too, so reusing a cache across a changed material list is rejected.
-    for (std::size_t i = 0; i < r.materials.list.materials.size(); ++i) {
-        if (r.materials.list.materials[i].flags != resources_.materials.list.materials[i].flags) {
+    for (auto i : std::views::iota(std::size_t{0}, r.materials.list().materials.size())) {
+        if (r.materials.list().materials[i].flags != resources_.materials.list().materials[i].flags) {
             return false;
         }
     }
-    return r.materials.list.materialsPerDetail == resources_.materials.list.materialsPerDetail;
+    return r.materials.list().materialsPerDetail == resources_.materials.list().materialsPerDetail;
 }
 
 void TerrainTextureCache::rebind(TerrainGridResources resources) {
@@ -255,8 +257,8 @@ TerrainTextureCache::erase(std::list<Entry>::iterator at) {
 bool TerrainTextureCache::compatible(UInt32 material, UInt32 other) const {
     const auto& m = resources_.materials;
     return material < supported_.size() && other < supported_.size() && supported_[material] &&
-           supported_[other] && m.textures[material]->width == m.textures[other]->width &&
-           m.textures[material]->paletteIndex == m.textures[other]->paletteIndex;
+           supported_[other] && m.textures()[material]->width == m.textures()[other]->width &&
+           m.textures()[material]->paletteIndex == m.textures()[other]->paletteIndex;
 }
 
 std::optional<TerrainTextureTile> TerrainTextureCache::tile(UInt32 block,
@@ -403,7 +405,7 @@ std::optional<TerrainTextureCache::BuiltTile> TerrainTextureCache::build(const K
         return {};
     }
     const auto unit = key.pixels / key.cells,
-               textureWidth = UInt32(resources_.materials.textures[first]->width);
+               textureWidth = UInt32(resources_.materials.textures()[first]->width);
     if (unit > textureWidth) {
         return {};
     }
@@ -412,23 +414,31 @@ std::optional<TerrainTextureCache::BuiltTile> TerrainTextureCache::build(const K
     if (!bitmap) {
         return {};
     }
-    bitmap->paletteIndex = resources_.materials.textures[first]->paletteIndex;
-    for (UInt32 y = 0; y < key.cells; ++y) {
-        for (UInt32 x = 0; x < key.cells; ++x) {
+    bitmap->paletteIndex = resources_.materials.textures()[first]->paletteIndex;
+    for (auto y : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 y) {
+                      return y < key.cells;
+                  })) {
+        for (auto x : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 x) {
+                          return x < key.cells;
+                      })) {
             const auto material =
                 block.materials[std::size_t(key.y + key.cells - 1 - y) * n + key.x + x];
             if ((!key.nativeEmptyLevels && material.hole()) || !compatible(material.index, first)) {
                 return {};
             }
-            const auto& texture = *resources_.materials.textures[material.index];
+            const auto& texture = *resources_.materials.textures()[material.index];
             const auto src = texture.level(mip);
             if (mip >= texture.detailLevels || src.empty()) {
                 return {};
             }
             const auto stride = texture.detailLevels == 1 ? UInt32(texture.stride()) : unit;
-            for (UInt32 dy = 0; dy < unit; ++dy) {
+            for (auto dy : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 dy) {
+                               return dy < unit;
+                           })) {
                 auto dst = bitmap->row(Int32(y * unit + dy));
-                for (UInt32 dx = 0; dx < unit; ++dx) {
+                for (auto dx : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 dx) {
+                                   return dx < unit;
+                               })) {
                     const auto p = source(dx, dy, unit, material.flags);
                     dst[x * unit + dx] = src[std::size_t(p.y) * stride + std::size_t(p.x)];
                 }
@@ -521,8 +531,13 @@ std::optional<TerrainTextureCache::BuiltTile> TerrainTextureCache::build(const K
                 auto map = std::make_shared<gfx::LightMap>();
                 map->size = {Int32(side), Int32(side)};
                 map->samples.resize(std::size_t(side) * side);
-                for (UInt32 y = 0; y < side; ++y) {
-                    for (UInt32 x = 0; x < side; ++x) {
+                for (auto y : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 y) {
+                                  return y < side;
+                              })) {
+                    for (auto x :
+                         std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 x) {
+                             return x < side;
+                         })) {
                         map->samples[std::size_t(y) * side + x] =
                             sample(*low,
                                    lowSide,
@@ -563,8 +578,14 @@ std::optional<TerrainTextureCache::BuiltTile> TerrainTextureCache::build(const K
                         const auto hside = res ? (1U << (res - 1)) + 1 : 1;
                         const auto ox = (UInt32(h.x) - key.x) * rate,
                                    oy = (key.y + key.cells - UInt32(h.y) - 1) * rate;
-                        for (UInt32 y = 0; y <= rate; ++y) {
-                            for (UInt32 x = 0; x <= rate; ++x) {
+                        for (auto y :
+                             std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 y) {
+                                 return y <= rate;
+                             })) {
+                            for (auto x : std::views::iota(UInt32{0}) |
+                                              std::views::take_while([&](UInt32 x) {
+                                                  return x <= rate;
+                                              })) {
                                 map->samples[std::size_t(oy + y) * side + ox + x] =
                                     sample(*colors,
                                            hside,

@@ -1,4 +1,5 @@
 #include <opent1/console/console.hpp>
+#include <ranges>
 #include <opent1/core/bit_stream.hpp>
 #include <opent1/core/mem_stream.hpp>
 #include <opent1/core/res_manager.hpp>
@@ -107,7 +108,7 @@ void checkImpl(bool cond, std::string_view expr, std::string_view file, int line
 [[nodiscard]] opent1::gfx::Palette makeTestPalette() {
     opent1::gfx::Palette pal;
     pal.palettes.resize(1);
-    for (std::size_t i = 0; i < 256; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{256})) {
         const auto c = static_cast<opent1::UInt8>(i);
         pal.palettes[0].colors[i] =
             opent1::gfx::PaletteColor{static_cast<opent1::UInt8>((c * 37u) & 0xFFu),
@@ -821,7 +822,7 @@ void verifyFullStackEndToEndIntegration() {
             trigger->setDimensions({2, 2, 2});
         }
         // Queue PlayerMoves on the client PlayerPSC (forward movement + jump + jetting + weapon trigger)
-        for (int step = 0; step < 6; ++step) {
+        for (auto step : std::views::iota(0, 6)) {
             PlayerMove mv{};
             mv.forwardAction = 1.0f;
             mv.jumpAction = (step == 0);
@@ -1164,7 +1165,7 @@ void verifyFullStackEndToEndIntegration() {
         auto synthSurf = gfx::SoftwareSurface::create(640, 480);
         CHECK(synthSurf != nullptr);
         if (synthSurf) {
-            for (int f = 0; f < 3; ++f) {
+            for (auto f : std::views::iota(0, 3)) {
                 PlayerMove mv{};
                 mv.forwardAction = 0.25f;
                 mv.trigger = (f == 1);
@@ -1218,7 +1219,7 @@ void verifyFullStackEndToEndIntegration() {
         auto liveSurface = gfx::SoftwareSurface::create(640, 480);
         CHECK(liveSurface != nullptr);
         if (liveSurface) {
-            for (int f = 0; f < 4; ++f) {
+            for (auto f : std::views::iota(0, 4)) {
                 PlayerMove mv{};
                 mv.forwardAction = 0.25f;
                 mv.jetting = true;
@@ -1251,7 +1252,7 @@ void verifyFullStackEndToEndIntegration() {
                     CHECK(rset->objects().size() >= 15u);
                 }
             }
-            for (int f = 0; f < 3; ++f) {
+            for (auto f : std::views::iota(0, 3)) {
                 PlayerMove mv{};
                 mv.forwardAction = 0.5f;
                 mv.trigger = (f == 1);
@@ -1277,7 +1278,7 @@ void verifyFullStackEndToEndIntegration() {
                 CHECK(dynamic_cast<world::SimMissionTerrain*>(cliMgr->findObject(sim::TerrainId)) !=
                       nullptr);
             }
-            for (int f = 0; f < 3; ++f) {
+            for (auto f : std::views::iota(0, 3)) {
                 PlayerMove mv{};
                 mv.forwardAction = 0.5f;
                 mv.trigger = (f == 1);

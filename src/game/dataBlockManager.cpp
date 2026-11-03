@@ -1,4 +1,5 @@
 #include <opent1/console/console.hpp>
+#include <ranges>
 #include <opent1/core/text.hpp>
 #include <opent1/game/data_block_manager.hpp>
 #include <opent1/game/version.hpp>
@@ -258,7 +259,9 @@ bool DamageSkinData::preload(ResourceManager* /*rm*/,
 }
 
 void DamageSkinData::pack(BitStream& stream, DataBlockManager* /*dbm*/) const {
-    for (std::size_t i = 0; i < kBmpCount; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < kBmpCount;
+                  })) {
         stream.writeString(bmpName[i]);
     }
 }
@@ -266,7 +269,9 @@ void DamageSkinData::pack(BitStream& stream, DataBlockManager* /*dbm*/) const {
 bool DamageSkinData::unpack(BitStream& stream, DataBlockManager* /*dbm*/) {
     const auto backup = *this;
     numBmps = 0;
-    for (std::size_t i = 0; i < kBmpCount; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < kBmpCount;
+                  })) {
         if (!stream.readString(bmpName[i])) {
             *this = backup;
             return false;
@@ -349,7 +354,9 @@ void ShapeBaseData::pack(BitStream& stream, DataBlockManager* dbm) const {
     stream.writeInt(debrisId, 32);
     writePod(stream, maxEnergy);
 
-    for (std::size_t j = 0; j < kMaxSequenceIndex; ++j) {
+    for (auto j : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t j) {
+                      return j < kMaxSequenceIndex;
+                  })) {
         const auto& as = sequenceSound[j];
         if (stream.writeFlag(!as.sequence.empty())) {
             stream.writeString(as.sequence);
@@ -383,7 +390,9 @@ bool ShapeBaseData::unpack(BitStream& stream, DataBlockManager* dbm) {
         *this = backup;
         return false;
     }
-    for (std::size_t j = 0; j < kMaxSequenceIndex; ++j) {
+    for (auto j : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t j) {
+                      return j < kMaxSequenceIndex;
+                  })) {
         if (stream.readFlag()) {
             if (!stream.readString(sequenceSound[j].sequence)) {
                 *this = backup;
@@ -449,7 +458,9 @@ void PlayerData::pack(BitStream& stream, DataBlockManager* dbm) const {
     ShapeBaseData::pack(stream, dbm);
     stream.writeString(flameShapeName);
 
-    for (std::size_t i = 0; i < kNumAnims; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < kNumAnims;
+                  })) {
         stream.writeString(animData[i].name);
         if (stream.writeFlag(animData[i].soundTag != -1)) {
             writeBlockIdHelper(stream, dbm, DataBlockManager::SoundDataType, animData[i].soundTag);
@@ -477,7 +488,9 @@ void PlayerData::pack(BitStream& stream, DataBlockManager* dbm) const {
     writePod(stream, density);
     writePod(stream, jetForce);
     writeBlockIdHelper(stream, dbm, DataBlockManager::SoundDataType, jetSound);
-    for (std::size_t i = 0; i < kNumFootSounds; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < kNumFootSounds;
+                  })) {
         writeBlockIdHelper(stream, dbm, DataBlockManager::SoundDataType, rFootSounds[i]);
         writeBlockIdHelper(stream, dbm, DataBlockManager::SoundDataType, lFootSounds[i]);
     }
@@ -496,7 +509,9 @@ bool PlayerData::unpack(BitStream& stream, DataBlockManager* dbm) {
         *this = backup;
         return false;
     }
-    for (std::size_t i = 0; i < kNumAnims; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < kNumAnims;
+                  })) {
         if (!stream.readString(animData[i].name)) {
             *this = backup;
             return false;
@@ -532,7 +547,9 @@ bool PlayerData::unpack(BitStream& stream, DataBlockManager* dbm) {
         return false;
     }
     jetSound = readBlockIdHelper(stream, dbm, DataBlockManager::SoundDataType);
-    for (std::size_t i = 0; i < kNumFootSounds; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < kNumFootSounds;
+                  })) {
         rFootSounds[i] = readBlockIdHelper(stream, dbm, DataBlockManager::SoundDataType);
         lFootSounds[i] = readBlockIdHelper(stream, dbm, DataBlockManager::SoundDataType);
     }
@@ -782,7 +799,7 @@ void VehicleData::pack(BitStream& stream, DataBlockManager* dbm) const {
     writeBlockIdHelper(stream, dbm, DataBlockManager::SoundDataType, dismountSound);
     writeBlockIdHelper(stream, dbm, DataBlockManager::SoundDataType, idleSound);
     writeBlockIdHelper(stream, dbm, DataBlockManager::SoundDataType, moveSound);
-    for (std::size_t i = 0; i < 4; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{4})) {
         writePoint3F(stream, suspension[i]);
     }
 }
@@ -802,7 +819,7 @@ bool VehicleData::unpack(BitStream& stream, DataBlockManager* dbm) {
     dismountSound = readBlockIdHelper(stream, dbm, DataBlockManager::SoundDataType);
     idleSound = readBlockIdHelper(stream, dbm, DataBlockManager::SoundDataType);
     moveSound = readBlockIdHelper(stream, dbm, DataBlockManager::SoundDataType);
-    for (std::size_t i = 0; i < 4; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{4})) {
         if (!readPoint3F(stream, suspension[i])) {
             *this = backup;
             return false;
@@ -1414,12 +1431,14 @@ void ExplosionData::pack(BitStream& stream, DataBlockManager* dbm) const {
         writePod(stream, lightRange);
         writePod(stream, timeZero);
         writePod(stream, timeOne);
-        for (std::size_t i = 0; i < kNumLightColors; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < kNumLightColors;
+                      })) {
             writePod(stream, colors[i].red);
             writePod(stream, colors[i].green);
             writePod(stream, colors[i].blue);
         }
-        for (std::size_t i = 0; i < 3; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
             writePod(stream, radFactors[i]);
         }
     }
@@ -1444,14 +1463,16 @@ bool ExplosionData::unpack(BitStream& stream, DataBlockManager* dbm) {
             *this = backup;
             return false;
         }
-        for (std::size_t i = 0; i < kNumLightColors; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < kNumLightColors;
+                      })) {
             if (!readPod(stream, colors[i].red) || !readPod(stream, colors[i].green) ||
                 !readPod(stream, colors[i].blue)) {
                 *this = backup;
                 return false;
             }
         }
-        for (std::size_t i = 0; i < 3; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
             if (!readPod(stream, radFactors[i])) {
                 *this = backup;
                 return false;
@@ -1769,9 +1790,13 @@ void DataBlockManager::rebuildLookupTable() {
     for (auto& bucket : hashTable_) {
         bucket.clear();
     }
-    for (Int32 g = 0; g < NumDataTypes; ++g) {
+    for (auto g : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 g) {
+                      return g < NumDataTypes;
+                  })) {
         const auto& grp = dataBlocks_[static_cast<std::size_t>(g)];
-        for (std::size_t i = 0; i < grp.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < grp.size();
+                      })) {
             if (grp[i] && !grp[i]->dbmName.empty()) {
                 const auto h = hashName(grp[i]->dbmName);
                 auto& bucket = hashTable_[h];
@@ -1855,14 +1880,16 @@ bool DataBlockManager::preloadBlock(Int32 group, Int32 block) {
 
 bool DataBlockManager::serverPreload() {
     bool ok = true;
-    for (Int32 g = 0; g < NumDataTypes; ++g) {
+    for (auto g : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 g) {
+                      return g < NumDataTypes;
+                  })) {
         auto& grp = dataBlocks_[static_cast<std::size_t>(g)];
-        for (std::size_t i = 0; i < grp.size(); ++i) {
-            if (!grp[i]) {
+        for (const auto& i : grp) {
+            if (!i) {
                 continue;
             }
             std::string err;
-            if (!grp[i]->preload(resources(), true, err)) {
+            if (!i->preload(resources(), true, err)) {
                 lastError_ = err;
                 if (auto* mgr = getManager(); mgr && mgr->console()) {
                     mgr->console()->print(err);
@@ -1872,6 +1899,17 @@ bool DataBlockManager::serverPreload() {
         }
     }
     return ok;
+}
+
+std::shared_ptr<GameBaseData>
+DataBlockManager::retainDataBlock(const GameBaseData* block) const noexcept {
+    if (block && block->dbmGroup >= 0 && block->dbmGroup < NumDataTypes && block->dbmIndex >= 0) {
+        const auto& group = dataBlocks_[static_cast<std::size_t>(block->dbmGroup)];
+        const auto index = static_cast<std::size_t>(block->dbmIndex);
+        if (index < group.size() && group[index].get() == block)
+            return group[index];
+    }
+    return {};
 }
 
 void DataBlockManager::reset() {
@@ -1934,7 +1972,7 @@ GameBaseData* DataBlockManager::lookupDataBlock(std::string_view name,
         return nullptr;
     }
     const auto& grp = dataBlocks_[static_cast<std::size_t>(groupId)];
-    for (std::size_t i = 0; i < grp.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, grp.size())) {
         if (grp[i] && equalIgnoreCase(grp[i]->dbmName, name)) {
             if (blockId) {
                 *blockId = static_cast<Int32>(i);
@@ -1962,11 +2000,15 @@ GameBaseData* DataBlockManager::lookupDataBlock(std::string_view name) const noe
 
 std::vector<std::unique_ptr<DataBlockEvent>> DataBlockManager::buildClientEvents() const {
     std::vector<std::unique_ptr<DataBlockEvent>> events;
-    for (Int32 g = 0; g < NumDataTypes; ++g) {
+    for (auto g : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 g) {
+                      return g < NumDataTypes;
+                  })) {
         const auto& grp = dataBlocks_[static_cast<std::size_t>(g)];
         if (!grp.empty()) {
             const Int32 gsize = static_cast<Int32>(grp.size());
-            for (Int32 j = 0; j < gsize; ++j) {
+            for (auto j : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 j) {
+                              return j < gsize;
+                          })) {
                 auto evt = std::make_unique<DataBlockEvent>();
                 evt->group = g;
                 evt->totalBlocks = gsize;
@@ -2071,7 +2113,9 @@ bool DataBlockManager::processEvent(const sim::SimEvent& event) {
 DataBlockManager::Snapshot DataBlockManager::captureSnapshot() const {
     Snapshot snap;
     snap.lastError = lastError_;
-    for (std::size_t g = 0; g < NumDataTypes; ++g) {
+    for (auto g : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t g) {
+                      return g < NumDataTypes;
+                  })) {
         snap.groups[g].reserve(dataBlocks_[g].size());
         for (const auto& blk : dataBlocks_[g]) {
             snap.groups[g].push_back(blk ? blk->clone() : nullptr);
@@ -2082,7 +2126,9 @@ DataBlockManager::Snapshot DataBlockManager::captureSnapshot() const {
 
 void DataBlockManager::restoreSnapshot(const Snapshot& snapshot) {
     lastError_ = snapshot.lastError;
-    for (std::size_t g = 0; g < NumDataTypes; ++g) {
+    for (auto g : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t g) {
+                      return g < NumDataTypes;
+                  })) {
         dataBlocks_[g].clear();
         dataBlocks_[g].reserve(snapshot.groups[g].size());
         for (const auto& blk : snapshot.groups[g]) {

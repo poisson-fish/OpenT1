@@ -1,4 +1,5 @@
 #include "interior_scene_lighting.hpp"
+#include <ranges>
 #include "collision_geometry.hpp"
 
 namespace opent1::world {
@@ -41,7 +42,7 @@ textureCoordinate(const InteriorGeometry& g, const InteriorSurface& s, Point3F p
     }
     std::array<Point3F, 3> world;
     std::array<Point2F, 3> uv;
-    for (std::size_t i = 0; i < 3; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
         const auto v = g.vertices[s.firstVertex + i];
         if (v.point >= g.points.size() || v.texture >= g.texturePoints.size()) {
             return {};
@@ -103,7 +104,7 @@ std::optional<InteriorSceneLights> InteriorSceneLights::prepare(const InteriorGe
     std::optional<InteriorCollision> collision;
     std::size_t entries{};
     try {
-        for (std::size_t i = 0; i < scene.lights.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, scene.lights.size())) {
             const auto& light = scene.lights[i];
             if (light.type != TsLight::Type::Point) {
                 continue;
@@ -142,7 +143,7 @@ std::optional<InteriorSceneLights> InteriorSceneLights::prepare(const InteriorGe
             }
             const auto color = packed(light.intensity);
             const auto maximum = Flt32(std::sqrt(64.f + .001f));
-            for (UInt32 index = 0; index < 64; ++index) {
+            for (auto index : std::views::iota(UInt32{0}, UInt32{64})) {
                 UInt32 value{};
                 for (UInt32 shift = 0; shift < 16; shift += 4) {
                     const auto component = (color >> shift) & 15;
@@ -230,9 +231,12 @@ bool InteriorSceneLights::merge(UInt32 index, std::span<UInt16> colors, std::siz
         SquareStepper ySquared(startY, step);
         const SquareStepper xStart(startX, step);
         std::size_t at{};
-        for (UInt32 y = 0; y < map.height; ++y) {
+        for ([[maybe_unused]] auto y :
+             std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 y) {
+                 return y < map.height;
+             })) {
             auto xSquared = xStart;
-            for (UInt32 x = 0; x < map.width; ++x, ++at) {
+            for ([[maybe_unused]] const auto x : std::views::iota(UInt32{0}, map.width)) {
                 const auto d = xSquared.value + ySquared.value;
                 if (d < radius - planeDistance) {
                     const auto bucket = (d + planeDistance) * remapScale;
@@ -244,6 +248,7 @@ bool InteriorSceneLights::merge(UInt32 index, std::span<UInt16> colors, std::siz
                         tables_[std::size_t(lightIndex)][UInt32(std::clamp(bucket, 0.f, 63.f))]);
                 }
                 xSquared.next();
+                ++at;
             }
             ySquared.next();
         }

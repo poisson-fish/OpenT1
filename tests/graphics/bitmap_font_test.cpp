@@ -1,4 +1,5 @@
 #include "gfx_test_support.hpp"
+#include <ranges>
 #include <opent1/gfx/bitmap_content.hpp>
 #include <opent1/core/file_stream.hpp>
 #include <opent1/core/vol_stream.hpp>
@@ -273,13 +274,17 @@ void contentBounds() {
     for (const auto width : {1, 7, 8, 9, 15, 16, 17, 31, 32, 33, 64, 65}) {
         auto bitmap = Bitmap::create(width, 7);
         CHECK(bitmap);
-        for (int sample = 0; sample < 80; ++sample) {
+        for (auto sample : std::views::iota(0, 80)) {
             // Nonzero padding must never count as visible content.
             std::ranges::fill(bitmap->pixels, std::byte{255});
             RectI expected{width, 7, -1, -1};
-            for (Int32 y = 0; y < bitmap->height; ++y) {
+            for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                              return y < bitmap->height;
+                          })) {
                 auto row = bitmap->row(y);
-                for (Int32 x = 0; x < width; ++x) {
+                for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                                  return x < width;
+                              })) {
                     const bool nonzero = sample && (random() % 17 == 0);
                     row[std::size_t(x)] = nonzero ? std::byte{1} : std::byte{};
                     if (nonzero) {
@@ -293,7 +298,9 @@ void contentBounds() {
             const auto actual = indexedContentBounds(*bitmap);
             CHECK(actual && *actual == expected);
         }
-        for (Int32 x = 0; x < width; ++x) {
+        for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                          return x < width;
+                      })) {
             std::ranges::fill(bitmap->pixels, std::byte{});
             bitmap->row(6)[std::size_t(x)] = std::byte{255};
             CHECK(indexedContentBounds(*bitmap) == std::optional(RectI{x, 6, x, 6}));

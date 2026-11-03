@@ -1,4 +1,5 @@
 #include <opent1/gfx/render_limits.hpp>
+#include <ranges>
 #include <opent1/world/world_scene.hpp>
 #include <opent1/world/terrain_grid.hpp>
 #include <opent1/world/interior_shape.hpp>
@@ -112,12 +113,14 @@ WorldVolumeMaterials::load(ResourceManager& manager,
             return {};
         }
         Entry entry{key, std::move(*resources), {}};
-        for (Int32 i = 0; i < list->materialsPerDetail; ++i) {
+        for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                          return i < list->materialsPerDetail;
+                      })) {
             const auto n = std::size_t(i);
-            if (list->materials[n].type() != 3 || !entry.resources.textures[n]) {
+            if (list->materials[n].type() != 3 || !entry.resources.textures()[n]) {
                 return {};
             }
-            entry.frames.push_back(entry.resources.textures[n].get());
+            entry.frames.push_back(entry.resources.textures()[n].get());
         }
         result.entries_.push_back(std::move(entry));
     }

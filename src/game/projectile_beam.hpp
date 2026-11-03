@@ -1,6 +1,7 @@
 #pragma once
 
 #include <opent1/world/world_mission.hpp>
+#include <ranges>
 
 #include <algorithm>
 #include <cmath>
@@ -73,7 +74,7 @@ inline bool appendProjectileBeam(world::WorldSurfaceMesh& mesh,
         {{0, 1, 2}, {0, 2, 3}, {2, 1, 0}, {3, 2, 0}}};
     for (const auto& face : faces) {
         world::StaticSurfaceTriangle triangle;
-        for (std::size_t i = 0; i < face.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, face.size())) {
             triangle.vertices[i].position = points[face[i]];
             triangle.vertices[i].texture = texture[face[i]];
         }
@@ -85,12 +86,14 @@ inline bool appendProjectileBeam(world::WorldSurfaceMesh& mesh,
 inline std::shared_ptr<world::WorldSurfaceMesh>
 projectileBeamMesh(const Resource<gfx::Bitmap>& bitmap) {
     auto mesh = std::make_shared<world::WorldSurfaceMesh>();
-    mesh->materials.list.details = 1;
-    mesh->materials.list.materialsPerDetail = 1;
+    world::TsMaterialResources::Data materials;
+    materials.list.details = 1;
+    materials.list.materialsPerDetail = 1;
     world::TsMaterial material;
     material.flags = 0x2003; // unlit, translucent texture; blend comes from the bitmap
-    mesh->materials.list.materials.push_back(material);
-    mesh->materials.textures.push_back(bitmap);
+    materials.list.materials.push_back(material);
+    materials.textures.push_back(bitmap);
+    mesh->materials = world::TsMaterialResources(std::move(materials));
     return mesh;
 }
 

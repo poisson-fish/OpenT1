@@ -19,6 +19,10 @@ struct Wave {
 
 bool registerWaveLoader(ResourceManager&);
 
+inline std::size_t resourceResidentBytes(const Wave& v) {
+    return sizeof(v) + v.samples.capacity();
+}
+
 enum Flag : UInt32 {
     Loop = 1U << 1,
     Stream = 1U << 2,

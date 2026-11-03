@@ -1,22 +1,120 @@
 #include <opent1/world/world_surfaces.hpp>
 #include <opent1/gfx/render_stats.hpp>
+#include <opent1/core/reusable_scratch.hpp>
 #include "collision_geometry.hpp"
 #include "terrain_window.hpp"
 #include "terrain_scene_lighting.hpp"
 #include <bit>
-#include <functional>
 #include <map>
 #include <memory_resource>
+#include <ranges>
 #include <set>
 #include <tuple>
 #include <unordered_map>
 
 namespace opent1::world {
 namespace {
+struct TerrainScratch {
+    // Bounded per-thread storage; nested/fallback calls lease an independent
+    // buffer. All arena objects die before the lease, and results own their data.
+    std::array<std::byte, 384 * 1024> memory;
+
+    void clear() {}
+};
+
+class ScratchMemory final : public std::pmr::memory_resource {
+    gfx::RenderWorkStats* stats_;
+    std::pmr::memory_resource* upstream_ = std::pmr::get_default_resource();
+
+    void* do_allocate(std::size_t bytes, std::size_t alignment) override {
+        auto* result = upstream_->allocate(bytes, alignment);
+        if (stats_) {
+            ++stats_->terrainScratchAllocations;
+            stats_->terrainScratchBytes += bytes;
+        }
+        return result;
+    }
+
+    void do_deallocate(void* memory, std::size_t bytes, std::size_t alignment) override {
+        upstream_->deallocate(memory, bytes, alignment);
+    }
+
+    bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override {
+        return this == &other;
+    }
+
+public:
+    explicit ScratchMemory(gfx::RenderWorkStats* stats) : stats_(stats) {}
+};
+
 struct Tile {
     const TerrainGridBlock* block;
     UInt32 index, bx, by, x, y, size;
 };
+
+struct TerrainTopology {
+    std::array<UInt8, 18> indices{};
+    UInt8 count{};
+};
+
+// The native half-square templates depend only on diagonal parity and four
+// reached edge midpoints. Share their ordered indices across all blocks/LODs;
+// camera-dependent heights and materials remain independent of topology.
+constexpr auto nativeTopologies = [] {
+    std::array<TerrainTopology, 32> result{};
+    for (auto key : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 key) {
+                        return key < result.size();
+                    })) {
+        auto& topology = result[key];
+        const auto emit = [&](UInt32 a, UInt32 b, UInt32 c) {
+            topology.indices[topology.count++] = UInt8(a & 7U);
+            topology.indices[topology.count++] = UInt8(b & 7U);
+            topology.indices[topology.count++] = UInt8(c & 7U);
+        };
+        for (const auto start : key & 16U ? std::array{6U, 2U} : std::array{0U, 4U}) {
+            const bool left = key & (1U << (((start + 1) & 7U) / 2)),
+                       top = key & (1U << (((start + 3) & 7U) / 2));
+            if (left && top) {
+                emit(start, start + 3, start + 4);
+                emit(start, start + 1, start + 3);
+                emit(start + 1, start + 2, start + 3);
+            } else if (left) {
+                emit(start, start + 1, start + 4);
+                emit(start + 1, start + 2, start + 4);
+            } else if (top) {
+                emit(start, start + 2, start + 3);
+                emit(start, start + 3, start + 4);
+            } else {
+                emit(start, start + 2, start + 4);
+            }
+        }
+    }
+    return result;
+}();
+
+// Eight vertices per shared stitch template, independent of block, placement,
+// camera, lightmap and geomorph state. These are the only terrain GPU meshes.
+const auto& hardwareTopologies() {
+    static const auto meshes = [] {
+        std::array<std::shared_ptr<const gfx::HardwareMesh>, 32> result;
+        const std::array<Point2F, 8> ring{
+            {{0, 0}, {0, .5f}, {0, 1}, {.5f, 1}, {1, 1}, {1, .5f}, {1, 0}, {.5f, 0}}};
+        for (auto i : std::views::iota(std::size_t{0}, result.size())) {
+            std::vector<gfx::HardwareVertex> vertices(8);
+            for (auto j : std::views::iota(std::size_t{0}, ring.size())) {
+                vertices[j].position = ring[j];
+                vertices[j].texture = {ring[j].x, 1 - ring[j].y};
+                vertices[j].inverseDepth = Flt32(j); // native input index, not depth
+            }
+            const auto& topology = nativeTopologies[i];
+            result[i] = gfx::HardwareMesh::create(
+                std::move(vertices),
+                {topology.indices.begin(), topology.indices.begin() + topology.count});
+        }
+        return result;
+    }();
+    return meshes;
+}
 
 // Collect first, then sort/deduplicate once. Boundary queries retain the native
 // coordinate order without allocating a tree node for each reached edge point.
@@ -25,15 +123,17 @@ class Edges {
     std::pmr::vector<Point> points_;
 
 public:
-    explicit Edges(std::pmr::memory_resource* memory) : points_(memory) {
-        points_.reserve(1024);
-    }
+    explicit Edges(std::pmr::memory_resource* memory) : points_(memory) {}
 
     void insert(UInt32 fixed, UInt32 along) {
+        if (points_.empty())
+            points_.reserve(1024);
         points_.emplace_back(fixed, along);
     }
 
     void prepare() {
+        if (auto* stats = gfx::currentRenderWorkStats)
+            stats->terrainEdgePoints += points_.size();
         std::ranges::sort(points_);
         const auto duplicates = std::ranges::unique(points_);
         points_.erase(duplicates.begin(), duplicates.end());
@@ -112,8 +212,11 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
     if (!n || n > 1024 || !std::has_single_bit(n)) {
         return {};
     }
-    const auto selection =
-        terrain_detail::selectWindow(grid, n, view, region, state ? state->window_ : std::nullopt);
+    const auto selection = [&] {
+        gfx::ScopedRenderWorkTimer phase(&gfx::RenderWorkStats::terrainVisibilityMs);
+        return terrain_detail::selectWindow(
+            grid, n, view, region, state ? state->window_ : std::nullopt);
+    }();
     if (!selection) {
         return {};
     }
@@ -167,13 +270,20 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                  cache ? cache->evictions() : 0};
 
     try {
-        std::pmr::monotonic_buffer_resource frameMemory(32 * 1024);
+        detail::ScratchLease<TerrainScratch> scratch;
+        auto& memory = scratch.get().memory;
+        if (stats)
+            stats->terrainScratchBufferBytes += memory.size();
+        ScratchMemory upstream(stats);
+        std::pmr::monotonic_buffer_resource frameMemory(memory.data(), memory.size(), &upstream);
         std::size_t work = MaxWork;
-        std::vector<Tile> tiles;
+        std::pmr::vector<Tile> tiles(&frameMemory);
+        tiles.reserve(1024);
         Edges horizontal(&frameMemory), vertical(&frameMemory);
 
         struct NativePoint {
             Flt32 height, distance;
+            std::array<Flt32, 4> inputs;
         };
 
         std::pmr::unordered_map<std::pair<UInt32, UInt32>, NativePoint, PointHash> nativePoints(
@@ -182,6 +292,8 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
             nativePoints.reserve(1024);
         }
         const auto introduce = [&](const Tile& t, UInt32 x, UInt32 y, UInt32 level, bool row) {
+            if (stats)
+                ++stats->terrainPointRequests;
             spend(work);
             const auto key = std::pair{t.bx + x, t.by + y};
             if (nativePoints.contains(key)) {
@@ -197,28 +309,35 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
             if (!std::isfinite(distance)) {
                 return false;
             }
-            const auto h =
-                row ? std::optional{authored}
-                    : morphTerrainHeight(*t.block, x, y, level, distance, (*geometry)[level]);
-            if (!h) {
+            const auto inputs =
+                row ? std::optional(std::array{authored, authored, 0.f, distance})
+                    : terrainMorphInputs(*t.block, x, y, level, distance, (*geometry)[level]);
+            if (!inputs) {
                 return false;
             }
-            nativePoints.emplace(key, NativePoint{*h, distance});
-            horizontal.insert(key.second, key.first);
-            vertical.insert(key.first, key.second);
+            const auto& v = *inputs;
+            const auto h = v[2] >= 1.f ? v[1] : v[0] + (v[1] - v[0]) * v[2];
+            nativePoints.emplace(key, NativePoint{h, distance, v});
+            if (stats)
+                ++stats->terrainPoints;
             return true;
         };
         std::set<std::array<UInt32, 4>> nextSplit;
         const auto& clip = selection->clip;
+        gfx::ScopedRenderWorkTimer selectPhase(&gfx::RenderWorkStats::terrainSelectMs);
         std::pmr::map<Int32, UInt32> blockIndices(&frameMemory);
-        for (UInt32 i = 0; i < grid.blocks.size(); ++i) {
+        for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                          return i < grid.blocks.size();
+                      })) {
             spend(work);
             if (!blockIndices.emplace(grid.blocks[i].id, i).second) {
                 return {};
             }
         }
         std::pmr::set<const TerrainGridBlock*> validated(&frameMemory);
-        for (std::size_t i = 0; i < grid.blockMap.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < grid.blockMap.size();
+                      })) {
             spend(work);
             const auto id = grid.blockMap[i];
             if (id == -1) {
@@ -259,7 +378,10 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                     return {};
                 }
                 if (geometry) {
-                    for (UInt32 p = 0; p <= scanLevel + 1; ++p) {
+                    for (auto p :
+                         std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 p) {
+                             return p <= scanLevel + 1;
+                         })) {
                         const auto count =
                             p ? UInt64(n >> (p - 1)) * (n >> (p - 1)) : b.heights.size();
                         if (!b.pins[p].empty() && b.pins[p].size() < (count + 7) / 8) {
@@ -274,9 +396,7 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                     return v != std::byte{};
                 });
             });
-            const std::function<bool(UInt32, UInt32, UInt32)> select = [&](UInt32 x,
-                                                                           UInt32 y,
-                                                                           UInt32 size) {
+            const auto select = [&](auto&& self, UInt32 x, UInt32 y, UInt32 size) -> bool {
                 if (stats) {
                     ++stats->terrainNodes;
                 }
@@ -345,8 +465,14 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                             ++stats->terrainDistanceRejects;
                         }
                         merge = merge && average >= (*geometry)[level].detailDistance;
-                        for (UInt32 dy = 0; dy < size && merge; ++dy) {
-                            for (UInt32 dx = 0; dx < size; ++dx) {
+                        for (auto dy :
+                             std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 dy) {
+                                 return dy < size && merge;
+                             })) {
+                            for (auto dx : std::views::iota(UInt32{0}) |
+                                               std::views::take_while([&](UInt32 dx) {
+                                                   return dx < size;
+                                               })) {
                                 spend(work);
                                 if (!materialMatches(dx, dy)) {
                                     merge = false;
@@ -360,8 +486,14 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                                    left = height(tile, x, y + size);
                         Flt64 error{};
                         Flt32 low = a, high = a;
-                        for (UInt32 dy = 0; dy <= size && merge; ++dy) {
-                            for (UInt32 dx = 0; dx <= size; ++dx) {
+                        for (auto dy :
+                             std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 dy) {
+                                 return dy <= size && merge;
+                             })) {
+                            for (auto dx : std::views::iota(UInt32{0}) |
+                                               std::views::take_while([&](UInt32 dx) {
+                                                   return dx <= size;
+                                               })) {
                                 ++heightSamples;
                                 spend(work);
                                 const auto h = height(tile, x + dx, y + dy);
@@ -403,15 +535,17 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                     if (material.hole() && !view.nativeTraversal) {
                         return true;
                     }
-                    if (material.index >= resources.materials.list.materialsPerDetail ||
+                    if (material.index >= resources.materials.list().materialsPerDetail ||
                         tiles.size() == 524288) {
                         return false;
                     }
                     tiles.push_back(tile);
-                    for (const auto xx : {bx + x, bx + x + size}) {
-                        for (const auto yy : {by + y, by + y + size}) {
-                            horizontal.insert(yy, xx);
-                            vertical.insert(xx, yy);
+                    if (!view.nativeTraversal) {
+                        for (const auto xx : {bx + x, bx + x + size}) {
+                            for (const auto yy : {by + y, by + y + size}) {
+                                horizontal.insert(yy, xx);
+                                vertical.insert(xx, yy);
+                            }
                         }
                     }
                     return true;
@@ -435,8 +569,8 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                             return false;
                         }
                     }
-                    return select(x, y, half) && select(x + half, y, half) &&
-                           select(x + half, y + half, half) && select(x, y + half, half);
+                    return self(self, x, y, half) && self(self, x + half, y, half) &&
+                           self(self, x + half, y + half, half) && self(self, x, y + half, half);
                 }
                 if (geometry && selection->visibility && level <= scanLevel) {
                     // transformCross reaches all five introduced points before
@@ -452,8 +586,8 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                         vertical.insert(UInt32(p.x), UInt32(p.y));
                     }
                 }
-                return select(x, y, half) && select(x + half, y, half) &&
-                       select(x, y + half, half) && select(x + half, y + half, half);
+                return self(self, x, y, half) && self(self, x + half, y, half) &&
+                       self(self, x, y + half, half) && self(self, x + half, y + half, half);
             };
             if (view.nativeTraversal) {
                 const auto step = 1U << scanLevel;
@@ -484,19 +618,36 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                         }
                     }
                     for (auto x = begin; x < end; x += step) {
-                        if (!select(x, y, step)) {
+                        if (!select(select, x, y, step)) {
                             return {};
                         }
                     }
                 }
-            } else if (!select(0, 0, n)) {
+            } else if (!select(select, 0, 0, n)) {
                 return {};
             }
         }
-        horizontal.prepare();
-        vertical.prepare();
+        selectPhase.stop();
+        {
+            gfx::ScopedRenderWorkTimer phase(&gfx::RenderWorkStats::terrainEdgesMs);
+            horizontal.prepare();
+            vertical.prepare();
+        }
+        gfx::ScopedRenderWorkTimer emitPhase(&gfx::RenderWorkStats::terrainEmitMs);
         WorldSurfaceMesh result;
+        result.terrainSquareIds.reserve(tiles.size());
         result.materials = resources.materials;
+        std::optional<TsMaterialResources::Data> materialData;
+        std::shared_ptr<TerrainPatches> patches;
+        if (view.retainedPatches && view.nativeTraversal && view.nativeGeometry &&
+            view.nativeGeometry->perspective && view.compositeTextures &&
+            view.textureTiming == TerrainTextureTiming::RetainedLru) {
+            patches = std::make_shared<TerrainPatches>();
+            patches->patches.reserve(tiles.size());
+            patches->camera = view.camera;
+            patches->farDistance = view.nativeGeometry->farDistance;
+            patches->hazeDistance = view.hazeDistance.value_or(patches->farDistance);
+        }
         using TextureKey = std::tuple<UInt32, UInt32, UInt32, UInt32, UInt32, UInt32, UInt32>;
 
         struct DrawTexture {
@@ -529,7 +680,7 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                 view.nativeTraversal && view.nativeGeometry && view.nativeGeometry->perspective;
             triangle.lit = baked && !block.lights.empty();
             const std::array points{a, b, c};
-            for (std::size_t j = 0; j < 3; ++j) {
+            for (auto j : std::views::iota(std::size_t{0}, std::size_t{3})) {
                 const auto x = UInt32(points[j].x), y = UInt32(points[j].y);
                 auto& v = triangle.vertices[j];
                 v.position = {Flt32(t.bx + x) * square, Flt32(t.by + y) * square, height(t, x, y)};
@@ -621,7 +772,7 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                 return {};
             }
             if (composite) {
-                const auto& bitmap = *resources.materials.textures[drawMaterial];
+                const auto& bitmap = *resources.materials.textures()[drawMaterial];
                 auto pixels = std::min(view.texturePixels, UInt32(bitmap.width) * t.size);
                 if (view.nativeTextures) {
                     const auto distance = [&](UInt32 x, UInt32 y) {
@@ -725,11 +876,13 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                     if (textureBytes > 64U * 1024U * 1024U || textures.size() == 4096) {
                         return {};
                     }
-                    const auto index = UInt32(result.materials.list.materials.size());
+                    if (!materialData)
+                        materialData = resources.materials.data();
+                    const auto index = UInt32(materialData->list.materials.size());
                     TsMaterial material;
                     material.flags = 0x103;
-                    result.materials.list.materials.push_back(material);
-                    result.materials.textures.push_back(tile->texture);
+                    materialData->list.materials.push_back(material);
+                    materialData->textures.push_back(tile->texture);
                     at = textures.emplace(key, DrawTexture{index, std::move(*tile)}).first;
                 }
                 drawMaterial = at->second.material;
@@ -773,24 +926,18 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                 std::optional<UInt32> previous;
                 const auto visit = [&](UInt32 coordinate) {
                     spend(work);
-                    if (!view.nativeTraversal ||
-                        ((coordinate == lo || coordinate == hi || coordinate == (lo + hi) / 2) &&
-                         nativePoints.contains(verticalEdge ? std::pair{fixed, coordinate}
-                                                            : std::pair{coordinate, fixed}))) {
-                        // Delay one point so the last corner remains the next
-                        // edge's first corner, in either traversal direction.
-                        if (previous) {
-                            boundary.push_back(
-                                verticalEdge
-                                    ? Point2I{Int32(fixed - t.bx), Int32(*previous - t.by)}
-                                    : Point2I{Int32(*previous - t.bx), Int32(fixed - t.by)});
-                        }
-                        previous = coordinate;
+                    // Delay one point so the last corner remains the next
+                    // edge's first corner, in either traversal direction.
+                    if (previous) {
+                        boundary.push_back(
+                            verticalEdge ? Point2I{Int32(fixed - t.bx), Int32(*previous - t.by)}
+                                         : Point2I{Int32(*previous - t.bx), Int32(fixed - t.by)});
                     }
+                    previous = coordinate;
                 };
                 if (reverse) {
-                    for (auto at = values.rbegin(); at != values.rend(); ++at) {
-                        visit(at->second);
+                    for (auto value : std::views::reverse(values)) {
+                        visit(value.second);
                     }
                 } else {
                     for (const auto& point : values) {
@@ -798,10 +945,12 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                     }
                 }
             };
-            edge(vertical, x, y, y + s, false, true);
-            edge(horizontal, y + s, x, x + s, false, false);
-            edge(vertical, x + s, y, y + s, true, true);
-            edge(horizontal, y, x, x + s, true, false);
+            if (!view.nativeTraversal) {
+                edge(vertical, x, y, y + s, false, true);
+                edge(horizontal, y + s, x, x + s, false, false);
+                edge(vertical, x + s, y, y + s, true, true);
+                edge(horizontal, y, x, x + s, true, false);
+            }
             const auto point = [&](UInt32 xx, UInt32 yy) {
                 return Point2I{Int32(t.x + xx), Int32(t.y + yy)};
             };
@@ -813,33 +962,83 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                                   point(s, s / 2),
                                   point(s, 0),
                                   point(s / 2, 0)};
-            if (geometry && std::ranges::all_of(boundary, [&](const auto& p) {
-                    return std::ranges::find(ring, p) != ring.end();
-                })) {
+            UInt32 midpointMask{};
+            // Native transformCross already records every reached edge point,
+            // including points introduced before a clipped child is rejected.
+            // Corners are always reached; only four midpoint memberships affect
+            // the stitch template. No sorted edge lists are needed on this path.
+            if (view.nativeTraversal && s > 1) {
+                for (UInt32 j = 1; j < ring.size(); j += 2) {
+                    if (nativePoints.contains({t.bx + UInt32(ring[j].x), t.by + UInt32(ring[j].y)}))
+                        midpointMask |= 1U << (j / 2);
+                }
+            }
+            const bool nativeBoundary =
+                view.nativeTraversal ||
+                (geometry && std::ranges::all_of(boundary, [&](const auto& p) {
+                     const auto found = std::ranges::find(ring, p);
+                     if (found == ring.end())
+                         return false;
+                     const auto index = UInt32(found - ring.begin());
+                     if (s > 1 && (index & 1U))
+                         midpointMask |= 1U << (index / 2);
+                     return true;
+                 }));
+            if (nativeBoundary) {
                 // Original PolyList/FaceList triangulate the two authored
                 // half-squares using only corners and reached edge midpoints.
                 // Conservative material/pin refinement can introduce additional
                 // edge points; those retain the general stitch fan below.
-                const auto split = ((t.x / s) ^ (t.y / s)) & 1U;
-                for (const auto start : split ? std::array{6U, 2U} : std::array{0U, 4U}) {
-                    const auto a = ring[start], b = ring[(start + 1) & 7U],
-                               c = ring[(start + 2) & 7U], d = ring[(start + 3) & 7U],
-                               e = ring[(start + 4) & 7U];
-                    const bool left = s > 1 && std::ranges::find(boundary, b) != boundary.end(),
-                               top = s > 1 && std::ranges::find(boundary, d) != boundary.end();
-                    if (left && top) {
-                        if (!emit(t, a, d, e) || !emit(t, a, b, d) || !emit(t, b, c, d)) {
-                            return {};
-                        }
-                    } else if (left) {
-                        if (!emit(t, a, b, e) || !emit(t, b, c, e)) {
-                            return {};
-                        }
-                    } else if (top) {
-                        if (!emit(t, a, c, d) || !emit(t, a, d, e)) {
-                            return {};
-                        }
-                    } else if (!emit(t, a, c, e)) {
+                const auto key = midpointMask | ((((t.x / s) ^ (t.y / s)) & 1U) << 4);
+                const auto& topology = nativeTopologies[key];
+                // Keep the native first-writer inputs even when the introducing
+                // vertex belongs to a neighbouring block with a different seam.
+                if (patches && composite && (drawMap || !baked || block.lights.empty())) {
+                    if (topology.count / 3 > 1'048'576 - patches->triangles)
+                        return {};
+                    TerrainPatch patch;
+                    patch.topology = hardwareTopologies()[key];
+                    patch.topologyKey = key;
+                    patch.origin = {Flt32(x) * square, Flt32(y) * square, 0};
+                    patch.extent = Flt32(s) * square;
+                    patch.material = drawMaterial;
+                    patch.firstTriangle = patches->triangles;
+                    patch.lightMap = drawMap;
+                    patch.mapOrigin = mapOrigin;
+                    patch.mapScale = mapScale;
+                    for (auto j : std::views::iota(UInt32{0}, UInt32{8})) {
+                        // Unreached midpoints are not referenced by the topology.
+                        const auto p =
+                            std::pair{t.bx + UInt32(ring[j].x), t.by + UInt32(ring[j].y)};
+                        if (const auto at = nativePoints.find(p); at != nativePoints.end())
+                            patch.heights[j] = at->second.inputs;
+                    }
+                    patches->triangles += topology.count / 3;
+                    patches->patches.push_back(std::move(patch));
+                    Flt32 minimum = std::numeric_limits<Flt32>::max(), maximum = -minimum;
+                    for (auto j :
+                         std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 j) {
+                             return j < topology.count;
+                         })) {
+                        const auto& v = patches->patches.back().heights[topology.indices[j]];
+                        minimum = std::min({minimum, v[0], v[1]});
+                        maximum = std::max({maximum, v[0], v[1]});
+                    }
+                    const Point3F low{Flt32(x) * square, Flt32(y) * square, minimum},
+                        high{Flt32(x + s) * square, Flt32(y + s) * square, maximum};
+                    if (patches->patches.size() == 1)
+                        result.bounds = {low, high};
+                    else {
+                        result.bounds.fMin.setMin(low);
+                        result.bounds.fMax.setMax(high);
+                    }
+                    continue;
+                }
+                for (UInt32 i = 0; i < topology.count; i += 3) {
+                    if (!emit(t,
+                              ring[topology.indices[i]],
+                              ring[topology.indices[i + 1]],
+                              ring[topology.indices[i + 2]])) {
                         return {};
                     }
                 }
@@ -858,17 +1057,26 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                 if (view.nativeTraversal) {
                     return {};
                 } // strict native traversal must use the original corner/midpoint templates
-                for (std::size_t i = 0; i < boundary.size(); ++i) {
+                for (auto i : std::views::iota(std::size_t{0}, boundary.size())) {
                     if (!emit(t, center, boundary[i], boundary[(i + 1) % boundary.size()])) {
                         return {};
                     }
                 }
             }
         }
-        if (!textures.empty()) {
-            result.materials.list.details = 1;
-            result.materials.list.materialsPerDetail =
-                Int32(result.materials.list.materials.size());
+        // The native compact policy only admits compatible composite patches.
+        // A mixed/custom material keeps the complete projected representation.
+        if (patches && !result.triangles.empty()) {
+            auto projected = view;
+            projected.retainedPatches = false;
+            return terrainLod(resources, projected, baked, region, cache, state, scene);
+        } else if (patches) {
+            result.terrainPatches = std::move(patches);
+        }
+        if (materialData) {
+            materialData->list.details = 1;
+            materialData->list.materialsPerDetail = Int32(materialData->list.materials.size());
+            result.materials = TsMaterialResources(std::move(*materialData));
         }
         if (state) {
             state->split_.swap(nextSplit);

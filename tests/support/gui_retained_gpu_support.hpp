@@ -1,5 +1,6 @@
 #pragma once
 #include "test_support.hpp"
+#include <ranges>
 #include <opent1/gfx/software_rasterizer.hpp>
 #ifdef OPENT1_GUI_RETAINED_GPU
 #include <opent1/gfx/sdl_gpu_surface.hpp>
@@ -24,7 +25,7 @@ inline void retainedGuiGpu(std::span<const std::shared_ptr<const gfx::Bitmap>> f
     auto surface = gfx::SdlGpuSurface::create(window, config.width, config.height, gpu);
     CHECK(surface);
     gfx::Palette palette;
-    for (UInt32 i = 0; i < 256; ++i) {
+    for (auto i : std::views::iota(UInt32{0}, UInt32{256})) {
         palette.palettes[0].colors[i] = {UInt8(i), UInt8(255 - i), UInt8(i * 3), 0};
     }
     std::vector<std::byte> last;

@@ -158,8 +158,8 @@ Int32 Mine::getDamageId() const noexcept {
         return 0;
     }
     if (auto* pPM = PlayerManager::get(getManager())) {
-        if (const auto* pCR = pPM->findClient(throwerClientId_)) {
-            if (pCR->loginStatus == throwerClientLoginId_) {
+        if (const auto* pCR = pPM->findBaseRep(throwerClientId_)) {
+            if (pCR->loginId == throwerClientLoginId_) {
                 return throwerClientId_;
             }
         }

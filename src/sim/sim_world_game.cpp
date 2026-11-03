@@ -710,7 +710,7 @@ bool SimGame::setTimeScale(double scale) {
     return true;
 }
 
-void SimGame::frame(double wallTime) {
+void SimGame::frame(double wallTime, bool renderCanvases) {
     if (switching_) {
         throw std::logic_error("cannot drive a game during world/focus replacement");
     }
@@ -743,11 +743,13 @@ void SimGame::frame(double wallTime) {
             });
         }
         setPluginManagers(manager());
-        std::ranges::for_each(worlds_, [](const auto& world) {
-            if (world) {
-                world->render();
-            }
-        });
+        if (renderCanvases) {
+            std::ranges::for_each(worlds_, [](const auto& world) {
+                if (world) {
+                    world->render();
+                }
+            });
+        }
         visit([](auto& plugin) {
             plugin.endFrame();
         });

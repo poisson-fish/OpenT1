@@ -1,4 +1,5 @@
 #include <opent1/game/hud_controls.hpp>
+#include <ranges>
 
 #include <limits>
 
@@ -36,7 +37,7 @@ nearestPaletteIndex(const gfx::Palette& pal, UInt8 r, UInt8 g, UInt8 b) noexcept
     const auto& colors = pal.palettes.front().colors;
     UInt32 bestDist = std::numeric_limits<UInt32>::max();
     UInt8 bestIdx = 0;
-    for (std::size_t i = 0; i < colors.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, colors.size())) {
         const Int32 dr = static_cast<Int32>(colors[i].red) - static_cast<Int32>(r);
         const Int32 dg = static_cast<Int32>(colors[i].green) - static_cast<Int32>(g);
         const Int32 db = static_cast<Int32>(colors[i].blue) - static_cast<Int32>(b);

@@ -41,12 +41,12 @@ std::optional<TerrainGeometryTable> terrainGeometryDetails(Int32 scale,
     return result;
 }
 
-std::optional<Flt32> morphTerrainHeight(const TerrainGridBlock& block,
-                                        UInt32 x,
-                                        UInt32 y,
-                                        UInt32 level,
-                                        Flt32 distance,
-                                        const TerrainGeometryDetail& d) {
+std::optional<std::array<Flt32, 4>> terrainMorphInputs(const TerrainGridBlock& block,
+                                                       UInt32 x,
+                                                       UInt32 y,
+                                                       UInt32 level,
+                                                       Flt32 distance,
+                                                       const TerrainGeometryDetail& d) {
     const auto n = block.width;
     if (!std::has_single_bit(n) || n > 1024 || level > 7 || (1U << level) > n || x > n || y > n ||
         (x % (1U << level)) || (y % (1U << level)) ||
@@ -66,7 +66,7 @@ std::optional<Flt32> morphTerrainHeight(const TerrainGridBlock& block,
     }
     if (distance <= d.minDistance ||
         (!pins.empty() && (std::to_integer<UInt32>(pins[at >> 3]) & (1U << (at & 7))))) {
-        return h;
+        return std::array{h, h, 0.f, distance};
     }
     const auto step = 1U << level, px = x >> level, py = y >> level;
     Int32 dx{}, dy{};
@@ -82,7 +82,7 @@ std::optional<Flt32> morphTerrainHeight(const TerrainGridBlock& block,
             dy = Int32(step);
             break;
         default:
-            return h;
+            return std::array{h, h, 0.f, distance};
     }
     const auto ax = Int32(x) + dx, ay = Int32(y) + dy, bx = Int32(x) - dx, by = Int32(y) - dy;
     if (ax < 0 || ay < 0 || bx < 0 || by < 0 || ax > Int32(n) || ay > Int32(n) || bx > Int32(n) ||
@@ -95,6 +95,19 @@ std::optional<Flt32> morphTerrainHeight(const TerrainGridBlock& block,
         return {};
     }
     const auto target = (a + b) * .5f, frac = (distance - d.minDistance) * d.distanceScale;
-    return frac >= 1.f ? target : h + (target - h) * frac;
+    return std::array{h, target, frac, distance};
+}
+
+std::optional<Flt32> morphTerrainHeight(const TerrainGridBlock& block,
+                                        UInt32 x,
+                                        UInt32 y,
+                                        UInt32 level,
+                                        Flt32 distance,
+                                        const TerrainGeometryDetail& detail) {
+    const auto inputs = terrainMorphInputs(block, x, y, level, distance, detail);
+    if (!inputs)
+        return {};
+    const auto& v = *inputs;
+    return v[2] >= 1.f ? v[1] : v[0] + (v[1] - v[0]) * v[2];
 }
 } // namespace opent1::world

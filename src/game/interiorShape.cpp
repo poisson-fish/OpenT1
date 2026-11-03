@@ -1,4 +1,5 @@
 #include <opent1/game/interior_shape.hpp>
+#include <ranges>
 #include <opent1/game/string_table.hpp>
 #include <opent1/sim/sim_world_game.hpp>
 
@@ -99,12 +100,18 @@ void InteriorShape::setLightAnimParams(std::vector<LightAnimParam> params) {
 void InteriorShape::setShapeResources(std::shared_ptr<world::InteriorShapeResources> res) {
     shapeResources_ = std::move(res);
     cachedSurfaceMesh_.reset();
+    cachedLightSlots_.clear();
+    visibleSource_.reset();
+    visibleMesh_.reset();
+    visibleSurfaces_.clear();
     collisionImage_.reset();
     checkVals_.clear();
     if (shapeResources_ && shapeResources_->shape) {
         const auto& shape = *shapeResources_->shape;
         for (const auto& state : shape.states) {
-            for (UInt32 i = 0; i < state.lodCount; ++i) {
+            for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                              return i < state.lodCount;
+                          })) {
                 const std::size_t lodIdx = static_cast<std::size_t>(state.firstLod + i);
                 if (lodIdx < shapeResources_->geometry.size() &&
                     shapeResources_->geometry[lodIdx]) {
@@ -120,7 +127,7 @@ void InteriorShape::setShapeResources(std::shared_ptr<world::InteriorShapeResour
             }
             if (collPtr) {
                 std::vector<sim::SimCollisionMaterial> materials;
-                for (const auto& material : shapeResources_->materials.list.materials) {
+                for (const auto& material : shapeResources_->materials.list().materials) {
                     materials.push_back(
                         {material.friction, material.elasticity, material.surfaceType});
                 }
@@ -225,7 +232,7 @@ Box3F InteriorShape::buildContainerBox(const TMat3F& in_rMat) const {
     Point3F firstPoint{};
     m_mul(itrSpaceBBox.fMin, in_rMat, firstPoint);
     Box3F wsBox{firstPoint, firstPoint};
-    for (Int32 i = 0; i < 8; ++i) {
+    for (auto i : std::views::iota(Int32{0}, Int32{8})) {
         const Point3F osPoint((i & 1) ? itrSpaceBBox.fMin.x : itrSpaceBBox.fMax.x,
                               (i & 2) ? itrSpaceBBox.fMin.y : itrSpaceBBox.fMax.y,
                               (i & 4) ? itrSpaceBBox.fMin.z : itrSpaceBBox.fMax.z);
@@ -418,9 +425,6 @@ void InteriorShape::clientProcess(UInt32 curTime) {
         const Flt32 floatStep = static_cast<Flt32>(timeStep * 67U) / 1000.0f;
         if (lightPlayer_) {
             lightPlayer_->advance(floatStep);
-            if (!std::ranges::equal(lightPlayer_->slots(), cachedLightSlots_)) {
-                cachedSurfaceMesh_.reset();
-            }
         }
     }
 }
@@ -467,6 +471,15 @@ bool InteriorShape::processQuery(sim::SimQuery& query) {
         return true;
     }
     if (auto* wsq = dynamic_cast<world::WorldSurfaceQuery*>(&query)) {
+        if (wsq->trimCaches) {
+            cachedSurfaceMesh_.reset();
+            cachedLightSlots_.clear();
+            visibleSource_.reset();
+            visibleMesh_.reset();
+            visibleSurfaces_.clear();
+            wsq->image.reset();
+            return true;
+        }
         if (destroyed_) {
             return false;
         }
@@ -474,20 +487,27 @@ bool InteriorShape::processQuery(sim::SimQuery& query) {
             wsq->failed = true;
             return true;
         }
-        if (!cachedSurfaceMesh_) {
+        if (!cachedSurfaceMesh_ || lightMapsInvalidated_ ||
+            (lightPlayer_ && !std::ranges::equal(lightPlayer_->slots(), cachedLightSlots_))) {
             world::InteriorSurfaceLighting lighting;
+            lighting.previous = cachedSurfaceMesh_.get();
+            lighting.refreshMaps = lightMapsInvalidated_;
             lighting.seconds = static_cast<Flt32>(lastUpdatedTime_) * 0.001f;
             if (lightPlayer_) {
                 lighting.slots = lightPlayer_->slots();
             }
             if (auto mesh =
                     world::WorldSurfaceMesh::interior(*shapeResources_, 0, 0, true, lighting)) {
+                lightMapsInvalidated_ = false;
                 cachedSurfaceMesh_ =
                     std::make_shared<const world::WorldSurfaceMesh>(std::move(*mesh));
                 cachedLightSlots_ =
                     lightPlayer_ ? std::vector<world::InteriorLightSlot>(
                                        lightPlayer_->slots().begin(), lightPlayer_->slots().end())
                                  : std::vector<world::InteriorLightSlot>{};
+            } else {
+                wsq->failed = true;
+                return true;
             }
         }
         if (!cachedSurfaceMesh_) {
@@ -599,7 +619,9 @@ bool InteriorShape::readCheckVals(BitStream& stream, std::vector<UInt32>& outVal
         return false;
     }
     outVals.resize(static_cast<std::size_t>(size));
-    for (UInt32 i = 0; i < size; ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < size;
+                  })) {
         UInt32 val = 0;
         if (!stream.read(val)) {
             return false;

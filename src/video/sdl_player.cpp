@@ -1,4 +1,5 @@
 #include <opent1/video/sdl_player.hpp>
+#include <ranges>
 #include <algorithm>
 #include <stdexcept>
 
@@ -29,7 +30,7 @@ bool SdlOutput::publish(const Presentation& next) {
     try {
         std::array<std::shared_ptr<audio::QueuedSource>, 7> staged;
         if (next.refreshAudio) {
-            for (std::size_t t = 0; t < 7; ++t) {
+            for (auto t : std::views::iota(std::size_t{0}, std::size_t{7})) {
                 const auto& pcm = next.audio[t];
                 if (pcm.bytes.empty()) {
                     continue;

@@ -1,4 +1,5 @@
 #include <opent1/game/marker.hpp>
+#include <ranges>
 #include <opent1/game/string_table.hpp>
 #include <opent1/sim/sim_world_game.hpp>
 
@@ -89,12 +90,16 @@ bool Marker::processArguments(std::span<const std::string> args) {
     Point3F pos{0.0f, 0.0f, 0.0f};
     Point3F rot{0.0f, 0.0f, 0.0f};
     if (args.size() > 1) {
-        for (std::size_t i = 0; i < args.size() - 1 && i < 3; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < args.size() - 1 && i < 3;
+                      })) {
             pos[i] = parseFloatArg(args[i + 1]);
         }
     }
     if (args.size() > 4) {
-        for (std::size_t i = 0; i < args.size() - 4 && i < 3; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < args.size() - 4 && i < 3;
+                      })) {
             rot[i] = parseFloatArg(args[i + 4]);
         }
     }

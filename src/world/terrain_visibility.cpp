@@ -34,13 +34,13 @@ bool finite(Flt32 v) {
 }
 
 bool rotation(const RMat3F& m) {
-    for (std::size_t i = 0; i < 3; ++i) {
-        for (std::size_t j = 0; j < 3; ++j) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
+        for (auto j : std::views::iota(std::size_t{0}, std::size_t{3})) {
             if (!finite(m.m[i][j])) {
                 return false;
             }
             Flt32 dot{};
-            for (std::size_t k = 0; k < 3; ++k) {
+            for (auto k : std::views::iota(std::size_t{0}, std::size_t{3})) {
                 dot += m.m[i][k] * m.m[j][k];
             }
             if (std::abs(dot - (i == j ? 1.f : 0.f)) > 1e-4f) {
@@ -82,7 +82,7 @@ bool rasterize(std::span<const Point2I> polygon, TerrainVisibilityTable& table) 
         return false;
     }
     const auto next = [&](std::size_t& a, std::size_t& b, Int32 y, bool left) {
-        for (std::size_t visits = 0; visits < polygon.size(); ++visits) {
+        for ([[maybe_unused]] auto visits : std::views::iota(std::size_t{0}, polygon.size())) {
             if (polygon[b].y > y) {
                 return true;
             }
@@ -144,7 +144,9 @@ std::optional<TerrainVisibility> terrainVisibility(Int32 scale,
     }
     TerrainVisibility result;
     result.scanLevel = scanLevel;
-    for (UInt32 level = 0; level <= scanLevel; ++level) {
+    for (auto level : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 level) {
+                          return level <= scanLevel;
+                      })) {
         result.tables[level].camera = {Int32(camera.x) >> (UInt32(scale) + level),
                                        Int32(camera.y) >> (UInt32(scale) + level)};
     }
@@ -225,7 +227,9 @@ std::optional<TerrainVisibility> terrainVisibility(Int32 scale,
     if (!rasterize(polygon, result.tables[0])) {
         return {};
     }
-    for (UInt32 level = 1; level <= scanLevel; ++level) {
+    for (auto level : std::views::iota(UInt32{1}) | std::views::take_while([&](UInt32 level) {
+                          return level <= scanLevel;
+                      })) {
         const auto& previous = result.tables[level - 1];
         auto& table = result.tables[level];
         if (previous.rows.empty()) {
@@ -235,7 +239,9 @@ std::optional<TerrainVisibility> terrainVisibility(Int32 scale,
                              previous.camera.y - table.camera.y * 2};
         table.startY = (previous.startY + offset.y) >> 1;
         const auto end = (previous.startY + offset.y + Int32(previous.rows.size()) - 1) >> 1;
-        for (auto y = table.startY; y <= end; ++y) {
+        for (auto y : std::views::iota(table.startY) | std::views::take_while([&](auto y) {
+                          return y <= end;
+                      })) {
             const auto row = y * 2 - previous.startY - offset.y;
             auto span = previous.rows[std::size_t(std::max(row, 0))];
             if (row >= 0 && row + 1 < Int32(previous.rows.size())) {

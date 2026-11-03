@@ -1,4 +1,5 @@
 #include "terrain_scene_lighting.hpp"
+#include <ranges>
 #include <bit>
 #include <cmath>
 
@@ -157,7 +158,9 @@ std::optional<std::vector<PointLightRegion>> pointLightRegions(const TerrainGrid
     }
     const auto square = Int32(1U << scale);
     const auto n = block.width;
-    for (UInt32 i = 0; i < scene.lights.size(); ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < scene.lights.size();
+                  })) {
         if (!spend(work, 1)) {
             return {};
         }
@@ -189,7 +192,9 @@ std::optional<std::vector<PointLightRegion>> pointLightRegions(const TerrainGrid
             continue;
         }
         Flt32 lowest = 1e8f, highest = -lowest;
-        for (auto yy = y0; yy <= y1; ++yy) {
+        for (auto yy : std::views::iota(y0) | std::views::take_while([&](auto yy) {
+                           return yy <= y1;
+                       })) {
             if (!spend(work, std::size_t(x1 - x0 + 1))) {
                 return {};
             }
@@ -227,6 +232,7 @@ mergePointLights(const TerrainGridBlock& block,
     }
     const auto bits = UInt32(std::countr_zero(rate)), mask = rate - 1;
     auto result = std::make_shared<gfx::LightMap>(base);
+    result->dynamic = true;
     for (const auto& region : regions) {
         const auto& light = scene.lights[region.source];
         auto loc = light.position - origin;
@@ -262,7 +268,9 @@ mergePointLights(const TerrainGridBlock& block,
         SquareStepper startX, stepY, zStep, lastZ;
         startX.init(loc.x - Flt32(region.x0) * Flt32(1U << scale), gridStep);
         auto dy = stepY.init(loc.y - Flt32(region.y0) * Flt32(1U << scale), gridStep);
-        for (UInt32 yy = 0; yy <= stepsY; ++yy) {
+        for (auto yy : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 yy) {
+                           return yy <= stepsY;
+                       })) {
             if (mask) {
                 if (yy & mask) {
                     std::ranges::for_each(std::views::iota(0U, columns), [&](UInt32 c) {
@@ -284,7 +292,9 @@ mergePointLights(const TerrainGridBlock& block,
             }
             auto stepX = startX;
             auto dx = stepX.value;
-            for (UInt32 xx = 0; xx <= stepsX; ++xx) {
+            for (auto xx : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 xx) {
+                               return xx <= stepsX;
+                           })) {
                 Flt32 dz{};
                 if (mask) {
                     if (xx & mask) {

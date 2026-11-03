@@ -1,5 +1,6 @@
 #pragma once
 #include <opent1/world/world_surfaces.hpp>
+#include <ranges>
 #include <cmath>
 #include <bit>
 
@@ -128,7 +129,9 @@ inline bool intersects(const Selection& selection, UInt32 x, UInt32 y, UInt32 wi
     const auto lo = std::max(Int64(y >> level) - table.camera.y, Int64(table.startY));
     const auto hi = std::min(Int64((y + width - 1) >> level) - table.camera.y,
                              Int64(table.startY) + Int64(table.rows.size()) - 1);
-    for (auto row = lo; row <= hi; ++row) {
+    for (auto row : std::views::iota(lo) | std::views::take_while([&](auto row) {
+                        return row <= hi;
+                    })) {
         const auto& span = table.rows[std::size_t(row - table.startY)];
         if (Int64(x >> level) - table.camera.x <= span.maximum &&
             Int64((x + width - 1) >> level) - table.camera.x >= span.minimum) {

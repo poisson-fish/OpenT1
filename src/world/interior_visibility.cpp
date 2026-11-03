@@ -167,7 +167,7 @@ std::optional<InteriorVisibility> InteriorGeometry::visibility(Point3F camera,
                 }
             }
         }
-        for (std::size_t i = 0; i < planeSet.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, planeSet.size())) {
             if (!planeSet[i]) {
                 continue;
             }
@@ -177,7 +177,9 @@ std::optional<InteriorVisibility> InteriorGeometry::visibility(Point3F camera,
             }
             planeSet[i] = inside(planes[i], camera);
         }
-        for (std::size_t i = 0; i < surfaceSet.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < surfaceSet.size();
+                      })) {
             if (!surfaceSet[i]) {
                 continue;
             }

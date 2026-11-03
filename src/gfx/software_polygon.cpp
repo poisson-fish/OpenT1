@@ -1,4 +1,5 @@
 #include <opent1/gfx/software_rasterizer.hpp>
+#include <ranges>
 #include <opent1/gfx/render_limits.hpp>
 #include <opent1/gfx/texture_cache.hpp>
 #include "software_float.hpp"
@@ -130,7 +131,9 @@ bool buildSpans(std::span<const PolygonVertex> vertices, RectI clip, std::vector
     std::vector<Edge> edges;
     edges.reserve(vertices.size());
     Int32 firstY = clip.bottom + 1, lastY = clip.top;
-    for (std::size_t i = 0; i < vertices.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < vertices.size();
+                  })) {
         auto a = vertices[i].position, b = vertices[(i + 1) % vertices.size()].position;
         const bool left = a.y > b.y;
         if (left) {
@@ -151,7 +154,10 @@ bool buildSpans(std::span<const PolygonVertex> vertices, RectI clip, std::vector
         firstY = std::min(firstY, std::max(first, clip.top));
         lastY = std::max(lastY, std::min(last, clip.bottom + 1));
     }
-    for (Int32 y = firstY; y < lastY; ++y) {
+    for (auto y :
+         std::views::iota(static_cast<Int32>(firstY)) | std::views::take_while([&](Int32 y) {
+             return y < lastY;
+         })) {
         Int64 left = 0, right = 0;
         bool hasLeft = false, hasRight = false;
         for (const auto& edge : edges) {
@@ -334,7 +340,9 @@ bool perspectiveSpans(const std::vector<Span>& rows,
                 WrappedUV uv(span, texture, constantLight);
                 // Preserve wrapping carries and UVWCTR's zero-at-subspan-end
                 // early exit even when that texel is outside the current clip.
-                for (Int32 i = 0; i < length; ++i) {
+                for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                                  return i < length;
+                              })) {
                     if (i == advance) {
                         span.u = uv.u;
                         span.v = uv.v;
@@ -462,12 +470,12 @@ bool SoftwareSurface::polygonSpans(std::span<const PolygonVertex> vertices,
     // Reject nonconvex and self-intersecting input, including a star polygon
     // whose consecutive cross products alone could all have the same sign.
     double area = 0;
-    for (std::size_t i = 0; i < vertices.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, vertices.size())) {
         const auto a = vertices[i].position, b = vertices[(i + 1) % vertices.size()].position;
         area += (double(a.x) - b.x) * (double(a.y) + b.y);
     }
     const double sign = area >= 0 ? 1 : -1;
-    for (std::size_t i = 0; i < vertices.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, vertices.size())) {
         if (area != 0 && std::ranges::any_of(vertices.subspan(i + 1), [&](const auto& v) {
                 return v.position.x == vertices[i].position.x &&
                        v.position.y == vertices[i].position.y;
@@ -523,7 +531,9 @@ bool SoftwareSurface::polygonSpans(std::span<const PolygonVertex> vertices,
     const auto primitiveCount = fan ? vertices.size() - 2 : 1;
     std::vector<Primitive> primitives;
     primitives.reserve(primitiveCount);
-    for (std::size_t i = 0; i < primitiveCount; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < primitiveCount;
+                  })) {
         const std::array<PolygonVertex, 3> triangle{
             vertices[0], vertices[fan ? i + 1 : 1], vertices[fan ? i + 2 : 2]};
         const std::span<const PolygonVertex> polygon =
@@ -535,7 +545,7 @@ bool SoftwareSurface::polygonSpans(std::span<const PolygonVertex> vertices,
         if (material.lightMap) {
             const auto values = [&](bool vertical) {
                 std::array<Float, 3> result{};
-                for (std::size_t j = 0; j < 3; ++j) {
+                for (auto j : std::views::iota(std::size_t{0}, std::size_t{3})) {
                     result[j] = Float(vertical ? polygon[j].lightMap.y : polygon[j].lightMap.x) *
                                 (material.perspective ? polygon[j].inverseDepth : 1.f);
                 }
@@ -597,7 +607,7 @@ bool SoftwareSurface::polygonSpans(std::span<const PolygonVertex> vertices,
         }
         if (vertexShade || vertexHaze) {
             std::array<Float, 3> values{};
-            for (std::size_t j = 0; j < 3; ++j) {
+            for (auto j : std::views::iota(std::size_t{0}, std::size_t{3})) {
                 const auto& vertex = polygon[j];
                 values[j] = vertexHaze
                                 ? Float(vertex.haze)
@@ -696,7 +706,10 @@ bool SoftwareSurface::polygonSpans(std::span<const PolygonVertex> vertices,
                 }
             }
             if (vertexShade || vertexHaze) {
-                for (Int64 offset = 0; offset <= steps; ++offset) {
+                for (auto offset :
+                     std::views::iota(Int64{0}) | std::views::take_while([&](Int64 offset) {
+                         return offset <= steps;
+                     })) {
                     const auto level = shadeAt(span,
                                                primitive.ds,
                                                UInt32(advance + offset) + shadePrestep,
@@ -724,7 +737,10 @@ bool SoftwareSurface::polygonSpans(std::span<const PolygonVertex> vertices,
     for (const auto& primitive : primitives) {
         for (auto span : primitive.spans) {
             auto row = bitmap_.row(span.y);
-            for (Int32 x = span.left; x < span.right; ++x) {
+            for (auto x : std::views::iota(static_cast<Int32>(span.left)) |
+                              std::views::take_while([&](Int32 x) {
+                                  return x < span.right;
+                              })) {
                 if (span.omitLast && x == span.originRight - 1) {
                     continue;
                 }
@@ -820,7 +836,9 @@ bool SoftwareSurface::sortedPolygons(std::span<const SortedPolygon> polygons, De
         if (count > maxPrimitives - inputs.size()) {
             return false;
         }
-        for (std::size_t i = 0; i < count; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < count;
+                      })) {
             Input input{{}, {}, material, polygon.alwaysBehind};
             if (fan) {
                 input.vertices = {vertices[0], vertices[i + 1], vertices[i + 2]};
@@ -857,7 +875,7 @@ bool SoftwareSurface::sortedPolygons(std::span<const SortedPolygon> polygons, De
     std::size_t cursor = 0, spanCount = 0;
     // sortVisibility returns opaque primitives first, then transparent ones.
     for (const bool transparent : {false, true}) {
-        for (std::size_t i = 0; i < inputs.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, inputs.size())) {
             const auto& input = inputs[i];
             if ((input.material.transparent || input.material.blend) != transparent) {
                 continue;

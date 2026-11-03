@@ -518,7 +518,6 @@ public:
 private:
     std::vector<std::unique_ptr<AIObj>> aiList_{};
     AIGraph graph_{};
-    Int32 nextAiClientId_{2176};
     Int32 corpseCounter_{0};
     std::vector<CallbackRecord> callbackHistory_{};
     std::vector<CallbackRecord> pendingCallbacks_{};

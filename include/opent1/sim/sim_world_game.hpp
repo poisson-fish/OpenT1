@@ -91,7 +91,7 @@ struct SimLight {
     Flt32 range{1};
     Point3F attenuation{1, 0, 0};
     Flt32 shadowAttenuation{1};
-    std::optional<gfx::DirectionalShadowMap> shadowMap{};
+    std::shared_ptr<const gfx::DirectionalShadowMap> shadowMap{};
 };
 
 struct SimLightQuery : SimQuery {
@@ -427,7 +427,9 @@ public:
     // Explicit monotonic wall-clock time (seconds), suitable for SDL callbacks
     // and deterministic replay. Paused scales (zero) retain event delays.
     bool setTimeScale(double);
-    void frame(double wallTime);
+    // Hosts which render after simulation/audio can skip the automatic canvas
+    // pass. Explicit script redraws still execute while advancing the world.
+    void frame(double wallTime, bool renderCanvases = true);
 
     [[nodiscard]] double simulationTime() const {
         return simTime_;

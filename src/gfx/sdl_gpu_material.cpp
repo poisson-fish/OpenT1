@@ -164,7 +164,7 @@ struct DrawState {
     SDL_GPUBuffer *vertices{}, *indices{};
 
     bool sameSamplers(const DrawState& other) const {
-        for (std::size_t i = 0; i < samplers.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, samplers.size())) {
             if (samplers[i].texture != other.samplers[i].texture ||
                 samplers[i].sampler != other.samplers[i].sampler) {
                 return false;
@@ -646,7 +646,9 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
     }
     const auto vertexBytes = UInt32((batch.vertices().size() + 6) * sizeof(HardwareVertex));
     UInt64 transferBytes = vertexBytes;
-    for (std::size_t i = 0; i < textures.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < textures.size();
+                  })) {
         const auto& t = textures[i];
         const auto add = [&](Int32 tw, Int32 th, UInt32 level, const auto& rgba) {
             const auto offset = align(transferBytes, 512),
@@ -668,7 +670,7 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
             SDL_SetError("Hardware texture upload budget exceeded");
             return nullptr;
         }
-        for (std::size_t j = 0; j < t.mips.size(); ++j) {
+        for (auto j : std::views::iota(std::size_t{0}, t.mips.size())) {
             const auto& mip = t.mips[j];
             if (!add(mip.width, mip.height, UInt32(j + 1), mip.rgba)) {
                 SDL_SetError("Hardware texture upload budget exceeded");
@@ -687,7 +689,9 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
     std::vector<bool> upload;
     std::size_t pendingBytes{};
     UInt64 hits{};
-    for (std::size_t i = 0; i < textures.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < textures.size();
+                  })) {
         const auto& t = textures[i];
         const auto hash = batch.textureHashes()[i];
         auto bytes = t.rgba.size();
@@ -696,8 +700,7 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
         }
         const auto find = [&](const auto& index, auto end) {
             const auto [first, last] = index.equal_range(hash);
-            for (auto it = first; it != last; ++it) {
-                const auto entry = it->second;
+            for (const auto& [key, entry] : std::ranges::subrange(first, last)) {
                 if (&t == entry->source.get() || equal(t, *entry->source)) {
                     return entry;
                 }
@@ -729,11 +732,12 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
     UInt64 reuses{};
     const auto eraseCached = [&](auto entry) {
         const auto [first, last] = textureIndex_.equal_range(entry->hash);
-        for (auto it = first; it != last; ++it) {
-            if (it->second == entry) {
-                textureIndex_.erase(it);
-                break;
-            }
+        const auto found =
+            std::ranges::find(std::ranges::subrange(first, last), entry, [](const auto& item) {
+                return item.second;
+            });
+        if (found != last) {
+            textureIndex_.erase(found);
         }
         stats_.bytes -= entry->bytes;
         --stats_.textures;
@@ -912,7 +916,7 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
         return nullptr;
     }
     std::memset(mapped, 0, std::size_t(transferBytes));
-    for (std::size_t i = 0; i < batch.meshes().size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, batch.meshes().size())) {
         if (batch.meshes()[i].transform.geometry[2] == 1)
             continue; // Filled with the patch's sampling data below.
         const InstanceData instance{batch.meshes()[i].transform};
@@ -949,7 +953,9 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
             if (bindings[t.texture]->slot) {
                 const auto width = t.width - 2, height = t.height - 2;
                 const auto sy = std::clamp(Int32(y) - 1, 0, Int32(height) - 1);
-                for (UInt32 x = 0; x < t.width; ++x) {
+                for (auto x : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 x) {
+                                  return x < t.width;
+                              })) {
                     const auto sx = std::clamp(Int32(x) - 1, 0, Int32(width) - 1);
                     std::memcpy(mapped + t.offset + std::size_t(y) * t.pitch + x * 4,
                                 t.data + (std::size_t(sy) * width + UInt32(sx)) * 4,

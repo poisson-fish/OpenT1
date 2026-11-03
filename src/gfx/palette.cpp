@@ -1,4 +1,5 @@
 #include <opent1/gfx/palette.hpp>
+#include <ranges>
 #include <opent1/core/mem_stream.hpp>
 #include <algorithm>
 #include <cmath>
@@ -318,7 +319,7 @@ bool Palette::buildRemapTables(const PaletteBuildOptions& options) {
             }
             Int32 best = std::numeric_limits<Int32>::max();
             UInt8 result{};
-            for (UInt32 i = 0; i < 256; ++i) {
+            for (auto i : std::views::iota(UInt32{0}, UInt32{256})) {
                 if (!(next.allowedMatches[i / 32] & (0x80000000U >> (i % 32)))) {
                     continue;
                 }
@@ -338,7 +339,7 @@ bool Palette::buildRemapTables(const PaletteBuildOptions& options) {
         const auto interpolate =
             [](std::array<float, 3> color, const std::array<float, 3>& target, float amount) {
                 const float inverse = 1.f - amount;
-                for (std::size_t i = 0; i < 3; ++i) {
+                for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
                     color[i] = color[i] * inverse + target[i] * amount;
                 }
                 return color;
@@ -355,9 +356,14 @@ bool Palette::buildRemapTables(const PaletteBuildOptions& options) {
                 continue;
             }
             if (sub.type == PaletteType::ShadeHaze) {
-                for (UInt32 h = 0; h < UInt32(next.hazeLevels); ++h) {
-                    for (UInt32 s = 0; s < shades; ++s) {
-                        for (UInt32 i = 0; i < 256; ++i) {
+                for (auto h : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 h) {
+                                  return h < UInt32(next.hazeLevels);
+                              })) {
+                    for (auto s :
+                         std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 s) {
+                             return s < shades;
+                         })) {
+                        for (auto i : std::views::iota(UInt32{0}, UInt32{256})) {
                             const auto& c = sub.colors[i];
                             std::array<float, 3> color{float(c.red) / 255.f,
                                                        float(c.green) / 255.f,
@@ -380,8 +386,10 @@ bool Palette::buildRemapTables(const PaletteBuildOptions& options) {
                     }
                 }
                 const auto hazeStart = 256 * std::size_t(shades) * next.hazeLevels;
-                for (UInt32 h = 0; h < shades; ++h) {
-                    for (UInt32 i = 0; i < 256; ++i) {
+                for (auto h : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 h) {
+                                  return h < shades;
+                              })) {
+                    for (auto i : std::views::iota(UInt32{0}, UInt32{256})) {
                         const auto& c = sub.colors[i];
                         std::array<float, 3> color{
                             float(c.red) / 255.f, float(c.green) / 255.f, float(c.blue) / 255.f};
@@ -394,11 +402,11 @@ bool Palette::buildRemapTables(const PaletteBuildOptions& options) {
                     }
                 }
             } else {
-                for (UInt32 dst = 0; dst < 256; ++dst) {
+                for (auto dst : std::views::iota(UInt32{0}, UInt32{256})) {
                     sub.remap[dst] = std::byte(dst);
                 }
-                for (UInt32 src = 1; src < 256; ++src) {
-                    for (UInt32 dst = 0; dst < 256; ++dst) {
+                for (auto src : std::views::iota(UInt32{1}, UInt32{256})) {
+                    for (auto dst : std::views::iota(UInt32{0}, UInt32{256})) {
                         const auto& s = sub.colors[src];
                         const auto& d = next.palettes[0].colors[dst];
                         const auto blend = [&](UInt8 source, UInt8 destination) {
@@ -419,7 +427,7 @@ bool Palette::buildRemapTables(const PaletteBuildOptions& options) {
                     }
                 }
             }
-            for (UInt32 i = 0; i < 256; ++i) {
+            for (auto i : std::views::iota(UInt32{0}, UInt32{256})) {
                 sub.identity[i] = &sub == &next.palettes[0] ? UInt8(i) : match(sub.colors[i]);
                 sub.components[0][i] = float(sub.colors[i].red) / 255.f;
                 sub.components[1][i] = float(sub.colors[i].green) / 255.f;

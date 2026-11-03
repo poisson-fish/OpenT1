@@ -1,4 +1,5 @@
 #include <opent1/audio/audio.hpp>
+#include <ranges>
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -150,7 +151,9 @@ void Runtime::startVoice(Voice& voice) {
     UInt64 readFrame{};
     // Native SFX_BUFFER_LENGTH=2000ms and SFX_TIMER_PERIOD=500ms. Alternating
     // half-second extents also preserve the exact ring size at odd PCM rates.
-    for (std::size_t i = 0; i < buffers.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < buffers.size();
+                  })) {
         const auto end = UInt64(wave.rate) * (i + 1) / 2;
         const auto frames = static_cast<UInt32>(end - readFrame);
         chunks.push_back(frames);
@@ -198,7 +201,9 @@ bool Runtime::serviceStream(Voice& voice) {
             std::vector<std::shared_ptr<const Buffer>> replacements;
             replacements.reserve(processed);
             UInt64 readFrame = voice.readFrame, consumed{};
-            for (UInt32 i = 0; i < processed; ++i) {
+            for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                              return i < processed;
+                          })) {
                 const auto frames = voice.chunks[i];
                 consumed += frames;
                 Wave chunk{wave.channels, wave.bits, wave.rate, {}};
@@ -334,7 +339,9 @@ bool Runtime::present(const Listener& listener,
             ++applied;
         }
     } catch (const std::exception&) {
-        for (std::size_t i = 0; i < applied; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < applied;
+                      })) {
             changes[i].voice->configure(changes[i].previous);
         }
         device_.listener(listener_);

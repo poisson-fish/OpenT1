@@ -1,4 +1,5 @@
 #include <opent1/gui/text_format.hpp>
+#include <ranges>
 #include <charconv>
 #include <cctype>
 
@@ -376,7 +377,9 @@ bool TextFormat::format(std::string_view source, Int32 width) {
                 std::string_view(text).substr(r.start, r.length)));
             ++i;
         } while (i < runs.size() && runs[i].offset.y == y && runs[i].justification == just);
-        for (auto j = begin; j < i; ++j) {
+        for (auto j : std::views::iota(begin) | std::views::take_while([&](auto j) {
+                          return j < i;
+                      })) {
             runs[j].offset.x += (runs[j].lineWidth - total) / (just == 1 ? 2 : 1);
         }
     }
@@ -391,7 +394,9 @@ bool TextFormat::format(std::string_view source, Int32 width) {
         do {
             total += images[i++].width;
         } while (i < images.size() && images[i].offset.y == y && images[i].justification == 1);
-        for (auto j = begin; j < i; ++j) {
+        for (auto j : std::views::iota(begin) | std::views::take_while([&](auto j) {
+                          return j < i;
+                      })) {
             images[j].offset.x += (width - total) / 2;
         }
     }

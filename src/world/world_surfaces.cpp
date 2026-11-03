@@ -1,4 +1,5 @@
 #include <opent1/world/world_surfaces.hpp>
+#include <ranges>
 #include <opent1/gfx/render_stats.hpp>
 #include "collision_geometry.hpp"
 #include "interior_scene_lighting.hpp"
@@ -14,7 +15,7 @@ StaticSurfaceTriangle WorldSurfaceMesh::terrainTriangle(std::size_t index) const
     result.lit = bool(patch.lightMap);
     result.nativeFarSphere = true;
     const auto first = (index - patch.firstTriangle) * 3;
-    for (std::size_t j = 0; j < 3; ++j) {
+    for (auto j : std::views::iota(std::size_t{0}, std::size_t{3})) {
         const auto id = patch.topology->indices()[first + j];
         const auto& input = patch.topology->vertices()[id];
         const auto& h = patch.heights[id];
@@ -69,7 +70,7 @@ std::optional<UInt16> WorldSurfaceMesh::sampleLighting(Point3F point) const {
                                                      : std::span<const gfx::HardwareVertex>{};
         const auto indices =
             interiorMesh->hardware ? interiorMesh->hardware->indices() : std::span<const UInt32>{};
-        for (std::size_t id = 0; id < interiorMesh->ranges.size(); ++id) {
+        for (auto id : std::views::iota(std::size_t{0}, interiorMesh->ranges.size())) {
             const auto* map = (*interiorMaps)[id].get();
             if (!map ||
                 (interiorSelection && !std::ranges::binary_search(*interiorSelection, UInt32(id))))
@@ -82,7 +83,7 @@ std::optional<UInt16> WorldSurfaceMesh::sampleLighting(Point3F point) const {
             const auto range = interiorMesh->ranges[id];
             for (UInt32 i = range[0]; i < range[0] + range[1]; i += 3) {
                 std::array<StaticSurfaceVertex, 3> triangle;
-                for (std::size_t j = 0; j < 3; ++j) {
+                for (auto j : std::views::iota(std::size_t{0}, std::size_t{3})) {
                     const auto& v = vertices[indices[i + j]];
                     triangle[j].position = {v.position.x, v.position.y, v.inverseDepth};
                     triangle[j].lightMap = v.lightMap;
@@ -231,7 +232,9 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrain(const TerrainGridResou
     WorldSurfaceMesh result;
     result.materials = resources.materials;
     const auto square = Flt32(1U << resources.grid->scale);
-    for (std::size_t i = 0; i < resources.grid->blockMap.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < resources.grid->blockMap.size();
+                  })) {
         const auto id = resources.grid->blockMap[i];
         if (id == -1) {
             continue;
@@ -268,8 +271,14 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrain(const TerrainGridResou
         if (UInt64(x1 - x0) * (y1 - y0) * 2 > 1'048'576 - result.triangles.size()) {
             return {};
         }
-        for (UInt32 y = y0; y < y1; ++y) {
-            for (UInt32 x = x0; x < x1; ++x) {
+        for (auto y :
+             std::views::iota(static_cast<UInt32>(y0)) | std::views::take_while([&](UInt32 y) {
+                 return y < y1;
+             })) {
+            for (auto x :
+                 std::views::iota(static_cast<UInt32>(x0)) | std::views::take_while([&](UInt32 x) {
+                     return x < x1;
+                 })) {
                 const auto material = b.materials[std::size_t(y) * n + x];
                 if (material.hole()) {
                     continue;
@@ -408,7 +417,9 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::interior(const InteriorShapeRe
     std::vector<std::shared_ptr<const NativeSurfaceTexture>> hardwareSoftware(
         reuse ? 0 : g.surfaces.size());
     std::size_t samples{};
-    for (std::size_t i = 0; i < g.surfaces.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < g.surfaces.size();
+                  })) {
         const auto& s = g.surfaces[i];
         if (!s.renderable()) {
             continue;
@@ -473,8 +484,12 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::interior(const InteriorShapeRe
                 const auto width = std::max(1U, UInt32(ls.width)),
                            height = std::max(1U, UInt32(ls.height));
                 prepared->size = {Int32(std::max(2U, width)), Int32(std::max(2U, height))};
-                for (Int32 y = 0; y < prepared->size.y; ++y) {
-                    for (Int32 x = 0; x < prepared->size.x; ++x) {
+                for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                                  return y < prepared->size.y;
+                              })) {
+                    for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                                      return x < prepared->size.x;
+                                  })) {
                         const auto index = std::size_t(std::min(UInt32(y), height - 1)) * width +
                                            std::min(UInt32(x), width - 1);
                         if (index >= colors->size()) {
@@ -538,7 +553,9 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::interior(const InteriorShapeRe
             v.lightMap = vertex.lightMap;
             hardwareVertices.push_back(v);
         }
-        for (UInt32 j = 1; j + 1 < vertices.size(); ++j) {
+        for (auto j : std::views::iota(UInt32{1}) | std::views::take_while([&](UInt32 j) {
+                          return j + 1 < vertices.size();
+                      })) {
             hardwareIndices.insert(hardwareIndices.end(), {first, first + j, first + j + 1});
         }
         std::shared_ptr<NativeSurfaceTexture> software;
@@ -668,7 +685,7 @@ bool WorldSurfaceMesh::appendHardwareInterior(std::vector<gfx::HardwarePolygon>&
     static const std::array<gfx::PolygonVertex, 3> placeholder{{{{0, 0}}, {{1, 0}}, {{0, 1}}}};
     static const std::array<Point2F, 3> lightUV{};
     gfx::HardwareTransform transform;
-    for (std::size_t i = 0; i < 3; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
         transform.camera[i] = {view.shapeToCamera.m[0][i],
                                view.shapeToCamera.m[1][i],
                                view.shapeToCamera.m[2][i],
@@ -680,7 +697,7 @@ bool WorldSurfaceMesh::appendHardwareInterior(std::vector<gfx::HardwarePolygon>&
         static const auto sharedPatch = [] {
             std::vector<gfx::HardwareVertex> vertices(18);
             std::vector<UInt32> indices(18);
-            for (UInt32 i = 0; i < 18; ++i) {
+            for (auto i : std::views::iota(UInt32{0}, UInt32{18})) {
                 vertices[i].inverseDepth = Flt32(i);
                 indices[i] = i;
             }
@@ -713,7 +730,7 @@ bool WorldSurfaceMesh::appendHardwareInterior(std::vector<gfx::HardwarePolygon>&
                     -Flt64(p.z) * view.focal.y + Flt64(p.y) * view.center.y,
                     Flt64(p.z) * view.focal.y + Flt64(p.y) * (view.height - view.center.y),
                     Flt64(view.farDistance) - h[3]};
-                for (std::size_t j = 0; j < planes.size(); ++j)
+                for (auto j : std::views::iota(std::size_t{0}, planes.size()))
                     outside[j] = outside[j] && planes[j] < -.001;
             }
             if (std::ranges::any_of(outside, std::identity{}))
@@ -730,7 +747,7 @@ bool WorldSurfaceMesh::appendHardwareInterior(std::vector<gfx::HardwarePolygon>&
             if (!facing)
                 continue;
             auto instance = transform;
-            for (std::size_t i = 0; i < 3; ++i)
+            for (auto i : std::views::iota(std::size_t{0}, std::size_t{3}))
                 instance.camera[i][3] = local.p[i];
             instance.parameters = patch.heights;
             instance.ambient = {terrainPatches->farDistance, 0, 0, terrainPatches->hazeDistance};
@@ -763,7 +780,9 @@ bool WorldSurfaceMesh::appendHardwareInterior(std::vector<gfx::HardwarePolygon>&
         }
         return true;
     }
-    for (std::size_t i = 0; i < interiorMesh->ranges.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < interiorMesh->ranges.size();
+                  })) {
         const auto range = interiorMesh->ranges[i];
         if (!range[1] ||
             (interiorSelection && !std::ranges::binary_search(*interiorSelection, UInt32(i))))
@@ -777,7 +796,7 @@ bool WorldSurfaceMesh::appendHardwareInterior(std::vector<gfx::HardwarePolygon>&
                 return fail();
             const auto c = palette.find().colors[std::size_t(source.index)];
             material.color = {Flt32(c.red) / 255, Flt32(c.green) / 255, Flt32(c.blue) / 255};
-            for (std::size_t cidx = 0; cidx < 3; ++cidx)
+            for (auto cidx : std::views::iota(std::size_t{0}, std::size_t{3}))
                 material.color[cidx] = Flt32(std::pow(material.color[cidx], double(1.f / gamma)));
         } else if (source.type() == 2) {
             material.color = {
@@ -943,10 +962,15 @@ collectShadowReceivers(const sim::ShadowSourceWindow& w,
             }
         }
         std::vector<sim::ShadowReceiver> result;
-        for (std::size_t i = 0; i < candidates.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < candidates.size();
+                      })) {
             const auto& c = candidates[i];
             std::vector<Poly> fragments{c.polygon};
-            for (std::size_t j = 0; j < candidates.size() && !fragments.empty(); ++j) {
+            for (auto j :
+                 std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t j) {
+                     return j < candidates.size() && !fragments.empty();
+                 })) {
                 spend(work);
                 if (i == j) {
                     continue;
@@ -1106,8 +1130,14 @@ worldShadowGeometry(const sim::ShadowSourceWindow& window,
                             previous.constant != receiver.constant) {
                             continue;
                         }
-                        for (std::size_t a = 0; a < previous.vertices.size() && !merged; ++a) {
-                            for (std::size_t b = 0; b < 3 && !merged; ++b) {
+                        for (auto a : std::views::iota(std::size_t{0}) |
+                                          std::views::take_while([&](std::size_t a) {
+                                              return a < previous.vertices.size() && !merged;
+                                          })) {
+                            for (auto b : std::views::iota(std::size_t{0}) |
+                                              std::views::take_while([&](std::size_t b) {
+                                                  return b < 3 && !merged;
+                                              })) {
                                 if (previous.vertices[a] != receiver.vertices[(b + 1) % 3] ||
                                     previous.vertices[(a + 1) % previous.vertices.size()] !=
                                         receiver.vertices[b]) {
@@ -1115,13 +1145,17 @@ worldShadowGeometry(const sim::ShadowSourceWindow& window,
                                 }
                                 auto combined = previous;
                                 combined.vertices.clear();
-                                for (std::size_t k = 0; k < previous.vertices.size(); ++k) {
+                                for (auto k : std::views::iota(std::size_t{0}) |
+                                                  std::views::take_while([&](std::size_t k) {
+                                                      return k < previous.vertices.size();
+                                                  })) {
                                     combined.vertices.push_back(
                                         previous.vertices[(a + 1 + k) % previous.vertices.size()]);
                                 }
                                 combined.vertices.push_back(receiver.vertices[(b + 2) % 3]);
                                 bool convex = true;
-                                for (std::size_t k = 0; k < combined.vertices.size(); ++k) {
+                                for (auto k :
+                                     std::views::iota(std::size_t{0}, combined.vertices.size())) {
                                     Point3F n;
                                     m_normal(combined.vertices[k],
                                              combined.vertices[(k + 1) % combined.vertices.size()],
@@ -1160,7 +1194,10 @@ worldShadowGeometry(const sim::ShadowSourceWindow& window,
         sim::ShadowGeometry triangles;
         triangles.maxPlaneDot = geometry.maxPlaneDot;
         for (const auto& p : geometry.polygons) {
-            for (std::size_t i = 1; i + 1 < p.vertices.size(); ++i) {
+            for (auto i :
+                 std::views::iota(std::size_t{1}) | std::views::take_while([&](std::size_t i) {
+                     return i + 1 < p.vertices.size();
+                 })) {
                 Point3F normal;
                 m_normal(p.vertices[0].position,
                          p.vertices[i].position,

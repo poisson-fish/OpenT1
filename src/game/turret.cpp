@@ -1,4 +1,5 @@
 #include <opent1/game/player.hpp>
+#include <ranges>
 #include <opent1/game/projectile_factory.hpp>
 #include <opent1/game/turret.hpp>
 #include <opent1/game/vehicle.hpp>
@@ -112,7 +113,7 @@ bool Turret::initResources(GameBaseData* in_data) {
 
     if (shapeInstance_) {
         const auto& shape = *shapeInstance_->shape();
-        for (std::size_t i = 0; i < shape.nodes.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, shape.nodes.size())) {
             const auto name = shape.nodes[i].name;
             if (name < 0 || std::size_t(name) >= shape.names.size()) {
                 continue;
@@ -124,7 +125,7 @@ bool Turret::initResources(GameBaseData* in_data) {
                 cameraNode_ = Int32(i);
             }
         }
-        for (std::size_t i = 0; i < shape.sequences.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, shape.sequences.size())) {
             const auto name = shape.sequences[i].name;
             if (name >= 0 && std::size_t(name) < shape.names.size()) {
                 if (shape.names[name] == "power") {
@@ -983,7 +984,7 @@ std::optional<world::TsShapePose> Turret::turretPose() const {
     // the aiming sequences drops the intact/hulk visibility selection and
     // draws both sets of meshes on authored turret shapes.
     auto instance = *shapeInstance_;
-    for (std::size_t i = 0; i < shape.sequences.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, shape.sequences.size())) {
         const auto name = shape.sequences[i].name;
         if (name < 0 || std::size_t(name) >= shape.names.size()) {
             continue;

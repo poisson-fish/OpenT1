@@ -1,4 +1,5 @@
 #include <opent1/game/fear_player_psc.hpp>
+#include <ranges>
 #include <opent1/game/player.hpp>
 #include <opent1/game/sim_move_obj.hpp>
 #include <opent1/game/commander_huds.hpp>
@@ -362,7 +363,9 @@ void PlayerPSC::clientCollectInput(UInt32 startTime, UInt32 endTime, Flt32 expli
     // them onto the current tick, as the original relative lookup did.
     if (!timedMoves) {
         const auto lastTick = (endTime ? endTime - 1u : 0u) & ~31u;
-        for (std::size_t i = 0; i < moves_.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < moves_.size();
+                      })) {
             moveTimes_.push_back(lastTick - UInt32(moves_.size() - 1u - i) * 32u);
         }
     }
@@ -666,7 +669,9 @@ bool PlayerPSC::writePacket(BitStream& bstream, UInt32& key) {
 
     PacketHead ph{};
     if (guiMode_ == InventoryGuiMode) {
-        for (std::size_t i = 0; i < ItemShoppingListWords; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < ItemShoppingListWords;
+                      })) {
             ph.xorShoppingList[i] = shoppingList_[i] ^ clientShoppingList_[i];
             ph.xorBuyList[i] = buyList_[i] ^ clientBuyList_[i];
             if (ph.xorShoppingList[i] || ph.xorBuyList[i]) {
@@ -684,7 +689,9 @@ bool PlayerPSC::writePacket(BitStream& bstream, UInt32& key) {
     }
     ph.resetting = fReset_;
     bstream.writeFlag(ph.resetting);
-    for (Int32 i = 0; i < MaxItemTypes; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < MaxItemTypes;
+                  })) {
         const auto slot = static_cast<std::size_t>(i);
         const Int32 count = controlPlayer_ ? controlPlayer_->getItemCount(i) : itemTypeCount_[slot];
         const Int32 previous = ph.resetting ? 0 : clientItemTypeCount_[slot];
@@ -724,7 +731,7 @@ bool PlayerPSC::writePacket(BitStream& bstream, UInt32& key) {
         const Int32 start = bstream.getCurPos();
         do {
             bstream.writeFlag(true);
-            for (UInt32 i = 0; i < 8; ++i) {
+            for (auto i : std::views::iota(UInt32{0}, UInt32{8})) {
                 const auto target = (cursor + i) & 255;
                 auto* obj = targetAt(target);
                 auto* client = players && target < 128
@@ -790,12 +797,12 @@ bool PlayerPSC::writePacket(BitStream& bstream, UInt32& key) {
             bstream.writeInt(next.y, 10);
         }
         std::array<UInt32, VisibleListWords> visibleNow{};
-        for (UInt32 i = 0; i < 256; ++i) {
+        for (auto i : std::views::iota(UInt32{0}, UInt32{256})) {
             if (visible(targetAt(i))) {
                 visibleNow[i >> 5] |= 1u << (i & 31);
             }
         }
-        for (std::size_t i = 0; i < visibleNow.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, visibleNow.size())) {
             ph.xorVisibleList[i] = visibleNow[i] ^ visibleList_[i];
             if (ph.xorVisibleList[i]) {
                 bstream.writeFlag(true);
@@ -811,11 +818,15 @@ bool PlayerPSC::writePacket(BitStream& bstream, UInt32& key) {
     if (!bstream.isValid()) {
         return false;
     }
-    for (std::size_t i = 0; i < ItemShoppingListWords; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < ItemShoppingListWords;
+                  })) {
         clientShoppingList_[i] ^= ph.xorShoppingList[i];
         clientBuyList_[i] ^= ph.xorBuyList[i];
     }
-    for (std::size_t i = 0; i < VisibleListWords; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < VisibleListWords;
+                  })) {
         visibleList_[i] ^= ph.xorVisibleList[i];
     }
     if (ph.resetting) {
@@ -927,7 +938,7 @@ bool PlayerPSC::readPacket(BitStream& bstream, UInt32 currentTime) {
                     if ((total += 8) > 256) {
                         return rollback();
                     }
-                    for (Int32 i = 0; i < 8; ++i) {
+                    for ([[maybe_unused]] auto i : std::views::iota(Int32{0}, Int32{8})) {
                         auto& info = targets[target];
                         if (bstream.readFlag()) {
                             info.position = {bstream.readInt(11) - 512, bstream.readInt(11) - 512};
@@ -1071,11 +1082,15 @@ void PlayerPSC::packetDropped(UInt32 key) {
         if (ph.resetting) {
             fReset_ = true;
         }
-        for (std::size_t i = 0; i < ItemShoppingListWords; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < ItemShoppingListWords;
+                      })) {
             clientShoppingList_[i] ^= ph.xorShoppingList[i];
             clientBuyList_[i] ^= ph.xorBuyList[i];
         }
-        for (std::size_t i = 0; i < VisibleListWords; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < VisibleListWords;
+                      })) {
             visibleList_[i] ^= ph.xorVisibleList[i];
         }
         for (const auto& inv : ph.invUpdates) {

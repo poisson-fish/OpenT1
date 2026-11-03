@@ -1,4 +1,5 @@
 #include "test_support.hpp"
+#include <ranges>
 #include <opent1/console/console.hpp>
 #include <opent1/core/res_manager.hpp>
 #include <opent1/core/timer.hpp>
@@ -206,7 +207,7 @@ void limits() {
           DiagnosticCode::ExecutionLimit);
     CHECK(eval(c, "return %x;").empty());
     std::string deep = "return 1";
-    for (int i = 0; i < 5000; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(0, 5000)) {
         deep += "+1";
     }
     deep += ';';

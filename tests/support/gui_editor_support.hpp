@@ -1,5 +1,6 @@
 #pragma once
 #include "test_support.hpp"
+#include <ranges>
 #include <opent1/gui/runtime.hpp>
 #include <opent1/core/file_stream.hpp>
 #include <opent1/core/mem_stream.hpp>
@@ -17,7 +18,7 @@ inline std::vector<gfx::Bitmap> nativeEditorFrames() {
     Persistent::ClassRegistry registry;
     CHECK(registerClasses(registry) && registerExtendedClasses(registry));
     std::vector<gfx::Bitmap> retained;
-    for (unsigned h = 0; h < 64; ++h) {
+    for (auto h : std::views::iota(unsigned{0}, unsigned{64})) {
         Control root;
         Canvas canvas;
         EditControl editor;
@@ -26,7 +27,7 @@ inline std::vector<gfx::Bitmap> nativeEditorFrames() {
         root.tag(100);
         const std::array<Point2I, 4> positions = {Point2I{12, 12}, {65, 18}, {10, 60}, {8, 4}};
         const std::array<Point2I, 4> extents = {Point2I{30, 20}, {28, 22}, {110, 32}, {20, 16}};
-        for (unsigned i = 0; i < 4; ++i) {
+        for (auto i : std::views::iota(unsigned{0}, unsigned{4})) {
             CHECK(controls[i].resize(positions[i], extents[i]));
             controls[i].tag(i + 1);
             CHECK((i == 3 ? controls[2] : root).addObject(controls[i]));
@@ -37,7 +38,9 @@ inline std::vector<gfx::Bitmap> nativeEditorFrames() {
         std::vector<std::byte> saved;
         const auto count = word();
         CHECK(count == 88);
-        for (unsigned s = 0; s < count; ++s) {
+        for (auto s : std::views::iota(unsigned{0}) | std::views::take_while([&](unsigned s) {
+                          return s < count;
+                      })) {
             const auto kind = word();
             const Int32 x = Int32(word()), y = Int32(word());
             const auto modifier = word();
@@ -157,7 +160,10 @@ inline std::vector<gfx::Bitmap> nativeEditorFrames() {
                 std::vector<std::byte> expected;
                 const auto runs = word();
                 CHECK(runs <= 16000);
-                for (unsigned r = 0; r < runs; ++r) {
+                for ([[maybe_unused]] auto r :
+                     std::views::iota(unsigned{0}) | std::views::take_while([&](unsigned r) {
+                         return r < runs;
+                     })) {
                     const auto n = word(), color = word();
                     CHECK(n && expected.size() + n <= 16000 && color <= 255);
                     expected.insert(expected.end(), n, std::byte(color));

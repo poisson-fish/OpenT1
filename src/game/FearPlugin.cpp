@@ -1,4 +1,6 @@
 #include <opent1/game/mine.hpp>
+#include <iterator>
+#include <ranges>
 #include <opent1/gfx/bitmap_content.hpp>
 #include <opent1/core/text.hpp>
 #include <opent1/core/filename.hpp>
@@ -398,7 +400,9 @@ bool renderSkyPass(const Sky& sky,
         // Original Sky::calcPoints/renderSkyBand: sixteen 22.5 degree panels,
         // camera-centered, from -size/8 to 3*size/4 above the horizon.
         const float distance = cam.farDistance * 1.5f;
-        for (std::size_t i = 0; i < Sky::TEXTURES; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < Sky::TEXTURES;
+                      })) {
             const auto angle = [&](std::size_t j) {
                 return (90.f + sky.featurePosition() - 22.5f - float(j) * 22.5f) *
                        std::numbers::pi_v<float> / 180.f;
@@ -413,7 +417,7 @@ bool renderSkyPass(const Sky& sky,
             for (const auto ids : {std::array{0, 1, 2}, std::array{0, 2, 3}}) {
                 world::StaticSurfaceTriangle triangle;
                 triangle.material = std::size_t(sky.textures()[i]) % skyMaterials->textures().size();
-                for (std::size_t j = 0; j < 3; ++j) {
+                for (auto j : std::views::iota(std::size_t{0}, std::size_t{3})) {
                     triangle.vertices[j].position = points[ids[j]];
                     triangle.vertices[j].texture = uv[ids[j]];
                 }
@@ -474,7 +478,7 @@ void renderStarFieldPass(const StarField& stars,
     std::array<UInt8, 3> cols{254, 248, 240};
     if (pal && !pal->palettes.empty()) {
         const auto& sc = stars.colors();
-        for (std::size_t i = 0; i < 3; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
             cols[i] = pal->nearest(gfx::PaletteColor{
                 static_cast<UInt8>(std::clamp(sc[i].red * 255.0f, 0.0f, 255.0f)),
                 static_cast<UInt8>(std::clamp(sc[i].green * 255.0f, 0.0f, 255.0f)),
@@ -553,7 +557,7 @@ struct WeatherGeometry {
         gfx::HardwareMaterial hw;
         hw.color = {color.red / 255.f, color.green / 255.f, color.blue / 255.f};
         if (gamma != 1) {
-            for (std::size_t channel = 0; channel < 3; ++channel) {
+            for (auto channel : std::views::iota(std::size_t{0}, std::size_t{3})) {
                 hw.color[channel] = Flt32(std::pow(hw.color[channel], double(1.f / gamma)));
             }
         }
@@ -562,7 +566,9 @@ struct WeatherGeometry {
         hw.opacity = .65f;
         // Deque storage keeps spans stable if the mission has multiple emitters.
         const auto first = vertices.size();
-        for (Int32 i = 0; i < std::min(snow.numFlakes(), 512); ++i) {
+        for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                          return i < std::min(snow.numFlakes(), 512);
+                      })) {
             const auto& flake = snow.flakes()[i];
             if (!(flake.flags & Snowfall::FlakeActive)) {
                 continue;
@@ -593,7 +599,10 @@ struct WeatherGeometry {
             }
             vertices.push_back(quad);
         }
-        for (std::size_t i = first; i < vertices.size(); ++i) {
+        for (auto i : std::views::iota(static_cast<std::size_t>(first)) |
+                          std::views::take_while([&](std::size_t i) {
+                              return i < vertices.size();
+                          })) {
             software.push_back({vertices[i], sw});
             hardware.push_back({vertices[i], hw});
         }
@@ -1227,7 +1236,9 @@ std::size_t FearPlugin::syncLoopbackState(bool deliverMoves) {
     }
 
     if (sg_.sensorManager && cg_.sensorManager) {
-        for (Int32 key = 0; key < SensorManager::MaxTargets; ++key) {
+        for (auto key : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 key) {
+                            return key < SensorManager::MaxTargets;
+                        })) {
             const auto& name = sg_.sensorManager->target(key).name;
             if (cg_.sensorManager->target(key).name != name) {
                 TargetNameEvent event;
@@ -1246,7 +1257,9 @@ std::size_t FearPlugin::syncLoopbackState(bool deliverMoves) {
             sg_.playerManager->teamAdded("Blood Eagle", "beagle");
             sg_.playerManager->teamAdded("Diamond Sword", "dsword");
         }
-        for (Int32 t = -1; t < sg_.playerManager->getNumTeams(); ++t) {
+        for (auto t : std::views::iota(Int32{-1}) | std::views::take_while([&](Int32 t) {
+                          return t < sg_.playerManager->getNumTeams();
+                      })) {
             const auto* srvTeam = sg_.playerManager->findTeam(t);
             if (!srvTeam) {
                 continue;
@@ -1463,7 +1476,10 @@ std::size_t FearPlugin::syncLoopbackState(bool deliverMoves) {
         }
         if (const auto* serverPlayer = dynamic_cast<const Player*>(source)) {
             if (auto* clientPlayer = dynamic_cast<Player*>(target)) {
-                for (Int32 item = 0; item < Player::MaxItemTypes; ++item) {
+                for (auto item :
+                     std::views::iota(Int32{0}) | std::views::take_while([&](Int32 item) {
+                         return item < Player::MaxItemTypes;
+                     })) {
                     clientPlayer->setItemCount(item, serverPlayer->getItemCount(item));
                 }
             }
@@ -2018,7 +2034,7 @@ void FearPlugin::init(Console& console, sim::SimManager* manager) {
                 return "-1";
             }
             std::string_view text = args[1];
-            for (Int32 word = 0;; ++word) {
+            for (auto word : std::views::iota(Int32{0})) {
                 const auto start = text.find_first_not_of(' ');
                 if (start == text.npos) {
                     return "-1";
@@ -2033,6 +2049,7 @@ void FearPlugin::init(Console& console, sim::SimManager* manager) {
                 }
                 text.remove_prefix(end);
             }
+            return "-1";
         });
 
     console.addCommand(
@@ -3382,7 +3399,9 @@ std::filesystem::path FearGameApp::discoverAssetRoot(const std::filesystem::path
         }
     }
 
-    for (int depth = 0; depth < 7 && !cur.empty(); ++depth) {
+    for ([[maybe_unused]] auto depth : std::views::iota(0) | std::views::take_while([&](int depth) {
+                                           return depth < 7 && !cur.empty();
+                                       })) {
         if (hasBaseVolumes(cur)) {
             return cur.lexically_normal();
         }
@@ -3849,7 +3868,7 @@ void FearGameApp::installRuntimeServices() {
                 "sf_orange214_10.pft", "sf_orange255_10.pft", "sf_white_9b.pft"};
             const std::array<std::string_view, 3> small{
                 "sf_orange_6.pft", "sf_yellow_6.pft", "sf_white_6.pft"};
-            for (std::size_t i = 0; i < large.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, large.size())) {
                 if (auto font = resources_->load<gfx::BitmapFont>(large[i])) {
                     center->messageFonts[i] = std::make_shared<gfx::BitmapFont>(*font);
                 }
@@ -4040,7 +4059,7 @@ void FearGameApp::installRuntimeServices() {
             };
             if (dynamic_cast<FearGuiFormattedText*>(formatted)) {
                 constexpr std::array<Int32, 3> tags{150111, 150121, 150161};
-                for (std::size_t i = 0; i < tags.size(); ++i) {
+                for (auto i : std::views::iota(std::size_t{0}, tags.size())) {
                     formatted->fonts[i] = {tags[i], font(tags[i])};
                 }
             }
@@ -4146,7 +4165,7 @@ void FearGameApp::installRuntimeServices() {
                     return;
                 }
                 if (commander->commandMode() == TSCommander::WaypointMode) {
-                    for (std::size_t i = 0; i < commander->targets().size(); ++i) {
+                    for (auto i : std::views::iota(std::size_t{0}, commander->targets().size())) {
                         if (commander->targets()[i].playerId == id) {
                             (void)commander->issueWaypoint(commander->targets()[i].pos, Int32(i));
                             commander->setCommandMode(TSCommander::SelectingMode);
@@ -4178,7 +4197,7 @@ void FearGameApp::installRuntimeServices() {
                                        "sf_orange_12.pft",
                                        "sf_green_14.pft",
                                        "sf_yellow_14.pft"};
-            for (std::size_t i = 0; i < names.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, names.size())) {
                 objectives->objectiveFonts[i].resource = chatFont(names[i]);
             }
             objectives->objectiveBitmap = [bitmap](std::string_view name) {
@@ -4245,8 +4264,10 @@ void FearGameApp::installRuntimeServices() {
                     add(name);
                 }
                 auto* dbm = fearPlugin_->clientGlobals().dbm;
-                for (Int32 i = 0; dbm && i < dbm->getDataGroupSize(DataBlockManager::ItemDataType);
-                     ++i) {
+                for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                                  return dbm &&
+                                         i < dbm->getDataGroupSize(DataBlockManager::ItemDataType);
+                              })) {
                     const auto* item = dynamic_cast<ItemData*>(
                         dbm->lookupDataBlock(i, DataBlockManager::ItemDataType));
                     if (item && !item->hudIcon.empty()) {
@@ -4391,7 +4412,7 @@ void FearGameApp::installRuntimeServices() {
                 "if_w_10b.pft", "sf_red_10b.pft", "sf_yellow_10b.pft", "if_g_10b.pft"};
             constexpr std::array smallNames{
                 "sf_white_6.pft", "sf_red_6.pft", "sf_yellow_6.pft", "sf_green_6.pft"};
-            for (std::size_t i = 0; i < names.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, names.size())) {
                 display->messageFonts[i] = chatFont(names[i]);
                 display->smallMessageFonts[i] = chatFont(smallNames[i], true);
             }
@@ -4436,7 +4457,7 @@ void FearGameApp::installRuntimeServices() {
                                           "_NA.BMP",
                                           "_BD.BMP",
                                           "_BO.BMP"};
-            for (std::size_t i = 0; i < sprites.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, sprites.size())) {
                 sprites[i] = bitmap(std::string("POP_Arrow") + suffixes[i], true);
             }
             combo->setBitmaps(std::move(sprites));
@@ -4458,7 +4479,7 @@ void FearGameApp::installRuntimeServices() {
                                        "DLG_LeftEdge.BMP",
                                        "DLG_BottomLeft.BMP",
                                        "DLG_BottomEdge.BMP"};
-            for (std::size_t i = 0; i < sprites.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, sprites.size())) {
                 sprites[i] = bitmap(names[i], true);
             }
             dialog->setBitmaps(std::move(sprites));
@@ -4491,7 +4512,7 @@ void FearGameApp::installRuntimeServices() {
                                               "_NA.BMP",
                                               "_BD.BMP",
                                               "_BO.BMP"};
-                for (std::size_t i = 0; i < sprites.size(); ++i) {
+                for (auto i : std::views::iota(std::size_t{0}, sprites.size())) {
                     sprites[i] = bitmap(root + suffixes[i], true);
                 }
                 button->setBitmaps(std::move(sprites));
@@ -4569,7 +4590,9 @@ void FearGameApp::installRuntimeServices() {
             const auto result = con.executeFile(args[1]);
             if (!result.ok() || result.value == "False") {
                 const auto count = parseIntSv(con.getVariable("cargc"));
-                for (Int32 i = 1; i + 1 < count; ++i) {
+                for (auto i : std::views::iota(Int32{1}) | std::views::take_while([&](Int32 i) {
+                                  return i + 1 < count;
+                              })) {
                     if (con.getVariable(std::format("cargv{}", i)) == "+exec" &&
                         con.getVariable(std::format("cargv{}", i + 1)) == args[1]) {
                         con.setVariable("OpenT1::StartupError",
@@ -4724,7 +4747,7 @@ void FearGameApp::ensureFallbackRenderAssets() {
         const std::size_t remapBytes = 256u * (std::size_t{1} << pal->shadeShift) *
                                        (static_cast<std::size_t>(pal->hazeLevels) + 1u);
         sub.remap.resize(remapBytes);
-        for (std::size_t i = 0; i < 256; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, std::size_t{256})) {
             const auto c = static_cast<UInt8>(i);
             sub.colors[i] = gfx::PaletteColor{static_cast<UInt8>((c * 37u) & 0xFFu),
                                               static_cast<UInt8>((c * 73u) & 0xFFu),
@@ -4736,7 +4759,10 @@ void FearGameApp::ensureFallbackRenderAssets() {
             sub.components[2][i] = static_cast<Flt32>(sub.colors[i].blue) / 255.0f;
             sub.components[3][i] = 1.0f;
         }
-        for (std::size_t idx = 0; idx < remapBytes; ++idx) {
+        for (auto idx :
+             std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t idx) {
+                 return idx < remapBytes;
+             })) {
             const auto rawIdx = static_cast<UInt8>(idx & 0xFFu);
             sub.remap[idx] = static_cast<std::byte>(rawIdx == 0 ? 1u : rawIdx);
         }
@@ -4861,7 +4887,7 @@ bool FearGameApp::bindGameplayActions() {
         "actionMap.sae",
         gameplayGuiMode_ == 2 ? "pdaMap.sae" : gameplayGuiMode_ == 1 ? "playMap.sae" : ""};
     std::array<std::shared_ptr<const sim::SimActionMap>, 3> maps;
-    for (std::size_t i = 0; i < names.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, names.size())) {
         maps[i] = inputMaps_.find(names[i]);
     }
     if (inputTarget_.resolve(*cg.manager) == cg.playerPSC && maps == boundInputMaps_) {
@@ -4942,7 +4968,7 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
             defaultPalette_->palettes.front().colors[std::size_t(defaultPalette_->hazeColor)];
         hardwareHazeColor_ = {color.red / 255.f, color.green / 255.f, color.blue / 255.f};
         if (paletteGamma != 1) {
-            for (std::size_t channel = 0; channel < 3; ++channel) {
+            for (auto channel : std::views::iota(std::size_t{0}, std::size_t{3})) {
                 hardwareHazeColor_[channel] =
                     Flt32(std::pow(hardwareHazeColor_[channel], double(1.f / paletteGamma)));
             }
@@ -4994,7 +5020,9 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
                 storage->attributes = bitmap.attributes;
                 storage->paletteIndex = bitmap.paletteIndex;
                 storage->palette = bitmap.palette;
-                for (Int32 y = 0; y < height; ++y) {
+                for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                                  return y < height;
+                              })) {
                     const auto row = bitmap.row(y + bounds.top)
                                          .subspan(std::size_t(bounds.left), std::size_t(width));
                     std::memcpy(storage->row(y).data(), row.data(), row.size());
@@ -5090,7 +5118,7 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
         // earlier background pixels; later stars/planets overlay its geometry.
         std::vector<gfx::HardwareBatch> environmentLayers;
         // 2. Render 4-pass Sky / StarField / Planet backdrop
-        for (int pass = 0; pass < 4; ++pass) {
+        for (auto pass : std::views::iota(0, 4)) {
             for (sim::SimObject* obj : envObjects) {
                 if (auto* sky = dynamic_cast<Sky*>(obj)) {
                     gfx::HardwareBatch skyBatch;
@@ -5533,22 +5561,23 @@ bool FearGameApp::init(std::span<const std::string_view> commandLineArgs) {
     std::string cliMission{};
     std::filesystem::path cliAssetRoot = config_.assetRoot;
 
-    for (std::size_t i = 0; i < commandLineArgs.size(); ++i) {
-        const auto arg = commandLineArgs[i];
+    for (auto argumentIt = commandLineArgs.begin(); argumentIt != commandLineArgs.end();
+         ++argumentIt) {
+        const auto arg = *argumentIt;
         if (arg == "--mount-assets") {
             mountAssets = true;
         } else if (arg == "--no-assets") {
             noAssets = true;
-        } else if (arg == "--assets" && (i + 1) < commandLineArgs.size()) {
-            cliAssetRoot = std::filesystem::path(commandLineArgs[++i]);
+        } else if (arg == "--assets" && std::next(argumentIt) != commandLineArgs.end()) {
+            cliAssetRoot = std::filesystem::path(*++argumentIt);
             mountAssets = true;
         } else if (arg == "--exec-console-cs") {
             execConsoleCs = true;
             mountAssets = true;
         } else if (arg == "--spawn-demo") {
             spawnDemo = true;
-        } else if (arg == "--mission" && (i + 1) < commandLineArgs.size()) {
-            cliMission = std::string(commandLineArgs[++i]);
+        } else if (arg == "--mission" && std::next(argumentIt) != commandLineArgs.end()) {
+            cliMission = std::string(*++argumentIt);
             mountAssets = true;
         }
     }
@@ -5562,14 +5591,16 @@ bool FearGameApp::init(std::span<const std::string_view> commandLineArgs) {
 
     game_.console().setVariable("cargc", std::to_string(commandLineArgs.size() + 1));
     game_.console().setVariable("cargv0", "Tribes.exe");
-    for (std::size_t i = 0; i < commandLineArgs.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, commandLineArgs.size())) {
         game_.console().setVariable(std::format("cargv{}", i + 1), commandLineArgs[i]);
     }
     game_.console().setVariable(std::format("cargv{}", commandLineArgs.size() + 1), "");
-    for (std::size_t i = 0; i < commandLineArgs.size(); ++i) {
-        const auto arg = commandLineArgs[i];
-        if (arg.starts_with("$") && arg.size() > 1 && i + 1 < commandLineArgs.size()) {
-            game_.console().setVariable(arg.substr(1), commandLineArgs[++i]);
+    for (auto argumentIt = commandLineArgs.begin(); argumentIt != commandLineArgs.end();
+         ++argumentIt) {
+        const auto arg = *argumentIt;
+        if (arg.starts_with("$") && arg.size() > 1 &&
+            std::next(argumentIt) != commandLineArgs.end()) {
+            game_.console().setVariable(arg.substr(1), *++argumentIt);
         }
     }
     initialized_ = true;
@@ -5578,25 +5609,35 @@ bool FearGameApp::init(std::span<const std::string_view> commandLineArgs) {
         shutdown();
         return false;
     }
-    for (std::size_t i = 0; i < commandLineArgs.size(); ++i) {
-        const auto arg = commandLineArgs[i];
-        game_.console().setVariable(std::format("cargv{}", i + 1), arg);
+    for (auto argumentIt = commandLineArgs.begin(); argumentIt != commandLineArgs.end();
+         ++argumentIt) {
+        const auto arg = *argumentIt;
+        game_.console().setVariable(
+            std::format("cargv{}",
+                        static_cast<std::size_t>(argumentIt - commandLineArgs.begin()) + 1),
+            arg);
         if (arg == "-dedicated") {
             game_.console().setVariable("Server::Dedicated", "true");
         } else if ((arg == "--assets" || arg == "--frames" || arg == "--driver" ||
                     arg == "--mission" || arg == "--renderer") &&
-                   (i + 1) < commandLineArgs.size()) {
-            const auto nextArg = commandLineArgs[++i];
-            game_.console().setVariable(std::format("cargv{}", i + 1), nextArg);
+                   std::next(argumentIt) != commandLineArgs.end()) {
+            const auto nextArg = *++argumentIt;
+            game_.console().setVariable(
+                std::format("cargv{}",
+                            static_cast<std::size_t>(argumentIt - commandLineArgs.begin()) + 1),
+                nextArg);
         } else if (!arg.empty() && arg.starts_with("--")) {
             continue;
-        } else if (arg == "+exec" && (i + 1) < commandLineArgs.size()) {
+        } else if (arg == "+exec" && std::next(argumentIt) != commandLineArgs.end()) {
             if (execConsoleCs) {
-                ++i;
+                ++argumentIt;
                 continue;
             }
-            const auto nextArg = commandLineArgs[++i];
-            game_.console().setVariable(std::format("cargv{}", i + 1), nextArg);
+            const auto nextArg = *++argumentIt;
+            game_.console().setVariable(
+                std::format("cargv{}",
+                            static_cast<std::size_t>(argumentIt - commandLineArgs.begin()) + 1),
+                nextArg);
             auto execRes = game_.console().executeFile(nextArg);
             if (!execRes.ok() || execRes.value == "False") {
                 const auto diskPath = config_.writeRoot.empty()
@@ -5627,17 +5668,20 @@ bool FearGameApp::init(std::span<const std::string_view> commandLineArgs) {
             }
         } else if (execConsoleCs &&
                    (arg == "+connect" || arg == "+password" || arg == "+maxplayers")) {
-            if (i + 1 < commandLineArgs.size()) {
-                ++i;
+            if (std::next(argumentIt) != commandLineArgs.end()) {
+                ++argumentIt;
             }
         } else if (execConsoleCs && arg == "+record") {
             continue;
         } else if (!arg.empty() && arg.front() == '+' && arg.size() > 1) {
             const std::string_view cmdName = arg.substr(1);
-            if ((i + 1) < commandLineArgs.size() && !commandLineArgs[i + 1].empty() &&
-                commandLineArgs[i + 1].front() != '-' && commandLineArgs[i + 1].front() != '+') {
-                const auto valArg = commandLineArgs[++i];
-                game_.console().setVariable(std::format("cargv{}", i + 1), valArg);
+            if (std::next(argumentIt) != commandLineArgs.end() && !std::next(argumentIt)->empty() &&
+                std::next(argumentIt)->front() != '-' && std::next(argumentIt)->front() != '+') {
+                const auto valArg = *++argumentIt;
+                game_.console().setVariable(
+                    std::format("cargv{}",
+                                static_cast<std::size_t>(argumentIt - commandLineArgs.begin()) + 1),
+                    valArg);
                 const std::array<std::string, 1> cmdArgs{std::string(valArg)};
                 (void)game_.console().execute(cmdName, cmdArgs);
             } else {
@@ -5645,9 +5689,12 @@ bool FearGameApp::init(std::span<const std::string_view> commandLineArgs) {
             }
         } else if (!arg.empty() && arg.front() == '$' && arg.size() > 1) {
             const std::string_view varName = arg.substr(1);
-            if ((i + 1) < commandLineArgs.size()) {
-                const auto valArg = commandLineArgs[++i];
-                game_.console().setVariable(std::format("cargv{}", i + 1), valArg);
+            if (std::next(argumentIt) != commandLineArgs.end()) {
+                const auto valArg = *++argumentIt;
+                game_.console().setVariable(
+                    std::format("cargv{}",
+                                static_cast<std::size_t>(argumentIt - commandLineArgs.begin()) + 1),
+                    valArg);
                 game_.console().setVariable(varName, valArg);
             }
         }

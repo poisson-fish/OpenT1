@@ -1,4 +1,5 @@
 #include <opent1/game/commander_huds.hpp>
+#include <ranges>
 #include <opent1/game/fear_player_psc.hpp>
 #include <opent1/game/chat_menu.hpp>
 
@@ -330,7 +331,7 @@ bool TSCommander::selectTargetsInBox(RectI screenBox) {
     bool any = false;
     selectedTargKey_ = -1;
     selectedPlayerId_ = -1;
-    for (std::size_t i = 0; i < targets_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, targets_.size())) {
         auto& t = targets_[i];
         const Point2I sp = screenPosition(t.pos);
         const bool inBox = (sp.x >= screenBox.left && sp.x <= screenBox.right &&
@@ -409,7 +410,7 @@ void TSCommander::refreshTargets(const PlayerPSC& psc,
     }
     const auto old = std::move(targets_);
     targets_.resize(MaxNumTargs);
-    for (std::size_t i = 0; i < targets_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, targets_.size())) {
         auto& target = targets_[i];
         const auto& source = psc.commandTargets()[i];
         target.datId = source.dataId;
@@ -488,8 +489,8 @@ bool TSCommander::rebuildMap(sim::SimWorld& model,
     view.farDistance = 1000;
     view.focal = {1024 / extent.x, 1024 / extent.y};
     const sim::VolumetricView volume{cameraToWorld.p, 1000, std::nextafter(1000.f, 0.f)};
-    for (Int32 y = 0; y < 8; ++y) {
-        for (Int32 x = 0; x < 8; ++x) {
+    for (auto y : std::views::iota(Int32{0}, Int32{8})) {
+        for (auto x : std::views::iota(Int32{0}, Int32{8})) {
             view.center = {512.f - Flt32(x * 128), 512.f - Flt32(y * 128)};
             tile->clear(0);
             const auto frame = world::WorldSceneFrame::captureContainers(model, view, volume, true);
@@ -557,7 +558,7 @@ void TSCommander::setSelected(std::size_t index, bool value) {
         selectedPlayerId_ = target.playerId;
     } else if (selectedTargKey_ == Int32(index)) {
         selectedTargKey_ = selectedPlayerId_ = -1;
-        for (std::size_t i = 0; i < targets_.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, targets_.size())) {
             if (targets_[i].selected) {
                 selectedTargKey_ = Int32(i);
                 selectedPlayerId_ = targets_[i].playerId;
@@ -571,7 +572,7 @@ void TSCommander::setSelected(std::size_t index, bool value) {
 }
 
 void TSCommander::clearSelection() {
-    for (std::size_t i = 0; i < targets_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, targets_.size())) {
         setSelected(i, false);
     }
     selectedTargKey_ = selectedPlayerId_ = -1;
@@ -581,7 +582,7 @@ bool TSCommander::selectPlayer(Int32 id, bool value, bool additive) {
     if (!additive) {
         clearSelection();
     }
-    for (std::size_t i = 0; i < targets_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, targets_.size())) {
         const auto& target = targets_[i];
         if (target.playerId == id && target.datId >= 0 && target.team == localTeam) {
             selectType = DataBlockManager::PlayerDataType;
@@ -750,7 +751,7 @@ bool TSCommander::event(const gui::Event& e) {
         } else if (mode_ == WaypointMode) {
             Int32 nearest = -1;
             Flt32 distance = 4;
-            for (std::size_t i = 0; i < targets_.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, targets_.size())) {
                 if (targets_[i].datId < 0) {
                     continue;
                 }
@@ -765,7 +766,7 @@ bool TSCommander::event(const gui::Event& e) {
         } else {
             additiveSelection_ = e.shift;
             clickedTarget_ = false;
-            for (std::size_t i = 0; i < targets_.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, targets_.size())) {
                 const auto& target = targets_[i];
                 const auto delta = screenPosition(target.pos) - point;
                 if (target.team != localTeam || !targetVisible(target) ||
@@ -866,7 +867,9 @@ bool TSCommander::draw(gfx::SoftwareSurface& surface, Point2I offset, RectI clip
                 target.sensorRange * Flt32(fields_.extent.x) * currentScale_ / missionExtent_.x,
                 target.sensorRange * Flt32(fields_.extent.y) * currentScale_ / missionExtent_.y};
             Point2I previous{center.x + Int32(radius.x), center.y};
-            for (int i = 1; i <= 64; ++i) {
+            for (auto i : std::views::iota(1) | std::views::take_while([&](int i) {
+                              return i <= 64;
+                          })) {
                 const auto angle = Flt32(i) * std::numbers::pi_v<Flt32> / 32;
                 const Point2I next{center.x + Int32(radius.x * std::cos(angle)),
                                    center.y + Int32(radius.y * std::sin(angle))};
@@ -877,7 +880,7 @@ bool TSCommander::draw(gfx::SoftwareSurface& surface, Point2I offset, RectI clip
     }
     // Native draws items before players, names after icons, and the local
     // player's directional marker last so dense groups remain selectable.
-    for (int pass = 0; pass < 5; ++pass) {
+    for (auto pass : std::views::iota(0, 5)) {
         for (const auto& target : targets_) {
             if (!targetVisible(target)) {
                 continue;
@@ -907,7 +910,7 @@ bool TSCommander::draw(gfx::SoftwareSurface& surface, Point2I offset, RectI clip
                                                               gfx::Flip::X};
                     const auto angle = Int32(256 - facing * 256 / kTwoPi) & 255;
                     std::size_t sector = 0;
-                    for (std::size_t i = 0; i < ends.size(); ++i) {
+                    for (auto i : std::views::iota(std::size_t{0}, ends.size())) {
                         if (angle <= ends[i]) {
                             sector = i;
                             break;

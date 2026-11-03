@@ -1,4 +1,5 @@
 #include <opent1/game/ban_list.hpp>
+#include <ranges>
 #include <opent1/core/text.hpp>
 #include <algorithm>
 #include <cctype>
@@ -76,8 +77,7 @@ void BanList::removeBan(std::string_view transportAddress) {
 }
 
 bool BanList::isTAEq(std::string_view bannedTA, std::string_view ta) const noexcept {
-    std::size_t i = 0;
-    for (;; ++i) {
+    for (const auto i : std::views::iota(std::size_t{0})) {
         const char a = (i < bannedTA.size()) ? bannedTA[i] : '\0';
         const char b = (i < ta.size()) ? ta[i] : '\0';
         if (a == '*' || (a == '\0' && b == ':')) {
@@ -90,6 +90,7 @@ bool BanList::isTAEq(std::string_view bannedTA, std::string_view ta) const noexc
             return true;
         }
     }
+    return false;
 }
 
 bool BanList::isBanned(std::string_view transportAddress) {

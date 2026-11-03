@@ -1,4 +1,5 @@
 #include <opent1/game/player.hpp>
+#include <ranges>
 #include <opent1/game/projectile.hpp>
 #include <opent1/game/sound.hpp>
 #include <opent1/game/smoke_puff.hpp>
@@ -25,7 +26,7 @@ UInt32 currentTimeMs(const sim::SimManager* mgr, UInt32 fallback = 0) noexcept {
 
 std::optional<Int32> findSequenceByName(const world::TsShape& shape,
                                         std::string_view name) noexcept {
-    for (std::size_t i = 0; i < shape.sequences.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, shape.sequences.size())) {
         const Int32 nameIdx = shape.sequences[i].name;
         if (nameIdx >= 0 && static_cast<std::size_t>(nameIdx) < shape.names.size()) {
             if (shape.names[static_cast<std::size_t>(nameIdx)] == name) {

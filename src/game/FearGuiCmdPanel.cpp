@@ -1,4 +1,5 @@
 #include <opent1/game/commander_huds.hpp>
+#include <ranges>
 
 namespace opent1::game {
 
@@ -16,7 +17,9 @@ bool FGCommandPanel::draw(gfx::SoftwareSurface& surface, Point2I offset, RectI c
         offset.x, offset.y, offset.x + fields_.extent.x - 1, offset.y + fields_.extent.y - 1};
     const auto corner = std::min({9, fields_.extent.x, fields_.extent.y});
     surface.fill({bounds.left, bounds.top, bounds.right, bounds.bottom - corner}, 247);
-    for (Int32 row = 0; row < corner; ++row) {
+    for (auto row : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 row) {
+                        return row < corner;
+                    })) {
         surface.line({bounds.left + row + 1, bounds.bottom - corner + row + 1},
                      {bounds.right, bounds.bottom - corner + row + 1},
                      247);

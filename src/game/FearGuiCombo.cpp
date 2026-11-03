@@ -1,4 +1,5 @@
 #include "opent1/game/shell_controls.hpp"
+#include <ranges>
 
 #include <algorithm>
 #include <cctype>
@@ -65,7 +66,9 @@ inline constexpr Int32 kIdItgBmpRootTag = 200100;
 
 bool caseInsensitiveLess(std::string_view a, std::string_view b) noexcept {
     const std::size_t n = std::min(a.size(), b.size());
-    for (std::size_t i = 0; i < n; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < n;
+                  })) {
         const auto ca = static_cast<unsigned char>(std::tolower(static_cast<unsigned char>(a[i])));
         const auto cb = static_cast<unsigned char>(std::tolower(static_cast<unsigned char>(b[i])));
         if (ca != cb) {
@@ -117,7 +120,7 @@ void FGComboList::clearEntries() {
 }
 
 void FGComboList::setSelectedEntry(Int32 id) {
-    for (std::size_t i = 0; i < entries_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, entries_.size())) {
         if (entries_[i].id == id) {
             selected = {0, static_cast<Int32>(i)};
             return;

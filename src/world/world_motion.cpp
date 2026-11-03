@@ -1,4 +1,5 @@
 #include <opent1/world/world_scene.hpp>
+#include <ranges>
 #include <algorithm>
 #include <cmath>
 
@@ -10,12 +11,14 @@ bool normalizeMotion(TMat3F& target) {
     if (!std::isfinite(target.determinant()) || std::abs(target.determinant() - 1) > .003f) {
         return false;
     }
-    for (std::size_t i = 0; i < 3; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
         const Point3F a{target.m[i][0], target.m[i][1], target.m[i][2]};
         if (!std::isfinite(a.len()) || std::abs(m_dot(a, a) - 1) > .001f) {
             return false;
         }
-        for (std::size_t j = 0; j < i; ++j) {
+        for (auto j : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t j) {
+                          return j < i;
+                      })) {
             const Point3F b{target.m[j][0], target.m[j][1], target.m[j][2]};
             if (std::abs(m_dot(a, b)) > .001f) {
                 return false;

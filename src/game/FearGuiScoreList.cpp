@@ -1,4 +1,6 @@
 #include <opent1/game/chat_inventory_huds.hpp>
+#include <iterator>
+#include <ranges>
 
 #include <algorithm>
 #include <format>
@@ -12,11 +14,13 @@ ScoreListCtrl::ScoreListCtrl() {
 std::vector<Int32> ScoreListCtrl::parseHeadingTabStops(std::string_view heading) {
     std::vector<Int32> stops{};
     stops.push_back(0);
-    for (std::size_t i = 0; i + 1 < heading.size(); ++i) {
-        if (heading[i] == '\t') {
-            const Int32 stop = static_cast<Int32>(static_cast<UInt8>(heading[i + 1]));
+    for (auto characterIt = heading.begin();
+         characterIt != heading.end() && std::next(characterIt) != heading.end();
+         ++characterIt) {
+        if (*characterIt == '\t') {
+            const Int32 stop = static_cast<Int32>(static_cast<UInt8>(*std::next(characterIt)));
             stops.push_back(stop);
-            ++i;
+            ++characterIt;
             if (stops.size() >= MaxTabStops - 1) {
                 break;
             }
@@ -31,9 +35,9 @@ std::string ScoreListCtrl::expandClientScoreFormat(std::string_view formatStr,
                                                    std::string_view teamName) {
     std::string out{};
     out.reserve(formatStr.size() + 32);
-    for (std::size_t i = 0; i < formatStr.size(); ++i) {
-        if (formatStr[i] == '%' && i + 1 < formatStr.size()) {
-            const char spec = formatStr[++i];
+    for (auto characterIt = formatStr.begin(); characterIt != formatStr.end(); ++characterIt) {
+        if (*characterIt == '%' && std::next(characterIt) != formatStr.end()) {
+            const char spec = *++characterIt;
             switch (spec) {
                 case 'n':
                     out.append(client.name);
@@ -53,7 +57,7 @@ std::string ScoreListCtrl::expandClientScoreFormat(std::string_view formatStr,
                     break;
             }
         } else {
-            out.push_back(formatStr[i]);
+            out.push_back(*characterIt);
         }
     }
     return out;
@@ -63,9 +67,9 @@ std::string ScoreListCtrl::expandTeamScoreFormat(std::string_view formatStr,
                                                  const PlayerManager::TeamRep& team) {
     std::string out{};
     out.reserve(formatStr.size() + 32);
-    for (std::size_t i = 0; i < formatStr.size(); ++i) {
-        if (formatStr[i] == '%' && i + 1 < formatStr.size()) {
-            const char spec = formatStr[++i];
+    for (auto characterIt = formatStr.begin(); characterIt != formatStr.end(); ++characterIt) {
+        if (*characterIt == '%' && std::next(characterIt) != formatStr.end()) {
+            const char spec = *++characterIt;
             if (spec == 't' || spec == 'n') {
                 out.append(team.name);
             } else {
@@ -73,7 +77,7 @@ std::string ScoreListCtrl::expandTeamScoreFormat(std::string_view formatStr,
                 out.push_back(spec);
             }
         } else {
-            out.push_back(formatStr[i]);
+            out.push_back(*characterIt);
         }
     }
     return out;
@@ -87,7 +91,9 @@ void ScoreListCtrl::rebuildScores(const PlayerManager& pm) {
     if (!pm.teamScoreHeading().empty() && pm.getNumTeams() > 0) {
         lines_.push_back({true, true, -1, 0, std::string(pm.teamScoreHeading())});
         std::vector<const PlayerManager::TeamRep*> sortedTeams{};
-        for (Int32 t = 0; t < pm.getNumTeams(); ++t) {
+        for (auto t : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 t) {
+                          return t < pm.getNumTeams();
+                      })) {
             if (const auto* team = pm.findTeam(t)) {
                 sortedTeams.push_back(team);
             }
@@ -153,7 +159,10 @@ bool ScoreListCtrl::drawCell(
     const auto authoredWidth = stops.size() > 2 ? stops[stops.size() - 2] + 36 : cellSize.x;
     const auto scale = std::min(1.f, float(cellSize.x) / float(std::max(1, authoredWidth)));
     std::string_view remaining(line.text);
-    for (std::size_t column = 0; !remaining.empty() && column + 1 < stops.size(); ++column) {
+    for (auto column :
+         std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t column) {
+             return !remaining.empty() && column + 1 < stops.size();
+         })) {
         const auto tab = remaining.find('\t');
         const auto left = Int32(float(stops[column]) * scale);
         const auto right =

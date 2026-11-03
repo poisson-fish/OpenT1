@@ -1,4 +1,5 @@
 #include <opent1/world/network_host.hpp>
+#include <ranges>
 #include <opent1/core/file_stream.hpp>
 #include <opent1/core/mem_stream.hpp>
 #include <algorithm>
@@ -281,9 +282,9 @@ struct Network {
             };
 
             auto& ps = sim::network::PacketStream::globalStats();
-            for (std::size_t dir = 0; dir < 2; ++dir) {
+            for (auto dir : std::views::iota(std::size_t{0}, std::size_t{2})) {
                 std::vector<BitSortInfo> bsi;
-                for (Int32 classCt = 0; classCt < 2048; ++classCt) {
+                for (auto classCt : std::views::iota(Int32{0}, Int32{2048})) {
                     const auto bits = ps.bitAccumulator[dir][static_cast<std::size_t>(classCt)];
                     if (bits != 0) {
                         bsi.push_back({classCt, bits});

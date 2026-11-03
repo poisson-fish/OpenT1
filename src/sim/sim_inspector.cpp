@@ -799,7 +799,9 @@ bool SimInspector::draw(gfx::SoftwareSurface& surface,
                            dirty_ ? " *" : ""))) {
         return false;
     }
-    for (auto i = first_; i < fields_.size() && i - first_ < visibleRows(); ++i) {
+    for (auto i : std::views::iota(first_) | std::views::take_while([&](auto i) {
+                      return i < fields_.size() && i - first_ < visibleRows();
+                  })) {
         const auto& field = fields_[i];
         const auto box = fieldRect(i);
         if (field.control == Control::Divider) {
@@ -846,9 +848,10 @@ bool SimInspector::draw(gfx::SoftwareSurface& surface,
         const auto& choices = fields_[*focus_].choices;
         surface.fill(box, colors.panel);
         surface.rectangle(box, colors.border);
-        for (auto i = choiceFirst_;
-             i < choices.size() && i - choiceFirst_ < std::size_t(box.height() / 20);
-             ++i) {
+        for (auto i : std::views::iota(choiceFirst_) | std::views::take_while([&](auto i) {
+                          return i < choices.size() &&
+                                 i - choiceFirst_ < std::size_t(box.height() / 20);
+                      })) {
             const auto y = box.top + Int32(i - choiceFirst_) * 20;
             const gfx::RectI row{box.left, y, box.right, y + 19};
             if (i == choiceCursor_) {

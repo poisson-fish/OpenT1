@@ -1,4 +1,5 @@
 #include "test_support.hpp"
+#include <ranges>
 #include "test_registry.hpp"
 #include <opent1/world/world_surfaces.hpp>
 #include <opent1/world/world_scene.hpp>
@@ -94,7 +95,7 @@ int environmentScratchOwnership() {
         gfx::Palette palette;
         std::array<gfx::PolygonVertex, 3> vertices{{{{1, 1}}, {{10, 1}}, {{1, 10}}}};
         std::array<gfx::HardwarePolygon, 3> scene;
-        for (std::size_t i = 0; i < scene.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, scene.size())) {
             scene[i].vertices = vertices;
             scene[i].material.blend = gfx::HardwareBlend::Alpha;
             scene[i].material.depth = gfx::HardwareDepth::TestOnly;
@@ -176,8 +177,12 @@ int retainedInteriorLighting() {
         world::WorldSurfaceMesh expanded;
         for (auto triangle : next->surfaceTriangles())
             expanded.triangles.push_back(std::move(triangle));
-        for (int x = -12; x <= 12; ++x)
-            for (int z = -12; z <= 12; ++z) {
+        for (auto x : std::views::iota(-12) | std::views::take_while([&](int x) {
+                          return x <= 12;
+                      }))
+            for (auto z : std::views::iota(-12) | std::views::take_while([&](int z) {
+                              return z <= 12;
+                          })) {
                 for (Flt32 depth : {-.051f, -.05f, 0.f, .05f, .051f}) {
                     const Point3F point{Flt32(x) * .1f, depth, Flt32(z) * .1f};
                     CHECK(next->sampleLighting(point) == expanded.sampleLighting(point));
@@ -263,7 +268,7 @@ int retainedTerrainPatches() {
         grid->blocks = {{0, "a"}, {1, "b"}};
         grid->blockMap = {0, 1, 0}; // repeated source and a deliberately unequal seam
         CHECK(manager.add("patch.dtf", std::move(grid)));
-        for (int block = 0; block < 2; ++block) {
+        for (auto block : std::views::iota(0, 2)) {
             auto source = std::make_unique<world::TerrainGridBlock>();
             source->width = 16;
             source->detailCount = 5;
@@ -276,8 +281,12 @@ int retainedTerrainPatches() {
             source->lights.resize(17 * 17, 0xffff);
             source->pins[0].resize((17 * 17 + 7) / 8);
             source->pins[0][3] = std::byte{0x40};
-            for (int y = 0; y <= 16; ++y)
-                for (int x = 0; x <= 16; ++x)
+            for (auto y : std::views::iota(0) | std::views::take_while([&](int y) {
+                              return y <= 16;
+                          }))
+                for (auto x : std::views::iota(0) | std::views::take_while([&](int x) {
+                                  return x <= 16;
+                              }))
                     source->heights[std::size_t(y) * 17 + x] = Flt32((x ^ y) + block * 8) * .25f;
             CHECK(manager.add(std::format("patch#{}.dtb", block), std::move(source)));
         }
@@ -300,7 +309,7 @@ int retainedTerrainPatches() {
         const auto hash = [&](UInt32 value) {
             selectionHash = (selectionHash ^ value) * 1099511628211ULL;
         };
-        for (UInt32 frame = 0; frame < 27; ++frame) {
+        for (auto frame : std::views::iota(UInt32{0}, UInt32{27})) {
             const auto camera =
                 frame < 3
                     ? std::array{Point3F{14, 4, 8}, Point3F{48, 12, 20}, Point3F{80, 24, 5}}[frame]
@@ -361,7 +370,7 @@ int retainedTerrainPatches() {
                 const auto& expected = reference->triangles[i++];
                 CHECK(triangle.material == expected.material && triangle.lit == expected.lit);
                 CHECK(triangle.lightMap->samples == expected.lightMap->samples);
-                for (std::size_t j = 0; j < 3; ++j) {
+                for (auto j : std::views::iota(std::size_t{0}, std::size_t{3})) {
                     const auto& a = triangle.vertices[j];
                     const auto& b = expected.vertices[j];
                     CHECK(a.position == b.position && a.texture == b.texture &&
@@ -376,8 +385,8 @@ int retainedTerrainPatches() {
             CHECK(software && !software->terrainPatches);
             CHECK(software->terrainSquareIds == reference->terrainSquareIds);
             CHECK(software->triangles.size() == reference->triangles.size());
-            for (std::size_t j = 0; j < software->triangles.size(); ++j)
-                for (std::size_t k = 0; k < 3; ++k) {
+            for (auto j : std::views::iota(std::size_t{0}, software->triangles.size()))
+                for (auto k : std::views::iota(std::size_t{0}, std::size_t{3})) {
                     const auto& a = software->triangles[j].vertices[k];
                     const auto& b = reference->triangles[j].vertices[k];
                     CHECK(a.position == b.position && a.farSphereDistance == b.farSphereDistance &&
@@ -409,8 +418,8 @@ int retainedTerrainPatches() {
         CHECK(projected && nested && !nested->terrainPatches && !nested->triangles.empty());
         CHECK(projected->terrainSquareIds == nested->terrainSquareIds);
         CHECK(projected->triangles.size() == nested->triangles.size());
-        for (std::size_t j = 0; j < projected->triangles.size(); ++j)
-            for (std::size_t k = 0; k < 3; ++k)
+        for (auto j : std::views::iota(std::size_t{0}, projected->triangles.size()))
+            for (auto k : std::views::iota(std::size_t{0}, std::size_t{3}))
                 CHECK(projected->triangles[j].vertices[k].position ==
                       nested->triangles[j].vertices[k].position);
         cache.clear();

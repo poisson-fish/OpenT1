@@ -1,4 +1,5 @@
 #include <opent1/game/shape_base.hpp>
+#include <ranges>
 #include <opent1/core/text.hpp>
 #include <opent1/world/scene_objects.hpp>
 #include <opent1/game/sound.hpp>
@@ -229,7 +230,8 @@ bool ShapeBase::initResources(GameBaseData* dat) {
             shieldShapeInstance_ =
                 std::make_shared<world::TsShapeInstance>(shapeData_->shieldShape);
             shieldImage_.setShapeInstance(shieldShapeInstance_.get(), shieldShapeInstance_);
-            for (std::size_t i = 0; i < shapeData_->shieldShape->sequences.size(); ++i) {
+            for (auto i :
+                 std::views::iota(std::size_t{0}, shapeData_->shieldShape->sequences.size())) {
                 const auto nameIdx = shapeData_->shieldShape->sequences[i].name;
                 if (nameIdx >= 0 &&
                     static_cast<std::size_t>(nameIdx) < shapeData_->shieldShape->names.size() &&
@@ -263,7 +265,9 @@ bool ShapeBase::initResources(GameBaseData* dat) {
         }
     }
 
-    for (Int32 i = 0; i < MaxScriptThreads; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < MaxScriptThreads;
+                  })) {
         auto& st = scriptThread_[static_cast<std::size_t>(i)];
         st.threadIndex.reset();
         if (st.sequence != -1) {
@@ -467,7 +471,9 @@ bool ShapeBase::setSequenceDir(Int32 slot, bool forward) {
 }
 
 void ShapeBase::updateScriptThreads(SimTime t) {
-    for (Int32 i = 0; i < MaxScriptThreads; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < MaxScriptThreads;
+                  })) {
         auto& st = scriptThread_[static_cast<std::size_t>(i)];
         if (!shapeInstance_ || !st.threadIndex) {
             continue;
@@ -1246,7 +1252,9 @@ bool ShapeBase::packShapeBaseUpdate(UInt32 mask, BitStream& stream, UInt32 curre
     if ((mask & InitialUpdate) != 0) {
         mask &= ~ShieldMask;
         mask &= ~ThreadMask;
-        for (Int32 i = 0; i < MaxScriptThreads; ++i) {
+        for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                          return i < MaxScriptThreads;
+                      })) {
             if (scriptThread_[static_cast<std::size_t>(i)].sequence != -1) {
                 mask |= ThreadMask;
                 break;
@@ -1269,7 +1277,9 @@ bool ShapeBase::packShapeBaseUpdate(UInt32 mask, BitStream& stream, UInt32 curre
     }
 
     if (stream.writeFlag((mask & ThreadMask) != 0)) {
-        for (Int32 i = 0; i < MaxScriptThreads; ++i) {
+        for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                          return i < MaxScriptThreads;
+                      })) {
             const auto& st = scriptThread_[static_cast<std::size_t>(i)];
             if (stream.writeFlag(st.sequence != -1 && (mask & (ThreadNMask << i)) != 0)) {
                 stream.writeInt(st.sequence, ThreadSequenceBits);
@@ -1338,7 +1348,9 @@ bool ShapeBase::unpackShapeBaseUpdate(BitStream& stream, UInt32 currentTime) {
     }
 
     if (stream.readFlag()) {
-        for (Int32 i = 0; i < MaxScriptThreads; ++i) {
+        for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                          return i < MaxScriptThreads;
+                      })) {
             if (stream.readFlag()) {
                 auto& st = scriptThread_[static_cast<std::size_t>(i)];
                 const Int32 seq = stream.readInt(ThreadSequenceBits);

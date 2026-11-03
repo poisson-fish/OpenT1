@@ -1,4 +1,5 @@
 #include <opent1/world/landscape_mapper.hpp>
+#include <ranges>
 #include <opent1/core/mem_stream.hpp>
 #include <algorithm>
 #include <charconv>
@@ -92,7 +93,10 @@ std::optional<std::vector<LandscapeRule>> readLandscapeRules(std::string_view te
     }
     std::getline(input, line);
     std::vector<LandscapeRule> rules;
-    for (Int32 i = 0; i < count; ++i) {
+    for ([[maybe_unused]] auto i :
+         std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+             return i < count;
+         })) {
         if (!std::getline(input, line) || line.size() > 1024) {
             return {};
         }
@@ -172,7 +176,9 @@ bool LandscapeTextureTable::valid() const {
         offsets.back() != picks.size()) {
         return false;
     }
-    for (std::size_t i = 0; i < count; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < count;
+                  })) {
         if (combinations[i] >> types || offsets[i] > offsets[i + 1] ||
             offsets[i + 1] > picks.size()) {
             return false;
@@ -185,7 +191,9 @@ bool LandscapeTextureTable::valid() const {
             end - start != 2U + picks[start] + 2U * picks[start + 1]) {
             return false;
         }
-        for (UInt32 j = 0; j < picks[start]; ++j) {
+        for (auto j : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 j) {
+                          return j < picks[start];
+                      })) {
             if (picks[start + 2 + j] > 7) {
                 return false;
             }
@@ -218,7 +226,10 @@ std::optional<LandscapeTextureTable> LandscapeTextureTable::load(std::span<const
     }
     t.pickCount = numPicks;
     if (t.version == 3) {
-        for (UInt32 i = 0; i < t.types; ++i) {
+        for ([[maybe_unused]] auto i :
+             std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                 return i < t.types;
+             })) {
             std::array<std::byte, 32> name{};
             if (!f.readBytes(name)) {
                 return {};
@@ -279,7 +290,7 @@ std::optional<std::vector<std::byte>> LandscapeTextureTable::encode() const {
     if (version == 3) {
         for (const auto& name : descriptions) {
             std::array<std::byte, 32> b{};
-            for (std::size_t i = 0; i < name.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, name.size())) {
                 b[i] = std::byte(UInt8(name[i]));
             }
             if (!f.writeBytes(b)) {
@@ -363,7 +374,7 @@ bool LandscapeTextureRecipe::addTexture(std::string_view file,
     d.material.useDefaultProperties = false;
     d.rotations = rotations;
     d.percentage = percent;
-    for (UInt32 i = 0; i < 4; ++i) {
+    for (auto i : std::views::iota(UInt32{0}, UInt32{4})) {
         auto tag = sides[i];
         if (tag >= 'a' && tag <= 'z') {
             tag = char(tag - 32);
@@ -417,7 +428,9 @@ std::optional<LandscapeTextureTable> LandscapeTextureRecipe::build() const {
     };
 
     std::vector<State> states;
-    for (UInt32 i = 0; i < textures.size(); ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < textures.size();
+                  })) {
         const auto& d = textures[i];
         if (!d.rotations || !std::ranges::all_of(d.corners, [&](auto c) {
                 return c < t.types;
@@ -425,10 +438,10 @@ std::optional<LandscapeTextureTable> LandscapeTextureRecipe::build() const {
             return {};
         }
         t.corners.push_back(d.corners);
-        for (UInt32 j = 0; j < 8; ++j) {
+        for (auto j : std::views::iota(UInt32{0}, UInt32{8})) {
             if (d.rotations & (1U << j)) {
                 State s{UInt8(i), UInt8(j), d.percentage, {}};
-                for (UInt32 c = 0; c < 4; ++c) {
+                for (auto c : std::views::iota(UInt32{0}, UInt32{4})) {
                     s.corners[c] = d.corners[orientation[j][c]];
                 }
                 states.push_back(s);
@@ -437,7 +450,9 @@ std::optional<LandscapeTextureTable> LandscapeTextureRecipe::build() const {
     }
     const auto base = t.types + 1, count = base * base * base * base;
     t.offsets.push_back(0);
-    for (UInt32 code = 0; code < count; ++code) {
+    for (auto code : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 code) {
+                         return code < count;
+                     })) {
         auto value = code;
         std::array<UInt32, 4> corners{};
         for (Int32 c = 3; c >= 0; --c) {
@@ -448,7 +463,7 @@ std::optional<LandscapeTextureTable> LandscapeTextureRecipe::build() const {
         std::vector<std::pair<UInt8, UInt8>> picks;
         for (const auto& s : states) {
             bool match = true, complete = true;
-            for (UInt32 c = 0; c < 4; ++c) {
+            for (auto c : std::views::iota(UInt32{0}, UInt32{4})) {
                 if (corners[c] && corners[c] - 1 != s.corners[c]) {
                     match = false;
                 }
@@ -457,7 +472,7 @@ std::optional<LandscapeTextureTable> LandscapeTextureRecipe::build() const {
                 }
             }
             if (match) {
-                for (UInt32 c = 0; c < 4; ++c) {
+                for (auto c : std::views::iota(UInt32{0}, UInt32{4})) {
                     if (!corners[c]) {
                         combinations |= 1U << s.corners[c];
                     }
@@ -476,7 +491,7 @@ std::optional<LandscapeTextureTable> LandscapeTextureRecipe::build() const {
         if (!picks.empty()) {
             t.picks.push_back(UInt8(std::popcount(flips)));
             t.picks.push_back(UInt8(picks.size()));
-            for (UInt32 j = 0; j < 8; ++j) {
+            for (auto j : std::views::iota(UInt32{0}, UInt32{8})) {
                 if (flips & (1U << j)) {
                     t.picks.push_back(UInt8(j));
                 }
@@ -509,7 +524,7 @@ std::optional<std::vector<std::byte>> LandscapeTextureRecipe::materialList() con
     for (const auto& d : textures) {
         const auto& m = d.material;
         std::array<std::byte, 32> name{};
-        for (std::size_t i = 0; i < m.mapFile.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, m.mapFile.size())) {
             name[i] = std::byte(UInt8(m.mapFile[i]));
         }
         if (!f.write(m.flags) || !f.write(m.alpha) || !f.write(m.index) ||
@@ -545,13 +560,17 @@ bool LandscapeMapper::map(UInt32 width,
         corners[index(p.x, p.y)] = type;
         const std::array<UInt32, 4> at{
             index(p.x, p.y), index(p.x - 1, p.y), index(p.x - 1, p.y - 1), index(p.x, p.y - 1)};
-        for (UInt32 k = 0; k < 4; ++k) {
+        for (auto k : std::views::iota(UInt32{0}, UInt32{4})) {
             auto& v = rotations[at[k]];
             v = v - (v / place[k] % base) * place[k] + type * place[k];
         }
     };
-    for (UInt32 y = 0; y < width; ++y) {
-        for (UInt32 x = 0; x < width; ++x) {
+    for (auto y : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 y) {
+                      return y < width;
+                  })) {
+        for (auto x : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 x) {
+                          return x < width;
+                      })) {
             auto& m = materials[std::size_t(y) * width + x];
             if (m.index >= textures_.corners.size() && (local || (m.flags & 0xc0))) {
                 return false;
@@ -582,8 +601,12 @@ bool LandscapeMapper::map(UInt32 width,
         }
         seed(c.point, c.type);
     }
-    for (UInt32 y = 0; y < width; ++y) {
-        for (UInt32 x = 0; x < width; ++x) {
+    for (auto y : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 y) {
+                      return y < width;
+                  })) {
+        for (auto x : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 x) {
+                          return x < width;
+                      })) {
             const auto at = std::size_t(y) * width + x;
             if (corners[at]) {
                 continue;
@@ -602,8 +625,12 @@ bool LandscapeMapper::map(UInt32 width,
             UInt8 type{};
             float high = -1;
             float minimum = 1e20f, maximum = -1e20f;
-            for (Int32 j = -1; j <= 1; ++j) {
-                for (Int32 i = -1; i <= 1; ++i) {
+            for (auto j : std::views::iota(Int32{-1}) | std::views::take_while([&](Int32 j) {
+                              return j <= 1;
+                          })) {
+                for (auto i : std::views::iota(Int32{-1}) | std::views::take_while([&](Int32 i) {
+                                  return i <= 1;
+                              })) {
                     const auto h = heights[index(Int32(x) + i, Int32(y) + j)];
                     minimum = std::min(minimum, h);
                     maximum = std::max(maximum, h);
@@ -634,7 +661,7 @@ bool LandscapeMapper::map(UInt32 width,
             rotations[adjacent[3]] += type * place[3];
         }
     }
-    for (std::size_t i = 0; i < materials.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, materials.size())) {
         auto& m = materials[i];
         if (m.flags & 0x40) {
             continue;
@@ -679,17 +706,25 @@ bool LandscapeMapper::apply(TerrainDocument& d, std::span<const LandscapeCorner>
     if (!std::has_single_bit(width) || width > 2048) {
         return false;
     }
-    for (UInt32 pass = 0; pass < (d.grid.pattern == 2 ? 2U : 1U); ++pass) {
+    for (auto pass : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 pass) {
+                         return pass < (d.grid.pattern == 2 ? 2U : 1U);
+                     })) {
         const UInt32 start = pass * 16;
         if (next.blocks.size() < start + across * across) {
             return false;
         }
         std::vector<float> heights(std::size_t(width) * width);
         std::vector<TerrainGridMaterial> materials(heights.size());
-        for (UInt32 b = 0; b < across * across; ++b) {
+        for (auto b : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 b) {
+                          return b < across * across;
+                      })) {
             auto& block = next.blocks[start + b];
-            for (UInt32 y = 0; y < bw; ++y) {
-                for (UInt32 x = 0; x < bw; ++x) {
+            for (auto y : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 y) {
+                              return y < bw;
+                          })) {
+                for (auto x : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 x) {
+                                  return x < bw;
+                              })) {
                     const auto at =
                         std::size_t(b / across * bw + y) * width + (b % across * bw + x);
                     heights[at] = block.heights[std::size_t(y) * (bw + 1) + x];
@@ -713,10 +748,16 @@ bool LandscapeMapper::apply(TerrainDocument& d, std::span<const LandscapeCorner>
         if (!map(width, d.grid.scale, heights, materials, points, false, random)) {
             return false;
         }
-        for (UInt32 b = 0; b < across * across; ++b) {
+        for (auto b : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 b) {
+                          return b < across * across;
+                      })) {
             auto& block = next.blocks[start + b];
-            for (UInt32 y = 0; y < bw; ++y) {
-                for (UInt32 x = 0; x < bw; ++x) {
+            for (auto y : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 y) {
+                              return y < bw;
+                          })) {
+                for (auto x : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 x) {
+                                  return x < bw;
+                              })) {
                     block.materials[std::size_t(y) * bw + x] =
                         materials[std::size_t(b / across * bw + y) * width + b % across * bw + x];
                 }
@@ -744,8 +785,14 @@ bool LandscapeMapper::applyLocal(TerrainDocument& d,
     std::vector<float> heights(std::size_t(width) * width);
     std::vector<TerrainGridMaterial> materials(heights.size());
     std::vector<std::pair<std::size_t, std::size_t>> addresses;
-    for (Int32 y = area.top; y <= area.bottom; ++y) {
-        for (Int32 x = area.left; x <= area.right; ++x) {
+    for (auto y :
+         std::views::iota(static_cast<Int32>(area.top)) | std::views::take_while([&](Int32 y) {
+             return y <= area.bottom;
+         })) {
+        for (auto x :
+             std::views::iota(static_cast<Int32>(area.left)) | std::views::take_while([&](Int32 x) {
+                 return x <= area.right;
+             })) {
             const auto id =
                 d.grid.blockMap[std::size_t(UInt32(y) / bw) * d.grid.size.x + UInt32(x) / bw];
             const auto block = std::ranges::find(d.grid.blocks, id, &TerrainGridBlockEntry::id);
@@ -763,7 +810,7 @@ bool LandscapeMapper::applyLocal(TerrainDocument& d,
     if (!map(width, d.grid.scale, heights, materials, forced, true, random)) {
         return false;
     }
-    for (std::size_t i = 0; i < addresses.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, addresses.size())) {
         next.blocks[addresses[i].first].materials[addresses[i].second] = materials[i];
     }
     d = std::move(next);
@@ -807,8 +854,8 @@ bool LandscapeMapper::stamp(TerrainDocument& d,
         average /= Flt32(flat.size());
     }
     for (auto p : flat) {
-        for (UInt32 y = 0; y < 2; ++y) {
-            for (UInt32 x = 0; x < 2; ++x) {
+        for (auto y : std::views::iota(UInt32{0}, UInt32{2})) {
+            for (auto x : std::views::iota(UInt32{0}, UInt32{2})) {
                 b.heights[(std::size_t(p.y) + y) * (width + 1) + UInt32(p.x) + x] = average;
             }
         }
@@ -816,11 +863,13 @@ bool LandscapeMapper::stamp(TerrainDocument& d,
     constexpr std::array<Flt32, 8> deviations{0, 3, 12, 30, 60, 130, 300, 700};
     for (auto p : flat) {
         const auto height = b.heights[std::size_t(p.y) * (width + 1) + p.x];
-        for (UInt32 level = 1; level <= stamp.clampDetail; ++level) {
+        for (auto level : std::views::iota(UInt32{1}) | std::views::take_while([&](UInt32 level) {
+                              return level <= stamp.clampDetail;
+                          })) {
             const auto step = 1U << level, x = UInt32(p.x) & ~(step - 1),
                        y = UInt32(p.y) & ~(step - 1);
-            for (UInt32 j = 0; j < 2; ++j) {
-                for (UInt32 i = 0; i < 2; ++i) {
+            for (auto j : std::views::iota(UInt32{0}, UInt32{2})) {
+                for (auto i : std::views::iota(UInt32{0}, UInt32{2})) {
                     if (x + i * step > width || y + j * step > width) {
                         continue;
                     }

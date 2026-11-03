@@ -1,4 +1,5 @@
 #include "opent1/game/server_irc_controls.hpp"
+#include <ranges>
 
 namespace opent1::game {
 
@@ -30,7 +31,10 @@ std::string ServerDetailCtrl::getCellText(Point2I cell) const {
             return {};
         }
         line.remove_prefix(2);
-        for (Int32 i = 0; i < cell.x; ++i) {
+        for ([[maybe_unused]] auto i :
+             std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                 return i < cell.x;
+             })) {
             const auto tab = line.find('\t');
             if (tab == line.npos) {
                 return {};

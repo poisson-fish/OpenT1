@@ -1,4 +1,5 @@
 #include "gfx_test_support.hpp"
+#include <ranges>
 #include "software_corpus.hpp"
 #include <opent1/gfx/software_rasterizer.hpp>
 #include <opent1/core/file_stream.hpp>
@@ -167,8 +168,12 @@ void wrappingTextures() {
         auto surface = SoftwareSurface::create(8, 6);
         CHECK(texture && surface);
         std::ranges::fill(texture->pixels, std::byte{255}); // Padding must never be sampled.
-        for (Int32 y = 0; y < size.y; ++y) {
-            for (Int32 x = 0; x < size.x; ++x) {
+        for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                          return y < size.y;
+                      })) {
+            for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                              return x < size.x;
+                          })) {
                 texture->row(y)[x] = std::byte(1 + y * size.x + x);
             }
         }
@@ -185,8 +190,8 @@ void wrappingTextures() {
         material.perspective = material.wrap = true;
         const std::array<SortedPolygon, 1> polygons{{{vertices, material}}};
         const auto check = [&](bool clipped) {
-            for (Int32 y = 0; y < 6; ++y) {
-                for (Int32 x = 0; x < 8; ++x) {
+            for (auto y : std::views::iota(Int32{0}, Int32{6})) {
+                for (auto x : std::views::iota(Int32{0}, Int32{8})) {
                     const auto u = Int32(std::floor(size.x * (-.5 + x * .25) + .125));
                     const auto v = Int32(std::floor(size.y * (-1. + y * .5) + .125));
                     const auto tx = (u % size.x + size.x) % size.x;
@@ -216,8 +221,8 @@ void clampedTextureCoordinates() {
     auto surface = SoftwareSurface::create(8, 6);
     CHECK(texture && surface);
     std::ranges::fill(texture->pixels, std::byte{255});
-    for (Int32 y = 0; y < 2; ++y) {
-        for (Int32 x = 0; x < 3; ++x) {
+    for (auto y : std::views::iota(Int32{0}, Int32{2})) {
+        for (auto x : std::views::iota(Int32{0}, Int32{3})) {
             texture->row(y)[x] = std::byte(1 + y * 3 + x);
         }
     }
@@ -236,8 +241,8 @@ void clampedTextureCoordinates() {
         for (const bool sorted : {false, true}) {
             surface->clear(0);
             CHECK(sorted ? surface->sortedPolygons(polygons) : surface->polygon(vertices, material));
-            for (Int32 y = 0; y < 6; ++y) {
-                for (Int32 x = 0; x < 8; ++x) {
+            for (auto y : std::views::iota(Int32{0}, Int32{6})) {
+                for (auto x : std::views::iota(Int32{0}, Int32{8})) {
                     const auto tx = std::clamp(Int32(std::floor(3 * (-.5 + x * .25) + .125)), 0, 2);
                     const auto ty = std::clamp(Int32(std::floor(2 * (-1. + y * .5) + .125)), 0, 1);
                     CHECK(surface->bitmap().row(y)[x] == texture->row(ty)[tx]);

@@ -1,4 +1,5 @@
 #include "test_support.hpp"
+#include <ranges>
 #include "test_registry.hpp"
 #include <opent1/core/mapped_file.hpp>
 #include <opent1/core/vol_stream.hpp>
@@ -13,7 +14,7 @@ int mappedArchives() {
         // Four UTF-16 filename lengths cover every alignment of the variable
         // rename payload within its UInt64 storage. The terminator must exist
         // even when there is no spare allocation padding after the name.
-        for (unsigned padding = 0; padding < 4; ++padding) {
+        for (auto padding : std::views::iota(unsigned{0}, unsigned{4})) {
             const auto path = std::filesystem::absolute(
                 "mapped-archive-" +
                 std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) +

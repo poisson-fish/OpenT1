@@ -1,4 +1,5 @@
 #include <opent1/game/interior_shape.hpp>
+#include <ranges>
 #include <opent1/game/string_table.hpp>
 #include <opent1/sim/sim_world_game.hpp>
 
@@ -108,7 +109,9 @@ void InteriorShape::setShapeResources(std::shared_ptr<world::InteriorShapeResour
     if (shapeResources_ && shapeResources_->shape) {
         const auto& shape = *shapeResources_->shape;
         for (const auto& state : shape.states) {
-            for (UInt32 i = 0; i < state.lodCount; ++i) {
+            for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                              return i < state.lodCount;
+                          })) {
                 const std::size_t lodIdx = static_cast<std::size_t>(state.firstLod + i);
                 if (lodIdx < shapeResources_->geometry.size() &&
                     shapeResources_->geometry[lodIdx]) {
@@ -229,7 +232,7 @@ Box3F InteriorShape::buildContainerBox(const TMat3F& in_rMat) const {
     Point3F firstPoint{};
     m_mul(itrSpaceBBox.fMin, in_rMat, firstPoint);
     Box3F wsBox{firstPoint, firstPoint};
-    for (Int32 i = 0; i < 8; ++i) {
+    for (auto i : std::views::iota(Int32{0}, Int32{8})) {
         const Point3F osPoint((i & 1) ? itrSpaceBBox.fMin.x : itrSpaceBBox.fMax.x,
                               (i & 2) ? itrSpaceBBox.fMin.y : itrSpaceBBox.fMax.y,
                               (i & 4) ? itrSpaceBBox.fMin.z : itrSpaceBBox.fMax.z);
@@ -616,7 +619,9 @@ bool InteriorShape::readCheckVals(BitStream& stream, std::vector<UInt32>& outVal
         return false;
     }
     outVals.resize(static_cast<std::size_t>(size));
-    for (UInt32 i = 0; i < size; ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < size;
+                  })) {
         UInt32 val = 0;
         if (!stream.read(val)) {
             return false;

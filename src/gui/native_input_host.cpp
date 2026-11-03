@@ -1,4 +1,5 @@
 #include <opent1/gui/native_object_hosts.hpp>
+#include <ranges>
 #include <opent1/sim/sim_sdl_input.hpp>
 #include <opent1/sim/sim_resource_volume.hpp>
 #include <opent1/core/file_stream.hpp>
@@ -178,7 +179,7 @@ struct NativeInputHost::State {
             }
             console.print(args[0]);
             if (d->first == sim::InputKeyboard) {
-                for (UInt32 i = 1; i < 256; ++i) {
+                for (auto i : std::views::iota(UInt32{1}, UInt32{256})) {
                     if (const auto* key = sim::inputKeyDescription(i);
                         key && (!key->name.empty() || key->lower)) {
                         console.print(std::format("key {} {}",

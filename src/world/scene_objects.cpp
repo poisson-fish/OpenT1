@@ -1,4 +1,5 @@
 #include <opent1/world/scene_objects.hpp>
+#include <ranges>
 #include <cmath>
 #include <opent1/sim/sim_resource_volume.hpp>
 
@@ -270,7 +271,9 @@ bool SimPathManager::replace(Int32 id, std::optional<PathState> p) {
 
 std::vector<PathEvent> SimPathManager::fullSync() const {
     std::vector<PathEvent> result;
-    for (std::size_t i = 0; i < paths_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < paths_.size();
+                  })) {
         if (paths_[i]) {
             PathEvent e;
             e.id = Int32(i);
@@ -959,7 +962,7 @@ std::shared_ptr<const WorldSurfaceMesh> boxSurface(const Box3F& box) {
     materials.list.details = 1;
     materials.list.materialsPerDetail = 3;
     materials.textures.resize(3);
-    for (Int32 i = 0; i < 3; ++i) {
+    for (auto i : std::views::iota(Int32{0}, Int32{3})) {
         TsMaterial m;
         m.flags = 1;
         m.index = 253 - i;
@@ -972,7 +975,7 @@ std::shared_ptr<const WorldSurfaceMesh> boxSurface(const Box3F& box) {
              std::array<std::array<std::size_t, 3>, 2>{{{0, 1, 2}, {0, 2, 3}}}) {
             StaticSurfaceTriangle triangle;
             triangle.material = 253 - face.color;
-            for (std::size_t i = 0; i < 3; ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
                 triangle.vertices[i].position = face.points[indices[i]];
             }
             mesh->triangles.push_back(std::move(triangle));

@@ -27,7 +27,10 @@ bool TsShapePose::overrideParentTransform(Int32 node, const TMat3F& parent) {
     inverse.inverse();
     TMat3F delta;
     m_mul(inverse, parent, delta);
-    for (std::size_t i = std::size_t(node); i < data_->transforms.size(); ++i) {
+    for (auto i : std::views::iota(static_cast<std::size_t>(std::size_t(node))) |
+                      std::views::take_while([&](std::size_t i) {
+                          return i < data_->transforms.size();
+                      })) {
         auto ancestor = Int32(i);
         while (ancestor > node) {
             ancestor = shape_->nodes[ancestor].parent;

@@ -76,7 +76,9 @@ void InteriorLightPlayer::install(std::size_t i) {
     const auto& s = lighting_->states[std::size_t(l.firstState) + thread.playback.state];
     if (order_ == std::numeric_limits<UInt64>::max()) {
         std::vector<std::size_t> order;
-        for (std::size_t n = 0; n < installed_.size(); ++n) {
+        for (auto n : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t n) {
+                          return n < installed_.size();
+                      })) {
             if (installed_[n].order) {
                 order.push_back(n);
             }
@@ -112,7 +114,7 @@ InteriorLightPlayer::slotsFor(const InteriorLighting& target) const {
     std::vector<Int32> mapped(lighting_->states.size(), -1);
     std::vector<bool> used(target.states.size());
     std::size_t work{};
-    for (std::size_t i = 0; i < target.lights.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, target.lights.size())) {
         const auto& a = lighting_->lights[i];
         const auto& b = target.lights[i];
         // Native ITRInstance preserves instance lights by ordinal when changing
@@ -121,7 +123,9 @@ InteriorLightPlayer::slotsFor(const InteriorLighting& target) const {
             !charge(work, std::size_t(a.stateCount))) {
             return {};
         }
-        for (Int32 j = 0; j < a.stateCount; ++j) {
+        for (auto j : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 j) {
+                          return j < a.stateCount;
+                      })) {
             const auto from = std::size_t(a.firstState + j), to = std::size_t(b.firstState + j);
             const auto& sa = lighting_->states[from];
             const auto& sb = target.states[to];
@@ -133,7 +137,9 @@ InteriorLightPlayer::slotsFor(const InteriorLighting& target) const {
         }
     }
     std::vector<std::size_t> order;
-    for (std::size_t i = 0; i < installed_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < installed_.size();
+                  })) {
         if (installed_[i].order) {
             order.push_back(i);
         }
@@ -236,7 +242,7 @@ InteriorLightPlayer::slotsForDetail(const InteriorLighting& target) const {
     }
     next->random_ = random_;
     std::size_t work{};
-    for (std::size_t i = 0; i < threads_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, threads_.size())) {
         next->threads_[i].playback = threads_[i].playback;
         auto& state = next->threads_[i].playback;
         if (state.time > target.lights[i].duration) {

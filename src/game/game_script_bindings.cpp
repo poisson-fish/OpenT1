@@ -1,4 +1,5 @@
 #include <opent1/game/fear_plugin.hpp>
+#include <ranges>
 #include <opent1/game/fear_player_psc.hpp>
 #include <opent1/game/explosion.hpp>
 #include <opent1/game/player.hpp>
@@ -736,7 +737,7 @@ void FearPlugin::installGameplayCommands(Console& console) {
                             return "False";
                         }
                         Int32 sequence = -1;
-                        for (std::size_t i = 0; i < data->sequences.size(); ++i) {
+                        for (auto i : std::views::iota(std::size_t{0}, data->sequences.size())) {
                             const auto name = data->sequences[i].name;
                             if (name >= 0 && std::size_t(name) < data->names.size() &&
                                 data->names[name] == args[3]) {
@@ -1000,9 +1001,10 @@ void FearPlugin::installGameplayCommands(Console& console) {
                 args.size() == 3 ? player(sg_.manager, sg_.playerManager, args[1]) : nullptr;
             Int32 count = 0;
             if (object && sg_.dbm) {
-                for (Int32 index = 0;
-                     index < sg_.dbm->getDataGroupSize(DataBlockManager::ItemDataType);
-                     ++index) {
+                for (auto index :
+                     std::views::iota(Int32{0}) | std::views::take_while([&](Int32 index) {
+                         return index < sg_.dbm->getDataGroupSize(DataBlockManager::ItemDataType);
+                     })) {
                     const auto* data =
                         sg_.dbm->lookupDataBlock(index, DataBlockManager::ItemDataType);
                     if (data && data->className == args[2] && object->getItemCount(index) > 0) {

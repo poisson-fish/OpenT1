@@ -21,8 +21,12 @@ void NativeTerrainBlock::buildGridMap() {
         int squareCount = 1 << (BlockShift - i);
         int squareSize = (NativeTerrainBlock::BlockSize - 1) / squareCount;
 
-        for (int squareX = 0; squareX < squareCount; squareX++) {
-            for (int squareY = 0; squareY < squareCount; squareY++) {
+        for (auto squareX : std::views::iota(0) | std::views::take_while([&](int squareX) {
+                                return squareX < squareCount;
+                            })) {
+            for (auto squareY : std::views::iota(0) | std::views::take_while([&](int squareY) {
+                                    return squareY < squareCount;
+                                })) {
                 UInt16 min = 0xFFFF;
                 UInt16 max = 0;
                 UInt16 mindev45 = 0;
@@ -56,8 +60,12 @@ void NativeTerrainBlock::buildGridMap() {
                 }
                 bool empty = true;
 
-                for (int sizeX = 0; sizeX <= squareSize; sizeX++) {
-                    for (int sizeY = 0; sizeY <= squareSize; sizeY++) {
+                for (auto sizeX : std::views::iota(0) | std::views::take_while([&](int sizeX) {
+                                      return sizeX <= squareSize;
+                                  })) {
+                    for (auto sizeY : std::views::iota(0) | std::views::take_while([&](int sizeY) {
+                                          return sizeY <= squareSize;
+                                      })) {
                         int x = squareX * squareSize + sizeX;
                         int y = squareY * squareSize + sizeY;
 
@@ -178,7 +186,9 @@ void NativeTerrainRender::lightExpandHorz(
     float z = trs.lmaBuffer[j][i].z;
     float dz = (trs.lmaBuffer[j][i + size].z - z) * scale;
 
-    for (int count = 1; count < size; count++) {
+    for (auto count : std::views::iota(1) | std::views::take_while([&](int count) {
+                          return count < size;
+                      })) {
         x += dx;
         z += dz;
 
@@ -194,7 +204,9 @@ void NativeTerrainRender::lightExpandVert(
     float z = trs.lmaBuffer[j][i].z;
     float dz = (trs.lmaBuffer[j + size][i].z - z) * scale;
 
-    for (int count = 1; count < size; count++) {
+    for (auto count : std::views::iota(1) | std::views::take_while([&](int count) {
+                          return count < size;
+                      })) {
         y += dy;
         z += dz;
 
@@ -211,7 +223,9 @@ void NativeTerrainRender::lmExpandHorz(int y, int x, int shift) {
     d.g = (trs.lmaBuffer[y][x + size].g - c.g) >> shift;
     d.b = (trs.lmaBuffer[y][x + size].b - c.b) >> shift;
 
-    for (int i = 1; i < size; i++) {
+    for (auto i : std::views::iota(1) | std::views::take_while([&](int i) {
+                      return i < size;
+                  })) {
         c.r += d.r;
         c.g += d.g;
         c.b += d.b;
@@ -228,7 +242,9 @@ void NativeTerrainRender::lmExpandVert(int y, int x, int shift) {
     d.g = (trs.lmaBuffer[y + size][x].g - c.g) >> shift;
     d.b = (trs.lmaBuffer[y + size][x].b - c.b) >> shift;
 
-    for (int i = 1; i < size; i++) {
+    for (auto i : std::views::iota(1) | std::views::take_while([&](int i) {
+                      return i < size;
+                  })) {
         c.r += d.r;
         c.g += d.g;
         c.b += d.b;
@@ -238,14 +254,13 @@ void NativeTerrainRender::lmExpandVert(int y, int x, int shift) {
 }
 
 void NativeTerrainRender::expandDynamicLight(TerrLightInfo& tl, int x, int y, int level) {
-    int i, j;
     setupColorAdder(tl.radiusSquared, tl.r, tl.g, tl.b);
 
     if (DynamicLightMapShift - level <= 0) {
         int step = 1 << (level - DynamicLightMapShift);
         int count = DynamicLightMapSize;
-        for (j = 0; j <= count; j++) {
-            for (i = 0; i <= count; i++) {
+        for (const auto j : std::views::iota(0, count + 1)) {
+            for (const auto i : std::views::iota(0, count + 1)) {
                 float xp = (x + i * step) * trs.squareSize - tl.pos.x;
                 float yp = (y + j * step) * trs.squareSize - tl.pos.y;
                 float zp = fixedToFloat(trs.currentBlock->getHeight(
@@ -263,8 +278,8 @@ void NativeTerrainRender::expandDynamicLight(TerrLightInfo& tl, int x, int y, in
 
         float delta = trs.squareSize / float(size);
 
-        for (j = 0; j <= count; j++) {
-            for (i = 0; i <= count; i++) {
+        for (const auto j : std::views::iota(0, count + 1)) {
+            for (const auto i : std::views::iota(0, count + 1)) {
                 float xp = (x + i) * trs.squareSize - tl.pos.x;
                 float yp = (y + j) * trs.squareSize - tl.pos.y;
                 float zp = fixedToFloat(trs.currentBlock->getHeight(
@@ -282,7 +297,9 @@ void NativeTerrainRender::expandDynamicLight(TerrLightInfo& tl, int x, int y, in
                         yp - trs.squareSize, xp * xp, delta, (j - 1) << delt, i << delt, delt);
                 if (i != 0 && j != 0) {
                     float previousX = (x + i - 1) * trs.squareSize - tl.pos.x;
-                    for (int k = 1; k < size; k++) {
+                    for (auto k : std::views::iota(1) | std::views::take_while([&](int k) {
+                                      return k < size;
+                                  })) {
                         float rowY = (y + j - 1) * trs.squareSize + k * delta - tl.pos.y;
                         lightExpandHorz(previousX,
                                         rowY * rowY,
@@ -298,7 +315,6 @@ void NativeTerrainRender::expandDynamicLight(TerrLightInfo& tl, int x, int y, in
 }
 
 void NativeTerrainRender::expandLightMap(int x, int y, int level) {
-    int i, j;
     x &= NativeTerrainBlock::BlockMask;
     y &= NativeTerrainBlock::BlockMask;
     if (DynamicLightMapShift - level <= 0) {
@@ -306,8 +322,8 @@ void NativeTerrainRender::expandLightMap(int x, int y, int level) {
         int count = DynamicLightMapSize;
         int lightMask = trs.currentBlock->lightMap->getWidth() - 1;
 
-        for (j = 0; j <= count; j++) {
-            for (i = 0; i <= count; i++) {
+        for (const auto j : std::views::iota(0, count + 1)) {
+            for (const auto i : std::views::iota(0, count + 1)) {
                 UInt16 lix = *((UInt16*)trs.currentBlock->lightMap->getAddress(
                     (x + (i << step)) & lightMask, (y + (j << step)) & lightMask));
                 convertColor(trs.lmaBuffer[j][i], lix);
@@ -318,17 +334,19 @@ void NativeTerrainRender::expandLightMap(int x, int y, int level) {
         int size = 1 << delt;
         int count = 1 << level;
 
-        for (j = 0; j <= count; j++) {
+        for (const auto j : std::views::iota(0, count + 1)) {
             UInt16* pixPtr =
                 (UInt16*)trs.currentBlock->lightMap->getAddress(x & 255, (y + j) & 255);
-            for (i = 0; i <= count; i++) {
+            for (const auto i : std::views::iota(0, count + 1)) {
                 convertColor(trs.lmaBuffer[j << delt][i << delt], *pixPtr++);
                 if (i != 0)
                     lmExpandHorz(j << delt, (i - 1) << delt, delt);
                 if (j != 0)
                     lmExpandVert((j - 1) << delt, i << delt, delt);
                 if (i != 0 && j != 0) {
-                    for (int k = 1; k < size; k++)
+                    for (auto k : std::views::iota(1) | std::views::take_while([&](int k) {
+                                      return k < size;
+                                  }))
                         lmExpandHorz(((j - 1) << delt) + k, (i - 1) << delt, delt);
                 }
             }
@@ -337,11 +355,10 @@ void NativeTerrainRender::expandLightMap(int x, int y, int level) {
 }
 
 void NativeTerrainRender::collapseLightMap() {
-    int j, i;
-    for (j = 0; j < 9; j++) {
+    for (const auto j : std::views::iota(0, 9)) {
         UInt16* row = (UInt16*)trs.currentBlock->dynamicLightMap->getAddress(0, j);
         Color* cwalk = trs.lmaBuffer[j];
-        for (i = 0; i < 9; i++)
+        for ([[maybe_unused]] const auto i : std::views::iota(0, 9))
             *row++ = convertColorBack(*cwalk++);
     }
 }
@@ -358,7 +375,9 @@ NativeTerrainRender::TestSquareLights(GridSquare* sq, int level, Point2I pos, UI
 
     Point3F vec;
 
-    for (int i = 0; (lightMask >> i) != 0; i++) {
+    for (auto i : std::views::iota(0) | std::views::take_while([&](int i) {
+                      return (lightMask >> i) != 0;
+                  })) {
 
         if (lightMask & (1 << i)) {
             const Point3F& lightPos = terrainLights[i].pos;
@@ -394,7 +413,9 @@ NativeTerrainRender::TestSquareLights(GridSquare* sq, int level, Point2I pos, UI
 int NativeTerrainRender::TestSquareVisibility(Point3F& min, Point3F& max, int mask, float expand) {
     int retMask = 0;
     Point3F minPoint, maxPoint;
-    for (int i = 0; i < NumClipPlanes; i++) {
+    for (auto i : std::views::iota(0) | std::views::take_while([&](int i) {
+                      return i < NumClipPlanes;
+                  })) {
         if (mask & (1 << i)) {
             if (trs.clipPlane[i].x > 0) {
                 maxPoint.x = max.x;
@@ -484,7 +505,9 @@ int NativeTerrainRender::allocEdges(int count) {
     int ret = trs.edgeCount;
     trs.edgeCount += count;
 
-    for (int i = ret; i < ret + count; i++)
+    for (auto i : std::views::iota(static_cast<int>(ret)) | std::views::take_while([&](int i) {
+                      return i < ret + count;
+                  }))
         trs.edges[i].mp = InvalidPointIndex;
     return ret;
 }
@@ -760,7 +783,7 @@ void NativeTerrainRender::processCurrentBlock(int topEdge,
         trs.edges[firstCrossEdge + 3].p1 = trs.edges[left].mp;
         trs.edges[firstCrossEdge + 3].p2 = midPoint;
 
-        for (int i = 0; i < 4; i++) {
+        for (auto i : std::views::iota(0, 4)) {
             n[i].level = nextLevel;
             n[i].clipFlags = clipFlags;
             n[i].lightMask = lightMask;
@@ -798,7 +821,9 @@ float NativeTerrainRender::getWaterHeight(Point2F pos, int pointIndex) {
     Point3F normal(0, 0, 1);
     float sinAngle, cosAngle;
 
-    for (int i = 0; i < trs.waveCount; i++) {
+    for (auto i : std::views::iota(0) | std::views::take_while([&](int i) {
+                      return i < trs.waveCount;
+                  })) {
         Point4F& wave = trs.waveParameters[i];
         float temp = pos.x * wave.x + pos.y * wave.y + wave.z;
         m_sincos(temp, &sinAngle, &cosAngle);
@@ -1013,7 +1038,7 @@ void NativeTerrainRender::processWaterBlock(Point2F extent, float height) {
         n[3].bottom = firstCrossEdge + 3;
         n[3].left = trs.edges[left].firstSubEdge;
 
-        for (int i = 0; i < 4; i++)
+        for (auto i : std::views::iota(0, 4))
             n[i].clipFlags = clipFlags;
 
         curStackSize += 3;

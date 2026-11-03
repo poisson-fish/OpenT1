@@ -1,4 +1,5 @@
 #include "test_support.hpp"
+#include <ranges>
 #include <opent1/gui/controls.hpp>
 #include <opent1/core/file_stream.hpp>
 using namespace opent1;
@@ -22,7 +23,7 @@ int opent1_test_gui_routing() {
         CHECK(root.resize({}, {200, 160}) && root.addObject(behind) && root.addObject(wrap) &&
               canvas.content(&root));
         unsigned direct = 0, routed = 0;
-        for (int history = 0; history < 256; ++history) {
+        for (auto history : std::views::iota(0, 256)) {
             const int x = 5 + history % 13, y = 7 + history % 17, w = 30 + history % 19,
                       h = 20 + history % 11;
             CHECK(behind.resize({x, y}, {w, h}) && wrap.resize({x, y}, {w, h}));

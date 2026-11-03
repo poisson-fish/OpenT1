@@ -1,4 +1,5 @@
 #include <opent1/game/ai.hpp>
+#include <ranges>
 #include <opent1/core/text.hpp>
 #include <opent1/game/string_table.hpp>
 #include <opent1/game/data_block_manager.hpp>
@@ -197,7 +198,9 @@ bool AIManager::spawn(Console& console,
 }
 
 bool AIManager::remove(std::string_view aiName, bool deletePlayer) {
-    for (std::size_t i = 0; i < aiList_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < aiList_.size();
+                  })) {
         if (equalIgnoreCase(aiList_[i]->name, aiName)) {
             AIObj& ai = *aiList_[i];
             removeVariables(getManager() ? getManager()->console() : nullptr, ai.name);

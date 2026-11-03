@@ -1,4 +1,5 @@
 #include <opent1/gui/native_tool_host.hpp>
+#include <ranges>
 #include <opent1/gui/sdl_presentation.hpp>
 #include <opent1/sim/sim_sdl_canvas.hpp>
 #include <charconv>
@@ -75,7 +76,9 @@ struct View {
             throw std::runtime_error("tool root");
         }
         Int32 x = 4, y = 4;
-        for (std::size_t i = 0; i < model.entries.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < model.entries.size();
+                      })) {
             const auto& e = model.entries[i];
             auto b = std::make_unique<ToolButton>();
             b->text = e.bitmap ? std::string{} : e.name;
@@ -104,7 +107,9 @@ struct View {
             buttons.push_back(std::move(b));
         }
         Int32 left = 0;
-        for (std::size_t i = 0; i < model.edges.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < model.edges.size();
+                      })) {
             auto t = std::make_unique<Text>();
             t->font = font;
             if (auto p = model.parts.find(Int32(i)); p != model.parts.end()) {
@@ -218,7 +223,7 @@ struct Panel : std::enable_shared_from_this<Panel> {
 
         auto staged = std::make_shared<View>(next, *console, font);
         gfx::Palette palette;
-        for (unsigned i = 0; i < 256; ++i) {
+        for (auto i : std::views::iota(unsigned{0}, unsigned{256})) {
             palette.palettes[0].colors[i] = {UInt8(i), UInt8(i), UInt8(i), 0};
         }
         // Validate the complete new graph/raster before capture/lifecycle work.
@@ -243,7 +248,7 @@ struct Panel : std::enable_shared_from_this<Panel> {
             return false;
         }
         gfx::Palette palette;
-        for (unsigned i = 0; i < 256; ++i) {
+        for (auto i : std::views::iota(unsigned{0}, unsigned{256})) {
             palette.palettes[0].colors[i] = {UInt8(i), UInt8(i), UInt8(i), 0};
         }
         return presentation.draw(canvas,
@@ -577,7 +582,10 @@ struct NativeToolHost::State {
             }
             std::vector<Int32> edges;
             Int32 previous = 0;
-            for (std::size_t i = 1; i < args.size(); ++i) {
+            for (auto i :
+                 std::views::iota(std::size_t{1}) | std::views::take_while([&](std::size_t i) {
+                     return i < args.size();
+                 })) {
                 Int32 edge{};
                 if (!number(args[i], edge) || (edge != -1 && (edge <= previous || edge > Width)) ||
                     (edge == -1 && i + 1 != args.size())) {
@@ -690,7 +698,7 @@ bool NativeToolHost::click(std::string_view name, std::string_view button) {
     if (!p) {
         return false;
     }
-    for (std::size_t i = 0; i < p->model.entries.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, p->model.entries.size())) {
         if (p->model.entries[i].name == button) {
             auto retained = p->view;
             return p->canvas.performClick(*retained->buttons[i]);

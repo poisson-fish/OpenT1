@@ -1,4 +1,5 @@
 #include <opent1/game/shell_controls.hpp>
+#include <ranges>
 
 namespace opent1::game {
 
@@ -24,7 +25,7 @@ bool FGShellBorder::draw(gfx::SoftwareSurface& surface, Point2I offset, RectI cl
     if (!border_ || fields_.extent.x < 512 || fields_.extent.y < 384) {
         return true;
     }
-    for (int i = 0; i < 15; ++i) {
+    for (auto i : std::views::iota(0, 15)) {
         if (!border_->get(i)) {
             return false;
         }

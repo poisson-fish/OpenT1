@@ -1,4 +1,5 @@
 #include <opent1/gfx/render_limits.hpp>
+#include <ranges>
 #include <opent1/world/interior_links.hpp>
 #include "collision_geometry.hpp"
 #include "interior_pvs.hpp"
@@ -30,7 +31,9 @@ InteriorContainerGraph::prepare(std::span<const InteriorContainerNode> nodes,
     graph.nodes_.assign(nodes.begin(), nodes.end());
     graph.children_.resize(nodes.size());
     graph.interiorNodes_.assign(interiors.size(), ~UInt32{0});
-    for (std::size_t i = 0; i < nodes.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < nodes.size();
+                  })) {
         const auto& node = nodes[i];
         if (!node.bounds.isValid() || node.interior < -1 || (node.pvs && node.interior < 0) ||
             !std::ranges::all_of(

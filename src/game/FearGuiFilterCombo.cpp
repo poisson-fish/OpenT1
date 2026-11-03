@@ -1,4 +1,5 @@
 #include "opent1/game/shell_controls.hpp"
+#include <ranges>
 
 namespace opent1::game {
 
@@ -8,7 +9,7 @@ FilterVarCtrl::FilterVarCtrl() {
 
 void FilterVarCtrl::setTable(std::span<const FilterCtrl::FilterVars> table) {
     clearEntries();
-    for (std::size_t i = 0; i < table.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, table.size())) {
         addEntry(table[i].label, static_cast<Int32>(i));
     }
 }

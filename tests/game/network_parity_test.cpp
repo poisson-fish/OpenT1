@@ -180,8 +180,8 @@ void scriptObserverTransforms() {
     CHECK(camera && camera->mode() == ObserverCamera::FreeRotateMode);
     const auto matches = [&](const TMat3F& actual) {
         CHECK((actual.p - source->getLinearPosition()).len() < .001f);
-        for (int row = 0; row < 3; ++row) {
-            for (int col = 0; col < 3; ++col) {
+        for (auto row : std::views::iota(0, 3)) {
+            for (auto col : std::views::iota(0, 3)) {
                 CHECK(std::abs(actual.m[row][col] - source->getTransform().m[row][col]) < .00001f);
             }
         }
@@ -482,7 +482,9 @@ void delayedControlReplay() {
     server->setControlObject(source);
     client->setControlObject(target);
     UInt32 previous = 0;
-    for (UInt32 i = 0; i < PlayerPSC::MaxMoves; ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < PlayerPSC::MaxMoves;
+                  })) {
         client->clientCollectInput(previous, i * 32 + 8, .032f);
         previous = i * 32 + 8;
     }
@@ -513,7 +515,7 @@ void soundEventDelivery() {
         CHECK(profile);
         profile->dist = 100;
         profile->profile.maxDistance = 100;
-        for (Int32 i = 0; i < 3; ++i) {
+        for (auto i : std::views::iota(Int32{0}, Int32{3})) {
             auto* sound = dynamic_cast<SoundData*>(blocks->createDataBlock(
                 "Effect" + std::to_string(i), DataBlockManager::SoundDataType));
             CHECK(sound);
@@ -933,7 +935,7 @@ void originalPscCapture() {
     CHECK(players->clientAdded("Capture", "male1", "base", true, 2049) == 2049);
     auto* psc = add<PlayerPSC>(endpoint.manager(), true);
     CHECK(endpoint.stream->addObject(*psc));
-    for (UInt32 mode = 0; mode < 6; ++mode) {
+    for (auto mode : std::views::iota(UInt32{0}, UInt32{6})) {
         auto* client = players->findClient(2049);
         client->curGuiMode = mode;
         client->sendScores = mode & 1;
@@ -1044,7 +1046,9 @@ void nativeServerFraming() {
     CHECK(client.itemCount(4) == 9);
     server.packetReceived(key);
     // Initial/control-absent packets and indexed inventory both reject truncation.
-    for (Int32 bits = 0; bits < count; ++bits) {
+    for (auto bits : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 bits) {
+                         return bits < count;
+                     })) {
         PlayerPSC truncated;
         truncated.setFirstMoveSeq(2);
         BitStream packet{std::span<const std::byte>(bytes)};
@@ -1066,7 +1070,7 @@ void recorderLayout() {
           output.write(UInt8{1}));
     CHECK(output.write(Int32{17}) && output.write(-0.25f) && output.write(0.125f));
     CHECK(output.getPosition() == 33);
-    for (std::size_t n = 0; n < bytes.size(); ++n) {
+    for (auto n : std::views::iota(std::size_t{0}, bytes.size())) {
         MemRWStream shortInput{std::span<const std::byte>(bytes).first(n)};
         CHECK(!psc.processRecorderStream(shortInput, 0));
         CHECK(psc.moves().empty());
@@ -1286,7 +1290,7 @@ void liveServerBrowser() {
     serverConsole.setVariable("modList", "base");
     clientConsole.setVariable("pref::buddyList", "\"Buddy One\" Other");
     CHECK(client->queryBrowserServer(address));
-    for (UInt32 now = 1; now < 100; ++now) {
+    for (auto now : std::views::iota(UInt32{1}, UInt32{100})) {
         (void)client->delegate()->process(now);
         (void)server->delegate()->process(now);
     }
@@ -1313,7 +1317,7 @@ void liveServerBrowser() {
     CHECK(list.setServerPreference(address, true, false));
     serverConsole.setVariable("Server::Hostname", "Updated");
     CHECK(client->queryBrowserServer(address, true));
-    for (UInt32 now = 100; now < 150; ++now) {
+    for (auto now : std::views::iota(UInt32{100}, UInt32{150})) {
         (void)client->delegate()->process(now);
         (void)server->delegate()->process(now);
     }
@@ -1337,7 +1341,10 @@ void liveServerBrowser() {
     client->delegate()->browser().onTimeout(address);
     CHECK(client->discoveredServers().front().status == ServerListCtrl::STAT_TIME_OUT);
     const auto encoded = server->encodeBrowserGameInfo();
-    for (std::size_t size = 0; size < encoded.size() / 2; ++size) {
+    for (auto size :
+         std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t size) {
+             return size < encoded.size() / 2;
+         })) {
         CHECK(!client->receiveBrowserGameInfo(
             {address,
              1,
@@ -1358,7 +1365,10 @@ void hostnameConnection() {
     CHECK(endpoint == "IP:localhost:" + std::to_string(port));
     CHECK(client->connect(endpoint, 0) == net::Result::Ok);
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    for (UInt32 now = 1; !client->stream(2048); ++now) {
+    for (auto now :
+         std::views::iota(UInt32{1}) | std::views::take_while([&]([[maybe_unused]] UInt32 now) {
+             return !client->stream(2048);
+         })) {
         CHECK(std::chrono::steady_clock::now() < deadline);
         (void)server->process(now);
         (void)client->process(now);

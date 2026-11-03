@@ -1,4 +1,5 @@
 #include <opent1/core/vol_stream.hpp>
+#include <ranges>
 #include <opent1/core/file_stream.hpp>
 #include <opent1/core/mem_stream.hpp>
 #include <opent1/core/rle_stream.hpp>
@@ -327,7 +328,9 @@ bool VolumeRWStream::openVolume(std::span<const std::byte> bytes) {
     }
     std::vector<Entry> next;
     std::size_t total = 0;
-    for (std::size_t i = 0; i < input.getVolumeItems().size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < input.getVolumeItems().size();
+                  })) {
         const auto& item = input.getVolumeItems()[i];
         if (item.size > MaxArchiveBytes - total ||
             !input.openEntry(i, static_cast<UInt32>(MaxArchiveBytes - total))) {
@@ -357,17 +360,17 @@ bool VolumeRWStream::replace(Entry entry) {
         return entry.name ? old.name && sameName(*entry.name, *old.name) : entry.id == old.id;
     });
     std::size_t total = entry.bytes.size();
-    for (auto it = entries_.begin(); it != entries_.end(); ++it) {
-        if (it == found) {
+    for (const auto& old : entries_) {
+        if (found != entries_.end() && &old == &*found) {
             continue;
         }
-        if (entry.id && it->id == entry.id) {
+        if (entry.id && old.id == entry.id) {
             return false;
         }
-        if (it->bytes.size() > MaxArchiveBytes - total) {
+        if (old.bytes.size() > MaxArchiveBytes - total) {
             return false;
         }
-        total += it->bytes.size();
+        total += old.bytes.size();
     }
     if (found == entries_.end()) {
         entries_.push_back(std::move(entry));
@@ -476,7 +479,7 @@ std::optional<std::vector<std::byte>> VolumeRWStream::encode() const {
         putBlock(kVolFileBlockTag, payload);
     }
     const auto stringsOffset = static_cast<UInt32>(output.size());
-    for (unsigned byte = 0; byte < 4; ++byte) {
+    for (auto byte : std::views::iota(unsigned{0}, unsigned{4})) {
         output[4 + byte] = static_cast<std::byte>((stringsOffset >> (byte * 8)) & 255);
     }
     putBlock(kVolStringTag, names);

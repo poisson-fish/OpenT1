@@ -1,4 +1,5 @@
 #include <opent1/game/fear_plugin.hpp>
+#include <ranges>
 #include <opent1/game/fear_player_psc.hpp>
 #include <opent1/game/player_manager.hpp>
 #include <opent1/game/player.hpp>
@@ -296,7 +297,10 @@ void FearPlugin::installNetworkCommands(Console& console) {
             if (args.size() < 2) {
                 return {};
             }
-            for (std::size_t i = 1; i < args.size() && i <= 10 && !args[i].empty(); ++i) {
+            for (auto i :
+                 std::views::iota(std::size_t{1}) | std::views::take_while([&](std::size_t i) {
+                     return i < args.size() && i <= 10 && !args[i].empty();
+                 })) {
                 masters->addresses[masters->count++] = args[i].substr(0, 255);
             }
             masters->poll();

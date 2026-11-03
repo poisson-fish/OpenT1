@@ -1,4 +1,5 @@
 #include <opent1/game/sound.hpp>
+#include <ranges>
 #include <opent1/game/player.hpp>
 #include <opent1/game/projectile_factory.hpp>
 #include <algorithm>
@@ -59,7 +60,9 @@ bool Player::setItemCount(Int32 type, Int32 count) {
             unmountItem(entry.imageSlot);
         }
     }
-    for (Int32 slot = 0; slot < MaxImageSlots; ++slot) {
+    for (auto slot : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 slot) {
+                         return slot < MaxImageSlots;
+                     })) {
         auto& img = itemImageList_[static_cast<std::size_t>(slot)];
         if (img.itemId == type) {
             img.itemCount = count;
@@ -763,7 +766,9 @@ void Player::updateImageState(Int32 imageSlot, Flt32 dt) {
 }
 
 void Player::updateItemImages(Flt32 dt) {
-    for (Int32 slot = 0; slot < MaxImageSlots; ++slot) {
+    for (auto slot : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 slot) {
+                         return slot < MaxImageSlots;
+                     })) {
         updateImageState(slot, dt);
         updateImageAnimation(itemImageList_[slot], dt);
         const auto& image = itemImageList_[slot];
@@ -782,7 +787,9 @@ void Player::updateImageMass() {
     if (totalMass <= 0.0f) {
         totalMass = 9.0f;
     }
-    for (Int32 slot = 0; slot < MaxImageSlots; ++slot) {
+    for (auto slot : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 slot) {
+                         return slot < MaxImageSlots;
+                     })) {
         const auto& img = itemImageList_[static_cast<std::size_t>(slot)];
         if (img.imageId != -1) {
             if (const auto* imgData = getImageData(img.imageId)) {
@@ -795,7 +802,9 @@ void Player::updateImageMass() {
 
 void Player::packItemImages(BitStream& stream, UInt32 mask) const {
     if (stream.writeFlag((mask & VisItemMask) != 0)) {
-        for (Int32 i = 0; i < MaxItemImages; ++i) {
+        for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                          return i < MaxItemImages;
+                      })) {
             if (stream.writeFlag((mask & (1u << (ItemImageMaskBits + i))) != 0)) {
                 const auto& itemImage = itemImageList_[static_cast<std::size_t>(i)];
                 stream.writeInt(itemImage.itemId + 1, ItemTypeBits);
@@ -818,7 +827,9 @@ bool Player::unpackItemImages(BitStream& stream, bool initialUpdate) {
     const auto savedImages = itemImageList_;
 
     if (stream.readFlag()) {
-        for (Int32 i = 0; i < MaxItemImages; ++i) {
+        for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                          return i < MaxItemImages;
+                      })) {
             if (stream.readFlag()) {
                 auto& itemImage = itemImageList_[static_cast<std::size_t>(i)];
                 const Int32 type = stream.readInt(ItemTypeBits) - 1;

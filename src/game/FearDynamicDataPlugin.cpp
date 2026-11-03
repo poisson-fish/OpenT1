@@ -1,4 +1,5 @@
 #include <opent1/core/filename.hpp>
+#include <ranges>
 #include "opent1/game/fear_dynamic_data_plugin.hpp"
 #include <opent1/core/text.hpp>
 
@@ -619,7 +620,7 @@ void FearDynamicDataPlugin::init(Console& console, sim::SimManager* manager) {
                                return std::string("False");
                            }
                            Int32 typeIndex = -1;
-                           for (std::size_t i = 0; i < kMatTypeNames.size(); ++i) {
+                           for (auto i : std::views::iota(std::size_t{0}, kMatTypeNames.size())) {
                                if (equalIgnoreCase(argv[1], kMatTypeNames[i])) {
                                    typeIndex = static_cast<Int32>(i);
                                    break;
@@ -944,7 +945,7 @@ void FearDynamicDataPlugin::setDataField(std::optional<std::string_view> objectN
     } else if (idx >= 0 && static_cast<std::size_t>(idx) < fld->arraySize && fld->arraySize > 1) {
         fld->setter(*dat, static_cast<std::size_t>(idx), values, *this);
     } else if (idx == -1 && values.size() == fld->arraySize) {
-        for (std::size_t i = 0; i < values.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, values.size())) {
             fld->setter(*dat, i, values.subspan(i, 1), *this);
         }
     } else if (console_) {
@@ -983,7 +984,9 @@ FearDynamicDataPlugin::ClassSchema& FearDynamicDataPlugin::registerClass(
 
     schema.hashTableSize = schema.fields.size() * 2 + 1;
     schema.hashBuckets.resize(schema.hashTableSize);
-    for (std::size_t i = 0; i < schema.fields.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < schema.fields.size();
+                  })) {
         const std::size_t bucket = hashFieldName(schema.fields[i].name, schema.hashTableSize);
         schema.hashBuckets[bucket].push_back(i);
     }

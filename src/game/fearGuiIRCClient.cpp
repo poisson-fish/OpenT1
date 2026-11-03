@@ -1,4 +1,5 @@
 #include "opent1/game/server_irc_controls.hpp"
+#include <ranges>
 
 #include <algorithm>
 #include <cctype>
@@ -680,7 +681,7 @@ IRCClient* IRCClient::find(sim::SimManager* manager) noexcept {
 }
 
 std::size_t IRCClient::ensurePerson(std::string_view nick, std::string_view ident) {
-    for (std::size_t i = 0; i < people_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, people_.size())) {
         if (people_[i].nick == nick) {
             if (!ident.empty()) {
                 people_[i].ident = std::string(ident);

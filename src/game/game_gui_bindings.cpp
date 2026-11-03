@@ -1,4 +1,5 @@
 #include <opent1/game/game_app.hpp>
+#include <ranges>
 #include <opent1/game/shell_controls.hpp>
 #include <opent1/game/server_irc_controls.hpp>
 #include <opent1/game/chat_inventory_huds.hpp>
@@ -99,7 +100,10 @@ public:
             const Int32 height = std::max(1, font_->info.height + 2);
             const auto& lines = console_.log();
             const auto count = std::min(lines.size(), std::size_t(204 / height));
-            for (std::size_t i = 0; i < count; ++i) {
+            for (auto i :
+                 std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                     return i < count;
+                 })) {
                 if (!surface.text(*font_,
                                   {offset.x + 8, offset.y + 4 + Int32(i) * height},
                                   lines[lines.size() - count + i])) {
@@ -863,7 +867,7 @@ void FearGameApp::installShellCommands() {
                 return "False";
             }
             std::vector<std::string> masters;
-            for (int i = 0; i < 64; ++i) {
+            for (auto i : std::views::iota(0, 64)) {
                 auto master = con.getVariable("Server::MasterAddressN" + std::to_string(i));
                 if (master.empty()) {
                     continue;

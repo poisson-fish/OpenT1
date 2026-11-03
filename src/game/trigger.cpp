@@ -1,4 +1,5 @@
 #include <opent1/game/trigger.hpp>
+#include <ranges>
 #include <opent1/game/string_table.hpp>
 #include <opent1/sim/sim_world_game.hpp>
 
@@ -155,7 +156,9 @@ bool Trigger::processArguments(std::span<const std::string> args) {
     }
     if (args.size() > 1) {
         Point3F dim{0.0f, 0.0f, 0.0f};
-        for (std::size_t i = 0; i < args.size() - 1 && i < 3; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < args.size() - 1 && i < 3;
+                      })) {
             dim[i] = parseFloatArg(args[i + 1]) * 0.5f;
         }
         boundingBox_.fMax = dim;
@@ -216,7 +219,7 @@ void Trigger::onRemove() {
 }
 
 void Trigger::onDeleteNotify(sim::SimObject& object) {
-    for (std::size_t i = 0; i < objectList_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, objectList_.size())) {
         if (objectList_[i].object == &object) {
             std::string argStr{};
             if (const auto* gb = dynamic_cast<const GameBase*>(&object)) {

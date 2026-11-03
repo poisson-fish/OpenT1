@@ -1,4 +1,5 @@
 #include <opent1/game/mine.hpp>
+#include <ranges>
 #include <opent1/game/player.hpp>
 #include <opent1/game/projectile_factory.hpp>
 #include <opent1/game/vehicle.hpp>
@@ -92,7 +93,7 @@ bool Vehicle::initResources(GameBaseData* in_data) {
     if (shapeInstance_) {
         const auto& shape = *shapeInstance_->shape();
         const auto find = [&](std::string_view wanted) -> Int32 {
-            for (std::size_t n = 0; n < shape.nodes.size(); ++n) {
+            for (auto n : std::views::iota(std::size_t{0}, shape.nodes.size())) {
                 const auto index = shape.nodes[n].name;
                 if (index >= 0 && std::size_t(index) < shape.names.size() &&
                     shape.names[index] == wanted) {
@@ -103,7 +104,7 @@ bool Vehicle::initResources(GameBaseData* in_data) {
         };
         pilotNode_ = find("dummy pilot");
         exitNode_ = find("dummy exit");
-        for (std::size_t n = 0; n < passengerNode_.size(); ++n) {
+        for (auto n : std::views::iota(std::size_t{0}, passengerNode_.size())) {
             passengerNode_[n] = find("dummy passenger" + std::to_string(n + 1));
             if (passengerNode_[n] < 0) {
                 break;
@@ -167,7 +168,10 @@ bool Vehicle::canRide(GameBase* /*obj*/) const {
 }
 
 Int32 Vehicle::nextPassengerPoint() {
-    for (std::size_t slot = 0; slot < passengerNode_.size() && passengerNode_[slot] >= 0; ++slot) {
+    for (auto slot :
+         std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t slot) {
+             return slot < passengerNode_.size() && passengerNode_[slot] >= 0;
+         })) {
         bool occupied = false;
         if (getManager()) {
             if (auto* players = dynamic_cast<sim::SimSet*>(getManager()->findObject(PlayerSetId))) {
@@ -227,7 +231,7 @@ bool Vehicle::getMuzzleTransform(Int32 /*slot*/, TMat3F* mat) const {
     }
     const auto& shape = *pose->shape();
     const auto findNode = [&](std::string_view wanted) -> Int32 {
-        for (std::size_t i = 0; i < shape.nodes.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, shape.nodes.size())) {
             const auto name = shape.nodes[i].name;
             if (name >= 0 && std::size_t(name) < shape.names.size() &&
                 shape.names[name] == wanted) {
@@ -237,7 +241,9 @@ bool Vehicle::getMuzzleTransform(Int32 /*slot*/, TMat3F* mat) const {
         return -1;
     };
     std::vector<Int32> barrels;
-    for (Int32 number = 1; number <= Int32(shape.nodes.size()); ++number) {
+    for (auto number : std::views::iota(Int32{1}) | std::views::take_while([&](Int32 number) {
+                           return number <= Int32(shape.nodes.size());
+                       })) {
         const auto node = findNode("dummy muzzle" + std::to_string(number));
         if (node < 0) {
             break;

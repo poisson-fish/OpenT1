@@ -1,4 +1,5 @@
 #include <opent1/game/player_manager.hpp>
+#include <ranges>
 #include <opent1/core/text.hpp>
 #include <opent1/math/random.hpp>
 #include <opent1/world/scene_objects.hpp>
@@ -125,7 +126,9 @@ void PlayerManager::TeamRep::clean() noexcept {
 void PingPLEvent::pack(BitStream& stream) const {
     const auto numCl = static_cast<Int32>(std::min<std::size_t>(entries.size(), 127));
     stream.writeInt(numCl, 7);
-    for (Int32 i = 0; i < numCl; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < numCl;
+                  })) {
         const Entry& entry = entries[static_cast<std::size_t>(i)];
         stream.writeInt(entry.clientId - PlayerManager::BaseClientId, 7);
         stream.writeInt(entry.ping >> 2, 8);
@@ -141,7 +144,10 @@ bool PingPLEvent::unpack(BitStream& stream) {
     }
     std::vector<Entry> parsed{};
     parsed.reserve(static_cast<std::size_t>(count));
-    for (Int32 i = 0; i < count; ++i) {
+    for ([[maybe_unused]] auto i :
+         std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+             return i < count;
+         })) {
         const Int32 cid = stream.readInt(7) + PlayerManager::BaseClientId;
         const Int32 p = stream.readInt(8) << 2;
         const Flt32 loss = stream.readFloat(6);
@@ -533,7 +539,9 @@ void PlayerManager::reset() {
     lastCommandMessage_.clear();
     freeList_ = &clientList_[1];
     clientList_[1].clean();
-    for (std::size_t i = 1; i + 1 < MaxClients; ++i) {
+    for (auto i : std::views::iota(std::size_t{1}) | std::views::take_while([&](std::size_t i) {
+                      return i + 1 < MaxClients;
+                  })) {
         clientList_[i].nextClient = &clientList_[i + 1];
         clientList_[i + 1].clean();
     }
@@ -546,7 +554,9 @@ void PlayerManager::reset() {
     teamScoreHeading_.clear();
     clientScoreHeading_.clear();
 
-    for (std::size_t i = 0; i <= MaxTeams; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i <= MaxTeams;
+                  })) {
         teamList_[i].clean();
     }
     numTeams_ = -1;
@@ -643,7 +653,9 @@ const PlayerManager::TeamRep* PlayerManager::findTeam(Int32 teamId) const noexce
 }
 
 PlayerManager::TeamRep* PlayerManager::findTeam(std::string_view teamName) noexcept {
-    for (Int32 i = -1; i < numTeams_; ++i) {
+    for (auto i : std::views::iota(Int32{-1}) | std::views::take_while([&](Int32 i) {
+                      return i < numTeams_;
+                  })) {
         TeamRep& t = teamList_[static_cast<std::size_t>(i + 1)];
         if (equalIgnoreCase(t.name, teamName)) {
             return &t;
@@ -653,7 +665,9 @@ PlayerManager::TeamRep* PlayerManager::findTeam(std::string_view teamName) noexc
 }
 
 const PlayerManager::TeamRep* PlayerManager::findTeam(std::string_view teamName) const noexcept {
-    for (Int32 i = -1; i < numTeams_; ++i) {
+    for (auto i : std::views::iota(Int32{-1}) | std::views::take_while([&](Int32 i) {
+                      return i < numTeams_;
+                  })) {
         const TeamRep& t = teamList_[static_cast<std::size_t>(i + 1)];
         if (equalIgnoreCase(t.name, teamName)) {
             return &t;
@@ -1032,7 +1046,9 @@ void PlayerManager::clearTeamObjectives(Int32 teamId) {
     if (!tr) {
         return;
     }
-    for (Int32 index = 0; index < MaxObjectives; ++index) {
+    for (auto index : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 index) {
+                          return index < MaxObjectives;
+                      })) {
         if (!tr->objectives[std::size_t(index)].text.empty()) {
             setTeamObjective(teamId, index, {});
         }
@@ -1119,7 +1135,10 @@ void PlayerManager::sendCommand(ClientRep& receiver,
 
 bool PlayerManager::isInCommandChain(Int32 peonId, Int32 cmdrId) noexcept {
     auto* walk = findBaseRep(peonId);
-    for (Int32 count = 0; walk && count < MaxClients; ++count) {
+    for ([[maybe_unused]] auto count :
+         std::views::iota(Int32{0}) | std::views::take_while([&](Int32 count) {
+             return walk && count < MaxClients;
+         })) {
         if (walk->commanderId == cmdrId) {
             return true;
         }
@@ -1348,7 +1367,9 @@ void PlayerManager::clientGuiModeChanged(Int32 clientId, UInt32 newGuiMode, UInt
     // Native objective/victory modes are 3/5. Victory freezes future updates.
     if (isServer_ && oldGuiMode != 3 && oldGuiMode != 5 && (newGuiMode == 3 || newGuiMode == 5)) {
         if (const auto* team = findTeam(client->team)) {
-            for (Int32 index = 0; index < MaxObjectives; ++index) {
+            for (auto index : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 index) {
+                                  return index < MaxObjectives;
+                              })) {
                 const auto& objective = team->objectives[std::size_t(index)];
                 if (client->lastObjectiveSequence < objective.seqNum) {
                     sendPlayerEvent(*client,
@@ -1383,30 +1404,36 @@ void PlayerManager::applyLanguageFilter(std::string& message, std::string_view b
         }
         std::array<char, 12> currentWord{};
         const std::size_t wordLen = std::min<std::size_t>(rawWord.size(), 11);
-        for (std::size_t i = 0; i < wordLen; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < wordLen;
+                      })) {
             currentWord[i] =
                 static_cast<char>(std::tolower(static_cast<unsigned char>(rawWord[i])));
         }
         std::array<std::size_t, 12> charOffsets{};
-        for (std::size_t index = 0; index < message.size(); ++index) {
+        for (auto index : std::views::iota(std::size_t{0}, message.size())) {
             std::size_t it = index;
-            std::size_t ct = 0;
-            for (; ct < wordLen; ++ct) {
-                while (it < message.size() &&
-                       !std::isalnum(static_cast<unsigned char>(message[it]))) {
-                    ++it;
-                }
-                if (it < message.size() &&
-                    static_cast<char>(std::tolower(static_cast<unsigned char>(message[it]))) ==
-                        currentWord[ct]) {
-                    charOffsets[ct] = it;
-                    ++it;
-                } else {
-                    break;
-                }
-            }
-            if (ct == wordLen) {
-                for (std::size_t i = 0; i < wordLen; ++i) {
+            const auto matched =
+                std::ranges::all_of(std::views::iota(std::size_t{0}, wordLen), [&](const auto ct) {
+                    while (it < message.size() &&
+                           !std::isalnum(static_cast<unsigned char>(message[it]))) {
+                        ++it;
+                    }
+                    if (it < message.size() &&
+                        static_cast<char>(std::tolower(static_cast<unsigned char>(message[it]))) ==
+                            currentWord[ct]) {
+                        charOffsets[ct] = it;
+                        ++it;
+                        return true;
+                    } else {
+                        return false;
+                    }
+                });
+            if (matched) {
+                for (auto i :
+                     std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                         return i < wordLen;
+                     })) {
                     message[charOffsets[i]] = getBadChar();
                 }
             }

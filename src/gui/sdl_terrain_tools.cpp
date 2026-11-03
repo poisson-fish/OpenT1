@@ -1,4 +1,5 @@
 #include <opent1/gui/sdl_terrain_tools.hpp>
+#include <ranges>
 #include <opent1/gui/sdl_presentation.hpp>
 
 namespace opent1::gui {
@@ -54,7 +55,7 @@ bool SdlTerrainWindow::redraw(bool present) {
         return false;
     }
     gfx::Palette fallback;
-    for (std::size_t i = 0; i < 256; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{256})) {
         fallback.palettes[0].colors[i] = {UInt8(i), UInt8(i), UInt8(i), 0};
     }
     const auto* palette = tools_->editor()->palette ? &*tools_->editor()->palette : &fallback;

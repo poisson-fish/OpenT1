@@ -1,5 +1,6 @@
 // Ordinary optimized executable: intentionally no allocation-tracking overrides.
 #include <opent1/game/game_app.hpp>
+#include <ranges>
 #include <opent1/game/observer_camera.hpp>
 #include <opent1/gfx/sdl_gpu_surface.hpp>
 #include <algorithm>
@@ -63,7 +64,7 @@ int main(int argc, char** argv) {
         const auto load = Clock::now();
         require(game.loadMission(argv[2]), "mission load failed");
         const auto loadMs = ms(load);
-        for (unsigned i = 0; i < 8; ++i)
+        for (auto i : std::views::iota(unsigned{0}, unsigned{8}))
             require(game.stepFrame((i + 1) * .032, false), "warmup failed");
         auto& cg = game.fearPlugin().clientGlobals();
         auto& sg = game.fearPlugin().serverGlobals();
@@ -98,7 +99,9 @@ int main(int argc, char** argv) {
         gfx::HardwareBatch::MemoryStats batchMemory;
         // Warm the rotating working set as well as pipeline creation.
         constexpr unsigned warm = 120;
-        for (unsigned f = 0; f < warm + count; ++f) {
+        for (auto f : std::views::iota(unsigned{0}) | std::views::take_while([&](unsigned f) {
+                          return f < warm + count;
+                      })) {
             const auto start = Clock::now();
             require(game.stepFrame((f + 9) * .032, false), "simulation failed");
             auto pos = origin;
@@ -273,7 +276,7 @@ int main(int argc, char** argv) {
             require(surface->render(snapshot, frame) && surface->readback(after),
                     "trimmed batch submission failed");
             unsigned trimError{};
-            for (std::size_t i = 0; i < before.size(); ++i)
+            for (auto i : std::views::iota(std::size_t{0}, before.size()))
                 trimError = std::max(trimError, unsigned(std::abs(int(before[i]) - int(after[i]))));
             std::cout << "Trim readback maximum channel error: " << trimError << '\n';
             // A fresh page layout may change normalized UV rounding by a color level.
@@ -283,7 +286,7 @@ int main(int argc, char** argv) {
             bool transitioned{};
             if (const auto* mission = std::getenv("OPENT1_VALIDATE_TRANSITION")) {
                 require(game.loadMission(mission), "transition mission load failed");
-                for (unsigned i = 0; i < 36; ++i) {
+                for (auto i : std::views::iota(unsigned{0}, unsigned{36})) {
                     require(game.stepFrame((warm + count + 9 + i) * .032, false),
                             "transition simulation failed");
                     gfx::HardwareBatch next;

@@ -128,7 +128,7 @@ bool ChanceNode::setCP(Flt32 value, std::span<const std::size_t> indices) {
         return false;
     }
     std::size_t index = indices[0];
-    for (std::size_t i = 0; i < parents_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, parents_.size())) {
         const auto size = parents_[i]->states_.size();
         if (indices[i + 1] >= size) {
             return false;
@@ -394,7 +394,10 @@ bool BayesNet::evaluate(std::span<Flt32> values, std::size_t budget) const {
         if (node->cpt_.size() != combinations * node->states_.size()) {
             return false;
         }
-        for (std::size_t state = 0; state < node->states_.size(); ++state) {
+        for (auto state :
+             std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t state) {
+                 return state < node->states_.size();
+             })) {
             std::vector<Flt32> row(
                 node->cpt_.begin() + static_cast<std::ptrdiff_t>(state * combinations),
                 node->cpt_.begin() + static_cast<std::ptrdiff_t>((state + 1) * combinations));
@@ -409,9 +412,15 @@ bool BayesNet::evaluate(std::span<Flt32> values, std::size_t budget) const {
                     return false;
                 }
                 budget -= row.size();
-                for (std::size_t i = 0; i < rows; ++i) {
+                for (auto i :
+                     std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                         return i < rows;
+                     })) {
                     Flt32 total = 0;
-                    for (std::size_t s = 0; s < count; ++s) {
+                    for (auto s : std::views::iota(std::size_t{0}) |
+                                      std::views::take_while([&](std::size_t s) {
+                                          return s < count;
+                                      })) {
                         total += row[i * count + s] * result[parent->states_[s].valueIndex];
                     }
                     if (!std::isfinite(total)) {
@@ -551,7 +560,10 @@ Persistent::Error BayesNet::read(StreamIO& stream, Int32, Int32, Persistent::Loa
         return Persistent::Error::ReadError;
     }
     std::unordered_set<UInt32> indices;
-    for (Int32 i = 0; i < count; ++i) {
+    for ([[maybe_unused]] auto i :
+         std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+             return i < count;
+         })) {
         const auto result = context.load(stream);
         if (!result) {
             return result.error;

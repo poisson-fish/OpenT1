@@ -68,7 +68,7 @@ prepareHardwareEnvironment(const EnvironmentCamera& camera,
         return {};
     }
     std::size_t frameCount{};
-    for (std::size_t i = 0; i < materials.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, materials.size())) {
         const auto& m = materials[i];
         if (m.name.empty() || m.name.size() > 1024 || m.name.find('\0') != m.name.npos ||
             m.frames.size() > 32768 ||
@@ -178,7 +178,7 @@ prepareHardwareEnvironment(const EnvironmentCamera& camera,
                     const auto& color = palette.find().colors[index];
                     material.color = {color.red / 255.f, color.green / 255.f, color.blue / 255.f};
                     if (paletteGamma != 1) {
-                        for (std::size_t i = 0; i < 3; ++i) {
+                        for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
                             material.color[i] =
                                 Flt32(std::pow(material.color[i], double(1.f / paletteGamma)));
                         }

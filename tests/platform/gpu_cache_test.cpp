@@ -1,4 +1,5 @@
 #include "test_support.hpp"
+#include <ranges>
 #include "ts_test_support.hpp"
 #include <opent1/gfx/sdl_gpu_surface.hpp>
 #include <opent1/world/world_surfaces.hpp>
@@ -14,7 +15,10 @@ gfx::HardwareBatch content(unsigned first) {
         {{{0, 0}, {0, 0}}, {{16, 0}, {1, 0}}, {{16, 16}, {1, 1}}, {{0, 16}, {0, 1}}}};
     std::vector<std::unique_ptr<gfx::Bitmap>> sources;
     std::vector<gfx::HardwarePolygon> polygons;
-    for (unsigned i = first; i < first + 1200; ++i) {
+    for (auto i :
+         std::views::iota(static_cast<unsigned>(first)) | std::views::take_while([&](unsigned i) {
+             return i < first + 1200;
+         })) {
         auto bitmap = gfx::Bitmap::create(1, 1, 24);
         CHECK(bitmap);
         bitmap->pixels[0] = std::byte{64};
@@ -151,7 +155,7 @@ void retainedInstanceSubmission(platform::SdlWindow& window) {
     CHECK(mesh);
     const std::array<gfx::PolygonVertex, 3> placeholder{{{{0, 0}}, {{1, 0}}, {{0, 1}}}};
     std::array<gfx::HardwarePolygon, 5> polygons;
-    for (std::size_t i = 0; i < polygons.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, polygons.size())) {
         auto& p = polygons[i];
         p.vertices = placeholder;
         p.mesh = mesh;
@@ -170,7 +174,7 @@ void retainedInstanceSubmission(platform::SdlWindow& window) {
     CHECK(batch && batch->meshes().size() == 3);
     std::array<gfx::HardwareBatch, 5> layers;
     std::array<const gfx::HardwareBatch*, 5> layerRefs;
-    for (std::size_t i = 0; i < layers.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, layers.size())) {
         auto layer = gfx::HardwareBatch::prepare(std::span(&polygons[i], 1));
         CHECK(layer);
         layers[i] = std::move(*layer);
@@ -256,7 +260,7 @@ void interiorReadbacks(platform::SdlWindow& window) {
                     unsigned largeErrors{};
                     for (std::size_t p = 0; p < a.size(); p += 4) {
                         bool large{};
-                        for (std::size_t c = 0; c < 3; ++c)
+                        for (auto c : std::views::iota(std::size_t{0}, std::size_t{3}))
                             large |= std::abs(int(a[p + c]) - int(b[p + c])) > 2;
                         largeErrors += large;
                     }
@@ -273,13 +277,17 @@ gfx::HardwareBatch pageContent(bool changed) {
     std::array<gfx::LightMap, 16> maps;
     const std::array<Point2F, 4> uv{{{-1, -1}, {2, -1}, {2, 2}, {-1, 2}}};
     std::vector<gfx::HardwarePolygon> polygons;
-    for (std::size_t i = 0; i < quads.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < quads.size();
+                  })) {
         const auto x = Flt32((i % 4) * 8), y = Flt32((i / 4) * 8);
         quads[i] = {{{{x, y}}, {{x + 8, y}}, {{x + 8, y + 8}}, {{x, y + 8}}}};
         const auto side = Int32(i == 15 ? 256 : i + 2);
         maps[i].size = {side, side};
         maps[i].dynamic = i == 0;
-        for (Int32 p = 0; p < side * side; ++p) {
+        for (auto p : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 p) {
+                          return p < side * side;
+                      })) {
             const auto value = UInt16((p + i * 137 + (changed && i == 0 ? 123 : 0)) & 0xfff);
             maps[i].samples.push_back(value);
         }
@@ -302,7 +310,9 @@ void pageReadbacks(platform::SdlWindow& window) {
     auto surface = gfx::SdlGpuSurface::create(window, 32, 32, config);
     CHECK(surface);
     std::array<std::vector<std::byte>, 4> reference;
-    for (std::size_t i = 0; i < frames.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < frames.size();
+                  })) {
         reference[i].resize(32 * 32 * 4);
         CHECK(surface->render(*frames[i]) && surface->readback(reference[i]));
     }
@@ -311,10 +321,10 @@ void pageReadbacks(platform::SdlWindow& window) {
     config.lightMapPageBytes = 1024 * 1024;
     surface = gfx::SdlGpuSurface::create(window, 32, 32, config);
     CHECK(surface);
-    for (std::size_t i = 0; i < frames.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, frames.size())) {
         std::vector<std::byte> actual(reference[i].size());
         CHECK(surface->render(*frames[i]) && surface->readback(actual));
-        for (std::size_t p = 0; p < actual.size(); ++p)
+        for (auto p : std::views::iota(std::size_t{0}, actual.size()))
             CHECK(std::abs(int(actual[p]) - int(reference[i][p])) <= 2);
     }
     const auto stats = surface->textureCacheStats();
@@ -327,7 +337,7 @@ void pageReadbacks(platform::SdlWindow& window) {
 
 gfx::HardwareBatch arrayContent(bool changedPalette) {
     gfx::Palette palette;
-    for (unsigned i = 0; i < 256; ++i) {
+    for (auto i : std::views::iota(unsigned{0}, unsigned{256})) {
         auto& c = palette.palettes[0].colors[i];
         c = {UInt8(i), UInt8((i * 23) & 255), UInt8((i * 61) & 255), UInt8((i * 37) & 255)};
         if (changedPalette)
@@ -336,7 +346,9 @@ gfx::HardwareBatch arrayContent(bool changedPalette) {
     std::array<std::array<gfx::PolygonVertex, 4>, 32> quads;
     std::vector<std::unique_ptr<gfx::Bitmap>> sources;
     std::vector<gfx::HardwarePolygon> polygons;
-    for (std::size_t i = 0; i < quads.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < quads.size();
+                  })) {
         // Authored mip chains require power-of-two source dimensions; single
         // mip images also exercise the supported non-power-of-two array layout.
         const auto levels = Int32(i % 3 + 1);
@@ -345,12 +357,14 @@ gfx::HardwareBatch arrayContent(bool changedPalette) {
         bitmap->detailLevels = levels;
         if (bitmap->detailLevels > 1) {
             std::size_t bytes{};
-            for (Int32 level = 0; level < bitmap->detailLevels; ++level)
+            for (auto level : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 level) {
+                                  return level < bitmap->detailLevels;
+                              }))
                 bytes += std::size_t(std::max(1, bitmap->width >> level)) *
                          std::max(1, bitmap->height >> level);
             bitmap->pixels.resize(bytes);
         }
-        for (std::size_t j = 0; j < bitmap->pixels.size(); ++j)
+        for (auto j : std::views::iota(std::size_t{0}, bitmap->pixels.size()))
             bitmap->pixels[j] = std::byte((j * 17 + i * 7) % 255 + 1);
         const auto x = Flt32((i % 8) * 16), y = Flt32((i / 8) * 16);
         quads[i] = {{{{x, y}, {-.5f, -.5f}},
@@ -386,7 +400,9 @@ void arrayReadbacks(platform::SdlWindow& window) {
     auto surface = gfx::SdlGpuSurface::create(window, 128, 64, config);
     CHECK(surface);
     std::array<std::vector<std::byte>, 3> reference;
-    for (std::size_t i = 0; i < frames.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < frames.size();
+                  })) {
         reference[i].resize(128 * 64 * 4);
         CHECK(surface->render(*frames[i]) && surface->readback(reference[i]));
     }
@@ -395,10 +411,10 @@ void arrayReadbacks(platform::SdlWindow& window) {
     config.textureArrayBytes = 1024 * 1024;
     surface = gfx::SdlGpuSurface::create(window, 128, 64, config);
     CHECK(surface);
-    for (std::size_t i = 0; i < frames.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, frames.size())) {
         std::vector<std::byte> actual(reference[i].size());
         CHECK(surface->render(*frames[i]) && surface->readback(actual));
-        for (std::size_t p = 0; p < actual.size(); ++p)
+        for (auto p : std::views::iota(std::size_t{0}, actual.size()))
             CHECK(std::abs(int(actual[p]) - int(reference[i][p])) <= 2);
         if (i == 1)
             CHECK(surface->trimCaches());
@@ -421,7 +437,7 @@ void terrainReadbacks(platform::SdlWindow& window) {
     palette.palettes[0].colors[1] = {180, 110, 60, 255};
     auto surface = gfx::SdlGpuSurface::create(window, 64, 64);
     CHECK(surface);
-    for (UInt32 key = 0; key < 32; ++key) {
+    for (auto key : std::views::iota(UInt32{0}, UInt32{32})) {
         const std::array<Point2F, 8> ring{
             {{0, 0}, {0, .5f}, {0, 1}, {.5f, 1}, {1, 1}, {1, .5f}, {1, 0}, {.5f, 0}}};
         std::vector<gfx::HardwareVertex> vertices(8);
@@ -445,7 +461,7 @@ void terrainReadbacks(platform::SdlWindow& window) {
             } else
                 emit(start, start + 2, start + 4);
         }
-        for (std::size_t i = 0; i < 8; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, std::size_t{8})) {
             vertices[i].position = ring[i];
             vertices[i].texture = {ring[i].x, 1 - ring[i].y};
         }
@@ -467,7 +483,7 @@ void terrainReadbacks(platform::SdlWindow& window) {
         patch.lightMap = lightMap;
         patch.mapOrigin = {.1f, .9f};
         patch.mapScale = {.8f, -.8f};
-        for (std::size_t i = 0; i < 8; ++i)
+        for (auto i : std::views::iota(std::size_t{0}, std::size_t{8}))
             patch.heights[i] = {
                 Flt32(i % 3) * .1f, Flt32(i % 2) * .2f, Flt32(i % 3) * .6f, Flt32(i) * .7f + 3.5f};
         patches->patches.push_back(patch);
@@ -514,7 +530,9 @@ void terrainReadbacks(platform::SdlWindow& window) {
 void terrainSubmission(platform::SdlWindow& window) {
     std::vector<gfx::HardwareVertex> vertices(18);
     std::vector<UInt32> indices;
-    for (UInt32 i = 0; i < vertices.size(); ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < vertices.size();
+                  })) {
         vertices[i].inverseDepth = Flt32(i);
         indices.push_back(i);
     }
@@ -526,12 +544,12 @@ void terrainSubmission(platform::SdlWindow& window) {
     const std::array<gfx::PolygonVertex, 3> placeholder{{{{0, 0}}, {{1, 0}}, {{0, 1}}}};
     const std::array<Point2F, 3> lightUV{};
     gfx::Palette palette;
-    for (unsigned i = 0; i < 256; ++i)
+    for (auto i : std::views::iota(unsigned{0}, unsigned{256}))
         palette.palettes[0].colors[i] = {UInt8(i), UInt8(i * 17), UInt8(i * 31), 255};
-    for (std::size_t i = 0; i < polygons.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, polygons.size())) {
         images[i] = gfx::Bitmap::create(4, 4);
         CHECK(images[i]);
-        for (std::size_t p = 0; p < images[i]->pixels.size(); ++p)
+        for (auto p : std::views::iota(std::size_t{0}, images[i]->pixels.size()))
             images[i]->pixels[p] = std::byte((i * 17 + p * 7) & 255);
         maps[i].size = {2, 2};
         maps[i].samples = {UInt16(0xf000U | (i * 53)), 0xff8f, 0xf8ff, 0xfff8};
@@ -565,7 +583,7 @@ void terrainSubmission(platform::SdlWindow& window) {
     auto reference = gfx::SdlGpuSurface::create(referenceWindow, 64, 64, standalone);
     auto batched = gfx::SdlGpuSurface::create(window, 64, 64);
     CHECK(reference && batched);
-    for (unsigned mode = 0; mode < 5; ++mode) {
+    for (auto mode : std::views::iota(unsigned{0}, unsigned{5})) {
         if (mode == 1) {
             // Same-state alpha patches overlap: instance order must retain the
             // original texture/blend order, including at equal depth.
@@ -581,7 +599,7 @@ void terrainSubmission(platform::SdlWindow& window) {
         if (mode == 3) {
             // Cutouts with overlapping, interleaved near/far patches exercise
             // color/depth writes and the independent uncut haze overlay.
-            for (std::size_t i = 0; i < polygons.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, polygons.size())) {
                 auto& p = polygons[i];
                 p.transform.camera[1][3] = 5 + Flt32((i * 7) % 16) * .25f;
                 p.material.blend = gfx::HardwareBlend::Opaque;
@@ -593,7 +611,7 @@ void terrainSubmission(platform::SdlWindow& window) {
             }
         }
         if (mode == 4) {
-            for (std::size_t i = 0; i < polygons.size(); ++i)
+            for (auto i : std::views::iota(std::size_t{0}, polygons.size()))
                 polygons[i].material.depth =
                     i % 2 ? gfx::HardwareDepth::Disabled : gfx::HardwareDepth::TestAndWrite;
         }
@@ -613,7 +631,7 @@ void terrainSubmission(platform::SdlWindow& window) {
         std::vector<std::byte> a(64 * 64 * 4), b(a.size());
         CHECK(reference->render(*batch, frame) && reference->readback(a));
         CHECK(batched->render(*batch, frame) && batched->readback(b));
-        for (std::size_t i = 0; i < a.size(); ++i)
+        for (auto i : std::views::iota(std::size_t{0}, a.size()))
             CHECK(std::abs(int(a[i]) - int(b[i])) <= 2);
         const auto stats = batched->submissionStats();
         CHECK(stats.inputDraws == (mode == 1 ? 16U : mode == 2 ? 64U : 32U));
@@ -635,7 +653,7 @@ void shapeReadbacks(platform::SdlWindow& window) {
     CHECK(manager.add("retained.dts", test::ts::load(test::ts::shape())));
     auto bitmap = gfx::Bitmap::create(4, 4);
     CHECK(bitmap);
-    for (std::size_t i = 0; i < bitmap->pixels.size(); ++i)
+    for (auto i : std::views::iota(std::size_t{0}, bitmap->pixels.size()))
         bitmap->pixels[i] = std::byte(i % 4);
     CHECK(manager.add("test.bmp", std::move(bitmap)));
     auto resources = world::TsShapeResources::load(manager, "retained.dts");

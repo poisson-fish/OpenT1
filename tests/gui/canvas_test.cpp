@@ -1,4 +1,5 @@
 #include "test_support.hpp"
+#include <ranges>
 #include <opent1/gui/runtime.hpp>
 #include <opent1/core/file_stream.hpp>
 #include <cmath>
@@ -33,7 +34,10 @@ State read(StreamIO& in) {
     }
     const auto n = word(in);
     CHECK(n < 100);
-    for (UInt32 i = 0; i < n; ++i) {
+    for ([[maybe_unused]] auto i :
+         std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+             return i < n;
+         })) {
         s.entries.push_back({word(in), word(in), word(in), word(in)});
     }
     const auto size = word(in);
@@ -118,13 +122,13 @@ struct Probe : Control {
 
 std::shared_ptr<const gfx::BitmapArray> frames() {
     auto a = std::make_shared<gfx::BitmapArray>();
-    for (int i = 0; i < 3; ++i) {
+    for (auto i : std::views::iota(0, 3)) {
         gfx::Bitmap b;
         b.width = 5;
         b.height = 3;
         b.pixels.resize(24);
-        for (int y = 0; y < 3; ++y) {
-            for (int x = 0; x < 5; ++x) {
+        for (auto y : std::views::iota(0, 3)) {
+            for (auto x : std::views::iota(0, 5)) {
                 b.pixels[std::size_t(y * 8 + x)] = std::byte((x + y) % 3 ? 180 + i : 0);
             }
         }
@@ -144,7 +148,7 @@ void histories(std::string_view driver) {
         2454, 2500, 2900, 2901, 3000, 3001, 3002, 3003, 3100, 3101, 3102, 3200,
         3201, 3300, 3400, 3401, 3500, 3801, 3802, 3803, 3804, 3805, 3900, 3901,
         4000, 4001, 4100, 4101, 4200, 4326, 4327, 4400, 4502, 4600, 4801, 4802};
-    for (UInt32 history = 0; history < 64; ++history) {
+    for (auto history : std::views::iota(UInt32{0}, UInt32{64})) {
         Probe p;
         auto f = p.fields();
         f.extent = {64, 48};
@@ -185,7 +189,10 @@ void histories(std::string_view driver) {
             e.key = tab ? Key::Tab : Key::None;
             CHECK(c.dispatch(e, t));
         };
-        for (std::size_t step = 0; step < times.size(); ++step) {
+        for (auto step :
+             std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t step) {
+                 return step < times.size();
+             })) {
             const auto native = read(input);
             const double seconds = double(times[step] - 1000) / 1000;
             bool refused = false;
@@ -347,7 +354,7 @@ void histories(std::string_view driver) {
         CHECK(c.content(nullptr));
     }
     CHECK(word(input) == 16);
-    for (UInt32 i = 0; i < 16; ++i) {
+    for (auto i : std::views::iota(UInt32{0}, UInt32{16})) {
         const std::array<UInt32, 8> expected = {1, 1, 0, 1, 1, 1, 1, 1};
         for (auto n : expected) {
             CHECK(word(input) == n);
@@ -587,7 +594,7 @@ void retainedRendering() {
     CHECK(child.fields().position.x == (32 - child.fields().extent.x) / 2);
     const auto snapshot = canvas.render(32, 24, palette.get());
     CHECK(snapshot && snapshot->palette);
-    for (int i = 0; i < 5; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(0, 5)) {
         CHECK(canvas.renderRetained(32, 24, palette));
     }
     CHECK(!canvas.updateRegion());

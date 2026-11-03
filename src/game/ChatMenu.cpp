@@ -1,4 +1,5 @@
 #include <opent1/game/chat_menu.hpp>
+#include <ranges>
 #include <algorithm>
 #include <charconv>
 
@@ -71,7 +72,9 @@ bool ChatMenu::addMenuString(std::string_view menuString, std::span<const std::s
             const Int32 count = static_cast<Int32>(
                 std::min<std::size_t>(argv.size(), static_cast<std::size_t>(MaxArgs)));
             newNode->argc = count;
-            for (Int32 i = 0; i < count; ++i) {
+            for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                              return i < count;
+                          })) {
                 newNode->argv[static_cast<std::size_t>(i)] =
                     std::string(argv[static_cast<std::size_t>(i)]);
             }
@@ -124,7 +127,9 @@ bool ChatMenu::processKey(char key) {
             if (walk->argc > 0) {
                 std::vector<std::string> cmdArgs;
                 cmdArgs.reserve(static_cast<std::size_t>(walk->argc));
-                for (Int32 i = 0; i < walk->argc; ++i) {
+                for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                                  return i < walk->argc;
+                              })) {
                     const auto& arg = walk->argv[static_cast<std::size_t>(i)];
                     cmdArgs.push_back(arg);
                 }

@@ -1,4 +1,5 @@
 #include <opent1/game/flying_camera.hpp>
+#include <ranges>
 #include <opent1/game/player.hpp>
 #include <opent1/game/sky.hpp>
 #include <opent1/game/string_table.hpp>
@@ -190,13 +191,17 @@ void FlyingCamera::nextObservable(Int32 iDirection) {
     const auto& objs = set->objects();
     const Int32 n = static_cast<Int32>(objs.size());
     Int32 startIdx = 0;
-    for (Int32 i = 0; i < n; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < n;
+                  })) {
         if (objs[static_cast<std::size_t>(i)] == pAttachedObj_) {
             startIdx = i;
             break;
         }
     }
-    for (Int32 step = 1; step <= n; ++step) {
+    for (auto step : std::views::iota(Int32{1}) | std::views::take_while([&](Int32 step) {
+                         return step <= n;
+                     })) {
         const Int32 idx = ((startIdx + step * (iDirection >= 0 ? 1 : -1)) % n + n) % n;
         if (auto* gb = dynamic_cast<GameBase*>(objs[static_cast<std::size_t>(idx)])) {
             attachToObject(gb);

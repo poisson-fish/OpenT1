@@ -1,4 +1,5 @@
 #include <opent1/gui/controls.hpp>
+#include <ranges>
 #include <opent1/gui/containers.hpp>
 #include <opent1/gui/text_format.hpp>
 #include <opent1/gui/edit_control.hpp>
@@ -228,7 +229,9 @@ bool Array::draw(gfx::SoftwareSurface& s, Point2I p, RectI clip) const {
         clip.left = std::max(clip.left, origin.x + header.x);
         p.x += header.x;
     }
-    for (Int32 y = 0; y < cells.y; ++y) {
+    for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                      return y < cells.y;
+                  })) {
         const auto top = p.y + y * cellSize.y;
         if (top > originalClip.bottom) {
             break;
@@ -243,7 +246,9 @@ bool Array::draw(gfx::SoftwareSurface& s, Point2I p, RectI clip) const {
                 s.fill({origin.x, top, origin.x + header.x, top + cellSize.y}, y % 2 ? 254 : 253);
             }
         }
-        for (Int32 x = 0; x < cells.x; ++x) {
+        for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                          return x < cells.x;
+                      })) {
             const Point2I at{p.x + x * cellSize.x, top};
             auto cellClip =
                 gfx::intersect(clip, {at.x, at.y, at.x + cellSize.x - 1, at.y + cellSize.y - 1});
@@ -308,7 +313,7 @@ bool TextList::insertTag(Int32 tag,
 }
 
 bool TextList::variableChanged(std::string_view value) {
-    for (std::size_t i = 0; i < entries.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, entries.size())) {
         if (entries[i].text == value) {
             const Point2I cell{0, Int32(i)};
             return selected == cell || select(cell);
@@ -562,7 +567,7 @@ Error Animate::write(StreamIO& s, Int32 v, Int32 u, Persistent::StoreContext& c)
         !s.write(arrayTag) || !s.write(timePerFrame) || !s.write(dummy) || !s.write(sleep)) {
         return Error::WriteError;
     }
-    for (int i = 0; i < 8; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(0, 8)) {
         if (!s.write(dummy)) {
             return Error::WriteError;
         }
@@ -578,7 +583,7 @@ Error Animate::read(StreamIO& s, Int32 v, Int32 u, Persistent::LoadContext& c) {
         return Error::ReadError;
     }
     const bool loop = !dummy;
-    for (int i = 0; i < 8; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(0, 8)) {
         if (!s.read(dummy)) {
             return Error::ReadError;
         }
@@ -666,7 +671,7 @@ bool BitmapBox::draw(gfx::SoftwareSurface& s, Point2I p, RectI clip) const {
     if (!frames) {
         return true;
     }
-    for (Int32 i = 0; i < 9; ++i) {
+    for (auto i : std::views::iota(Int32{0}, Int32{9})) {
         if (!frames->get(i)) {
             return false;
         }
@@ -759,8 +764,12 @@ bool ChunkedBitmap::set(const gfx::Bitmap& bitmap, bool transparent) {
     Point2I count{(bitmap.width + 255) / 256, (bitmap.height + 255) / 256};
     std::vector<gfx::Bitmap> chunks;
     const auto width = bitmap.width / count.x, height = bitmap.height / count.y;
-    for (int y = 0; y < count.y; ++y) {
-        for (int x = 0; x < count.x; ++x) {
+    for (auto y : std::views::iota(0) | std::views::take_while([&](int y) {
+                      return y < count.y;
+                  })) {
+        for (auto x : std::views::iota(0) | std::views::take_while([&](int x) {
+                          return x < count.x;
+                      })) {
             auto chunk =
                 bitmap.crop({x * width, y * height, (x + 1) * width - 1, (y + 1) * height - 1});
             if (!chunk) {
@@ -798,8 +807,12 @@ bool ChunkedBitmap::draw(gfx::SoftwareSurface& s, RectI r) const {
         return false;
     }
     const int w = Int32(r.width()) / count_.x, h = Int32(r.height()) / count_.y;
-    for (int y = 0; y < count_.y; ++y) {
-        for (int x = 0; x < count_.x; ++x) {
+    for (auto y : std::views::iota(0) | std::views::take_while([&](int y) {
+                      return y < count_.y;
+                  })) {
+        for (auto x : std::views::iota(0) | std::views::take_while([&](int x) {
+                          return x < count_.x;
+                      })) {
             RectI target{r.left + x * w,
                          r.top + y * h,
                          x == count_.x - 1 ? r.right : r.left + (x + 1) * w - 1,
@@ -855,17 +868,15 @@ wrapText(const gfx::BitmapFont& font, std::string_view text, Int32 width) {
     while (i < text.size()) {
         const auto start = i;
         std::size_t length = 0;
-        bool newline = false;
-        for (; i < text.size(); ++i) {
+        const auto end = std::ranges::find_if(text.substr(start), [&](const char c) {
             ++length;
-            if (length >= 255) {
-                return {};
-            }
-            if (text[i] == '\n' || font.textWidth(text.substr(start, length)) > width) {
-                newline = true;
-                break;
-            }
+            return length >= 255 || c == '\n' || font.textWidth(text.substr(start, length)) > width;
+        });
+        if (length >= 255) {
+            return {};
         }
+        i = std::size_t(end - text.begin());
+        const bool newline = end != text.end();
         if (!newline) {
             lines.push_back({UInt32(start), UInt32(length)});
             return lines;
@@ -911,7 +922,9 @@ bool TextWrap::setText(std::string_view value) {
         return false;
     }
     std::string next(value);
-    for (std::size_t i = 0; i + 2 < next.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i + 2 < next.size();
+                  })) {
         if (next[i] == '\\' && next[i + 1] == 'n') {
             next[i] = '\n';
             next[i + 1] = ' ';

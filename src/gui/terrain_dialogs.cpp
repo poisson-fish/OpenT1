@@ -1,4 +1,5 @@
 #include <opent1/gui/terrain_tools.hpp>
+#include <ranges>
 #include <opent1/core/file_stream.hpp>
 #include <opent1/core/mem_stream.hpp>
 #include <charconv>
@@ -256,7 +257,7 @@ bool TerrainTools::showEditorDialog() {
         (!editorModal_.addObject(editorScroll_) || !editorScroll_.addObject(editorDialog_))) {
         return false;
     }
-    for (int i = 0; i < 2; ++i) {
+    for (auto i : std::views::iota(0, 2)) {
         auto b = std::make_unique<Button>();
         b->text = i ? "Cancel" : "OK";
         b->message = i ? 10 : 9;
@@ -321,7 +322,7 @@ bool TerrainTools::dialog(TerrainDialog kind, std::size_t rule) {
                                             double(s.feather),
                                             double(view.display.selectionColor),
                                             double(view.display.highlightColor)};
-        for (std::size_t i = 0; i < names.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, names.size())) {
             if (!addDialogField(std::string(names[i]), std::format("{}", values[i]))) {
                 return false;
             }
@@ -369,7 +370,7 @@ bool TerrainTools::dialog(TerrainDialog kind, std::size_t rule) {
                                             r.slope.deviation,
                                             r.slopeWeight,
                                             double(r.adjustSlopes)};
-        for (std::size_t i = 0; i < names.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, names.size())) {
             if (!addDialogField(std::string(names[i]), std::format("{}", values[i]))) {
                 return false;
             }
@@ -534,7 +535,7 @@ bool TerrainTools::acceptDialog() {
     const auto commit = [&]() -> bool {
         if (*dialog_ == TerrainDialog::Settings) {
             auto next = editor_->settings();
-            for (std::size_t i = 5; i < 18; ++i) {
+            for (auto i : std::views::iota(std::size_t{5}, std::size_t{18})) {
                 if (!integer(i, 0, i == 14 || i == 15 ? 1 : 255)) {
                     return false;
                 }
@@ -561,7 +562,7 @@ bool TerrainTools::acceptDialog() {
                 view.display.highlightColor = UInt8(values[17]);
             }
         } else if (*dialog_ == TerrainDialog::NewTerrain) {
-            for (std::size_t i = 0; i < 5; ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, std::size_t{5})) {
                 if (!integer(i, 0, 16384)) {
                     return false;
                 }

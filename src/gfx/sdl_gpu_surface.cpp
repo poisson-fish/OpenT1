@@ -1,4 +1,5 @@
 #include <opent1/gfx/sdl_gpu_surface.hpp>
+#include <ranges>
 #include "sdl_gpu_material.hpp"
 #include <SDL3/SDL_gpu.h>
 #include <algorithm>
@@ -26,7 +27,9 @@ SDL_GPUPresentMode nativeMode(GpuPresentMode mode) {
 
 std::vector<std::string> gpuDrivers() {
     std::vector<std::string> result;
-    for (int i = 0; i < SDL_GetNumGPUDrivers(); ++i) {
+    for (auto i : std::views::iota(0) | std::views::take_while([&](int i) {
+                      return i < SDL_GetNumGPUDrivers();
+                  })) {
         if (const auto* name = SDL_GetGPUDriver(i)) {
             result.emplace_back(name);
         }
@@ -266,7 +269,9 @@ bool SdlGpuSurface::upload() {
     }
     std::memset(data, 0, s.transferBytes);
     const auto rowBytes = std::size_t(s.software->bitmap().width) * 4;
-    for (Int32 y = 0; y < s.software->bitmap().height; ++y) {
+    for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                      return y < s.software->bitmap().height;
+                  })) {
         std::memcpy(
             data + std::size_t(y) * s.pitch, s.rgba.data() + std::size_t(y) * rowBytes, rowBytes);
     }
@@ -306,7 +311,9 @@ bool SdlGpuSurface::uploadBitmap(const Bitmap& bitmap) {
         return false;
     }
     // Video pixels are opaque even when a caller's Bitmap carries GUI flags.
-    for (Int32 y = 0; y < bitmap.height; ++y) {
+    for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                      return y < bitmap.height;
+                  })) {
         const auto row = bitmap.row(y);
         auto target = software->pixels().subspan(std::size_t(y) * software->bitmap().stride(),
                                                  std::size_t(bitmap.width));
@@ -354,7 +361,9 @@ bool SdlGpuSurface::uploadBitmap(const Bitmap& bitmap) {
         return false;
     }
     std::memset(mapped, 0, ti.size);
-    for (Int32 y = 0; y < bitmap.height; ++y) {
+    for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                      return y < bitmap.height;
+                  })) {
         std::memcpy(mapped + std::size_t(y) * pitch,
                     rgba.data() + std::size_t(y) * std::size_t(bitmap.width) * 4,
                     std::size_t(bitmap.width) * 4);
@@ -548,7 +557,9 @@ bool SdlGpuSurface::readback(std::span<std::byte> output) {
         return false;
     }
     const auto rowBytes = std::size_t(s.software->bitmap().width) * 4;
-    for (Int32 y = 0; y < s.software->bitmap().height; ++y) {
+    for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                      return y < s.software->bitmap().height;
+                  })) {
         std::memcpy(
             output.data() + std::size_t(y) * rowBytes, data + std::size_t(y) * s.pitch, rowBytes);
     }

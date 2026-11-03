@@ -1,6 +1,7 @@
 #pragma once
 
 #include <opent1/world/world_mission.hpp>
+#include <ranges>
 
 #include <algorithm>
 #include <cmath>
@@ -73,7 +74,7 @@ inline bool appendProjectileBeam(world::WorldSurfaceMesh& mesh,
         {{0, 1, 2}, {0, 2, 3}, {2, 1, 0}, {3, 2, 0}}};
     for (const auto& face : faces) {
         world::StaticSurfaceTriangle triangle;
-        for (std::size_t i = 0; i < face.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, face.size())) {
             triangle.vertices[i].position = points[face[i]];
             triangle.vertices[i].texture = texture[face[i]];
         }

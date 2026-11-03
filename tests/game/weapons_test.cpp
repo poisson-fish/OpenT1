@@ -1,4 +1,5 @@
 #include <opent1/core/bit_stream.hpp>
+#include <ranges>
 #include <opent1/core/mem_stream.hpp>
 #include <opent1/game/flier.hpp>
 #include <opent1/game/mine.hpp>
@@ -192,7 +193,9 @@ void checkPacketParity(const BinaryFixtureReader::PacketRecord& actual,
             expected.bitCount,
             expected.bytes.size());
         const std::size_t n = std::min(actual.bytes.size(), expected.bytes.size());
-        for (std::size_t i = 0; i < n; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < n;
+                      })) {
             if (actual.bytes[i] != expected.bytes[i]) {
                 std::fprintf(stderr,
                              "  first byte diff at index %zu: actual=0x%02X vs expected=0x%02X\n",
@@ -250,7 +253,7 @@ void testFixtureParity() {
     auto& vehicleData =
         createBlock<VehicleData>(dbm, DataBlockManager::VehicleDataType, "Vehicle0");
     auto& flierData = createBlock<FlierData>(dbm, DataBlockManager::FlierDataType, "Flier0");
-    for (int i = 0; i < 4; ++i) {
+    for (auto i : std::views::iota(0, 4)) {
         createBlock<SoundData>(dbm, DataBlockManager::SoundDataType, "Sound" + std::to_string(i));
     }
 
@@ -1152,7 +1155,7 @@ void testFixtureParity() {
             CHECK(item.write(ms, 1, 0, sctx) == Persistent::Error::Ok);
         });
         CHECK(actItemPersist == expItemPersist);
-        for (std::size_t cut = 0; cut < expItemPersist.size(); ++cut) {
+        for (auto cut : std::views::iota(std::size_t{0}, expItemPersist.size())) {
             std::span<const std::byte> sub(expItemPersist.data(), cut);
             MemRWStream rms(sub);
             Item readItem;

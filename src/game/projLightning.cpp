@@ -1,4 +1,5 @@
 #include <opent1/game/player.hpp>
+#include <ranges>
 #include <opent1/game/proj_lightning.hpp>
 #include "projectile_beam.hpp"
 
@@ -224,7 +225,9 @@ void Lightning::createSegments(UInt32 in_lineIndex,
 
     Flt32 randFactor = m_pLightningData_->displaceBias;
     while (numToSubdivide < csm_SubdivisionMenuSize) {
-        for (UInt32 i = 0; i < numToSubdivide; ++i) {
+        for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                          return i < numToSubdivide;
+                      })) {
             const UInt32 startIndex = rLine.segs[i].startIndex;
             const UInt32 endIndex = rLine.segs[i].endIndex;
             const UInt32 midIndex = (startIndex + endIndex) / 2u;
@@ -243,7 +246,9 @@ void Lightning::createSegments(UInt32 in_lineIndex,
         numToSubdivide *= 2u;
     }
 
-    for (UInt32 i = 0; i < csm_SubdivisionMenuSize; ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < csm_SubdivisionMenuSize;
+                  })) {
         rLine.segs[i].startPoint = rLine.points[rLine.segs[i].startIndex];
         rLine.segs[i].endPoint = rLine.points[rLine.segs[i].endIndex];
     }
@@ -272,7 +277,9 @@ void Lightning::clientProcess(UInt32 in_currTime) {
         m_endPoint_ = m_pCurrentTarget_->getTransform().p + m_targetOffset_;
         const Box3F& rBox = m_pCurrentTarget_->getBoundingBox();
         const Point3F radii = (rBox.fMax - rBox.fMin) * 0.5f;
-        for (UInt32 i = 0; i < csm_numLines; ++i) {
+        for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                          return i < csm_numLines;
+                      })) {
             if (in_currTime >= m_lines_[i].expireTime) {
                 Point3F finalPoint = m_pCurrentTarget_->getBoxCenter();
                 finalPoint.x += sg_lightningRandom.getFloat(-0.8f, 0.8f) * radii.x;

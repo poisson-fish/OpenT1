@@ -1,4 +1,5 @@
 #include <opent1/game/player.hpp>
+#include <ranges>
 #include <opent1/game/proj_grenade.hpp>
 #include <opent1/game/smoke_puff.hpp>
 #include <opent1/game/sound.hpp>
@@ -371,7 +372,7 @@ bool Grenade::advanceGrenade(UInt32 currTime, bool collisions) {
         setTimeSlice(static_cast<Flt32>(slice) * 0.001f);
         TMat3F target = updateMovement();
         Flt32 remaining = static_cast<Flt32>(slice) * 0.001f;
-        for (Int32 bounce = 0; bounce < 8; ++bounce) {
+        for ([[maybe_unused]] auto bounce : std::views::iota(Int32{0}, Int32{8})) {
             sim::SimCollisionInfo collision{};
             sim::SimContainerQuery query{};
             query.type = ~UInt32{0};

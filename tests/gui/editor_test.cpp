@@ -1,11 +1,12 @@
 #include "gui_editor_support.hpp"
+#include <ranges>
 #include "gui_retained_gpu_support.hpp"
 using namespace opent1;
 using namespace opent1::gui;
 
 namespace {
 void histories() {
-    for (unsigned h = 0; h < 64; ++h) {
+    for (auto h : std::views::iota(unsigned{0}, unsigned{64})) {
         Control root, a, b;
         EditControl editor;
         Canvas canvas;
@@ -184,14 +185,14 @@ void preparations() {
     EditControl bounded;
     CHECK(boundedRoot.addObject(boundedTarget) && boundedRoot.addObject(bounded) &&
           bounded.select(boundedTarget));
-    for (unsigned i = 0; i < 140; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(unsigned{0}, unsigned{140})) {
         CHECK(bounded.move({1, 0}));
     }
-    for (unsigned i = 0; i < 128; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(unsigned{0}, unsigned{128})) {
         CHECK(bounded.undo());
     }
     CHECK(!bounded.undo() && boundedTarget.fields().position.x == 12);
-    for (unsigned i = 0; i < 128; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(unsigned{0}, unsigned{128})) {
         CHECK(bounded.redo());
     }
     CHECK(!bounded.redo() && boundedTarget.fields().position.x == 140);
@@ -205,7 +206,7 @@ void nativeFailures() {
         return n;
     };
     CHECK(word() == 0x46453742 && word() == 1 && word() == 4);
-    for (UInt32 i = 0; i < 4; ++i) {
+    for (auto i : std::views::iota(UInt32{0}, UInt32{4})) {
         CHECK(word() == i && word() == (i < 2 ? 0U : 0xc0000005U) && word() == (i < 2 ? 24U : 16U));
         CHECK(word() == 0x50473742 && word() == 1 && word() == 2 && word() == 2);
         if (i < 2) {

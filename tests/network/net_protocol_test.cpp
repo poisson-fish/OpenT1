@@ -1,4 +1,5 @@
 #include "net_test_support.hpp"
+#include <ranges>
 #include <opent1/core/bit_stream.hpp>
 using namespace net_test;
 
@@ -60,7 +61,9 @@ void malformed() {
     Session session(wire);
     // Every truncated connect prefix; malformed ACK chains and unknown types.
     const auto good = header(1, 3);
-    for (std::size_t n = 1; n < good.size; ++n) {
+    for (auto n : std::views::iota(std::size_t{1}) | std::views::take_while([&](std::size_t n) {
+                      return n < good.size;
+                  })) {
         auto d = good;
         d.size = n;
         wire.incoming.push_back(d);
@@ -79,7 +82,7 @@ void malformed() {
     CHECK(drain(session).empty());
     // Deterministic hostile corpus exercises every parser width without trusting a length field.
     UInt32 rng = 17;
-    for (unsigned i = 0; i < 20000; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(unsigned{0}, unsigned{20000})) {
         rng = rng * 1664525 + 1013904223;
         bad.size = 1 + rng % MaxDatagram;
         std::ranges::generate(bad.bytes, [&] {
@@ -106,7 +109,9 @@ void timeoutAndWrap() {
     CHECK(w.outgoing.empty());
     CHECK(s.process(start + 3001u) == Result::Ok);
     CHECK(w.outgoing.size() == 1);
-    for (UInt32 n = 2; n <= 16; ++n) {
+    for (auto n : std::views::iota(UInt32{2}) | std::views::take_while([&](UInt32 n) {
+                      return n <= 16;
+                  })) {
         CHECK(s.process(start + n * 3000u + 1) == Result::Ok);
     }
     CHECK(!s.info(id));
@@ -165,10 +170,10 @@ void limitsAndBackpressure() {
     Datagram raw;
     raw.address = "peer";
     raw.size = 1;
-    for (unsigned n = 0; n < 40; ++n) {
+    for ([[maybe_unused]] auto n : std::views::iota(unsigned{0}, unsigned{40})) {
         wire.incoming.push_back(raw);
     }
-    for (unsigned n = 0; n < 30; ++n) {
+    for ([[maybe_unused]] auto n : std::views::iota(unsigned{0}, unsigned{30})) {
         CHECK(s.process(0) == Result::Ok);
     }
     CHECK(s.process(0) == Result::Capacity);

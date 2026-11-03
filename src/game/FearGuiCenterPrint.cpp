@@ -1,4 +1,5 @@
 #include <opent1/game/status_combat_huds.hpp>
+#include <ranges>
 #include <opent1/game/hud_panel.hpp>
 
 #include <algorithm>
@@ -71,7 +72,7 @@ void CenterPrint::tick(double nowSec) {
     const auto extent = parent() ? parent()->fields().extent : fields_.extent;
     const bool small = extent.x < 512 || extent.y < 384;
     const auto& fonts = small ? smallMessageFonts : messageFonts;
-    for (std::size_t i = 0; i < fonts.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, fonts.size())) {
         formatted_.fonts[i].resource = fonts[i];
     }
     renderActive_ =

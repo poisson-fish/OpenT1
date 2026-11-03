@@ -1,4 +1,5 @@
 #include <opent1/game/fear_plugin.hpp>
+#include <ranges>
 #include <opent1/game/fear_player_psc.hpp>
 #include <opent1/game/game_base.hpp>
 #include <opent1/game/marker.hpp>
@@ -137,7 +138,10 @@ bool FearPlugin::configureRemoteStream(sim::network::PacketStream& stream) {
                 }
                 return false;
             };
-            for (Int32 suffix = 1; sameName(name); ++suffix) {
+            for (auto suffix : std::views::iota(Int32{1}) |
+                                   std::views::take_while([&]([[maybe_unused]] Int32 suffix) {
+                                       return sameName(name);
+                                   })) {
                 name = identity->name + "." + std::to_string(suffix);
             }
             if (!sg_.playerManager->clientAdded(
@@ -227,7 +231,9 @@ bool FearPlugin::configureRemoteStream(sim::network::PacketStream& stream) {
             }
             dataFinishedFlag_ = true;
             downloadedBlocks_ = 0;
-            for (Int32 group = 0; group < DataBlockManager::NumDataTypes; ++group) {
+            for (auto group : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 group) {
+                                  return group < DataBlockManager::NumDataTypes;
+                              })) {
                 downloadedBlocks_ += cg_.dbm->getDataGroupSize(group);
             }
             game_.console().setVariable("DataBlock::Finished", "true");

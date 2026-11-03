@@ -1,6 +1,7 @@
 // Interactive cube / loaded TS comparison using the software and SDL_GPU paths.
 #define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL.h>
+#include <iterator>
 #include <SDL3/SDL_main.h>
 #include <opent1/gfx/sdl_gpu_surface.hpp>
 #include <opent1/world/ts_static_shape.hpp>
@@ -171,7 +172,7 @@ private:
         constexpr std::array<unsigned, 3> starts{0, 128, 224}, counts{128, 96, 32};
         Flt32 best = 1000;
         UInt8 result{};
-        for (std::size_t ramp = 0; ramp < ramps.size(); ++ramp) {
+        for (auto ramp : std::views::iota(std::size_t{0}, ramps.size())) {
             const auto level =
                 std::clamp(dot(rgb, ramps[ramp]) / dot(ramps[ramp], ramps[ramp]), 0.f, 1.f) *
                 Flt32(counts[ramp] - 1);
@@ -219,7 +220,7 @@ private:
         auto& base = softwarePalette_.palettes[0];
         base.index = 0;
         base.type = PaletteType::ShadeHaze;
-        for (unsigned i = 0; i < 256; ++i) {
+        for (auto i : std::views::iota(unsigned{0}, unsigned{256})) {
             const Point3F ramp = i < 128   ? Point3F{.17f, .68f, .94f}
                                  : i < 224 ? Point3F{.16f, .23f, .32f}
                                            : Point3F{1, 1, 1};
@@ -234,9 +235,9 @@ private:
         }
         base.remap.resize(32 * 9 * 256);
         const Point3F haze{.07f, .11f, .16f};
-        for (unsigned h = 0; h < 9; ++h) {
-            for (unsigned s = 0; s < 32; ++s) {
-                for (unsigned i = 0; i < 256; ++i) {
+        for (auto h : std::views::iota(unsigned{0}, unsigned{9})) {
+            for (auto s : std::views::iota(unsigned{0}, unsigned{32})) {
+                for (auto i : std::views::iota(unsigned{0}, unsigned{256})) {
                     const auto& c = base.colors[i];
                     Point3F rgb{Flt32(c.red) / 255, Flt32(c.green) / 255, Flt32(c.blue) / 255};
                     const auto amount = h == 8 ? Flt32(s) / 31 : Flt32(h) / 7;
@@ -253,8 +254,8 @@ private:
         blend.type = PaletteType::Translucent;
         blend.colors = base.colors;
         blend.remap.resize(65536);
-        for (unsigned alpha = 0; alpha < 256; ++alpha) {
-            for (unsigned i = 0; i < 256; ++i) {
+        for (auto alpha : std::views::iota(unsigned{0}, unsigned{256})) {
+            for (auto i : std::views::iota(unsigned{0}, unsigned{256})) {
                 const auto& c = base.colors[i];
                 blend.remap[alpha * 256 + i] =
                     alpha == 0
@@ -268,8 +269,12 @@ private:
         const auto convert = [&](const Bitmap& source, Point3F tint) {
             auto bitmap = Bitmap::create(source.width, source.height);
             require(bool(bitmap), "Unable to allocate indexed viewer texture");
-            for (Int32 y = 0; y < source.height; ++y) {
-                for (Int32 x = 0; x < source.width; ++x) {
+            for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                              return y < source.height;
+                          })) {
+                for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                                  return x < source.width;
+                              })) {
                     const auto row = source.row(y);
                     const auto offset = std::size_t(x) * 3;
                     bitmap->row(y)[std::size_t(x)] = std::byte(
@@ -380,7 +385,7 @@ private:
         if (requestTransition && !transitionName_.empty()) {
             Int32 target = -1;
             const auto& shape = *model_->shape;
-            for (std::size_t i = 0; i < shape.sequences.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, shape.sequences.size())) {
                 const auto name = shape.sequences[i].name;
                 if (transitionName_ == std::to_string(i) ||
                     (name >= 0 && transitionName_ == shape.names[std::size_t(name)])) {
@@ -435,12 +440,12 @@ private:
         shadow_ = Bitmap::create(model_ ? 64 : 128, model_ ? 64 : 128, 16);
         font_ = Bitmap::create(128, 64);
         require(cube_ && floor_ && shadow_ && font_, "Unable to allocate viewer textures");
-        for (Int32 y = 0; y < 64; ++y) {
-            for (Int32 x = 0; x < 64; ++x) {
+        for (auto y : std::views::iota(Int32{0}, Int32{64})) {
+            for (auto x : std::views::iota(Int32{0}, Int32{64})) {
                 const auto checker = ((x / 16 + y / 16) & 1) != 0;
                 const auto edge = x < 2 || y < 2 || x >= 62 || y >= 62;
                 const UInt8 value = edge ? 100 : checker ? 210 : 250;
-                for (std::size_t c = 0; c < 3; ++c) {
+                for (auto c : std::views::iota(std::size_t{0}, std::size_t{3})) {
                     cube_->row(y)[std::size_t(x) * 3 + c] = std::byte(value);
                 }
             }
@@ -448,13 +453,17 @@ private:
         // Bake the complete floor grid into normalized UV space. The legacy
         // constant-lit wrapped U/V carry path is unsuitable for this large
         // arbitrary camera-projected polygon and can scramble one grid axis.
-        for (Int32 y = 0; y < floor_->height; ++y) {
-            for (Int32 x = 0; x < floor_->width; ++x) {
+        for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                          return y < floor_->height;
+                      })) {
+            for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                              return x < floor_->width;
+                          })) {
                 const bool line = (x * 24 / 512) != (std::max(0, x - 1) * 24 / 512) ||
                                   (y * 24 / 512) != (std::max(0, y - 1) * 24 / 512);
                 const std::array<UInt8, 3> ground =
                     line ? std::array<UInt8, 3>{73, 55, 39} : std::array<UInt8, 3>{43, 30, 22};
-                for (std::size_t c = 0; c < 3; ++c) {
+                for (auto c : std::views::iota(std::size_t{0}, std::size_t{3})) {
                     floor_->row(y)[std::size_t(x) * 3 + c] = std::byte(ground[c]);
                 }
             }
@@ -466,8 +475,8 @@ private:
         for (const auto& glyph : glyphs) {
             const auto slot = unsigned(glyph.code) - 32, ox = (slot % 16) * 8,
                        oy = (slot / 16) * 10;
-            for (unsigned y = 0; y < 7; ++y) {
-                for (unsigned x = 0; x < 5; ++x) {
+            for (auto y : std::views::iota(unsigned{0}, unsigned{7})) {
+                for (auto x : std::views::iota(unsigned{0}, unsigned{5})) {
                     if (glyph.rows[y] & (1U << (4 - x))) {
                         font_->row(Int32(oy + y))[ox + x] = std::byte{1};
                     }
@@ -478,48 +487,50 @@ private:
 
     bool onInit(std::span<const std::string_view> args) override {
         GpuSurfaceConfig gpu;
-        for (std::size_t i = 1; i < args.size(); ++i) {
-            if (args[i] == "--smoke") {
+        for (auto argumentIt = std::ranges::next(args.begin(), 1, args.end());
+             argumentIt != args.end();
+             ++argumentIt) {
+            if (*argumentIt == "--smoke") {
                 smoke_ = true;
-            } else if (args[i] == "--sweep") {
+            } else if (*argumentIt == "--sweep") {
                 smoke_ = true;
                 sweep_ = true;
-            } else if (args[i] == "--animation-sweep") {
+            } else if (*argumentIt == "--animation-sweep") {
                 smoke_ = true;
                 animationSweep_ = true;
-            } else if (args[i] == "--root-motion") {
+            } else if (*argumentIt == "--root-motion") {
                 rootMotion_ = true;
-            } else if (args[i] == "--reverse") {
+            } else if (*argumentIt == "--reverse") {
                 reverse_ = true;
-            } else if (args[i] == "--unlit") {
+            } else if (*argumentIt == "--unlit") {
                 modelLighting_ = false;
-            } else if (args[i] == "--utility-prefix" && i + 1 < args.size()) {
-                utilityPrefixes_.emplace_back(args[++i]);
-            } else if (args[i] == "--transition-to" && i + 1 < args.size()) {
-                transitionName_ = args[++i];
-            } else if (args[i] == "--driver" && i + 1 < args.size()) {
-                gpu.driver = args[++i];
-            } else if (args[i] == "--snapshot" && i + 1 < args.size()) {
-                snapshot_ = args[++i];
-            } else if (args[i] == "--shape" && i + 1 < args.size()) {
-                modelName_ = args[++i];
-            } else if (args[i] == "--skin" && i + 1 < args.size()) {
-                skin_ = args[++i];
-            } else if (args[i] == "--sequence" && i + 1 < args.size()) {
-                sequenceName_ = args[++i];
-            } else if (args[i] == "--auto-detail") {
+            } else if (*argumentIt == "--utility-prefix" && std::next(argumentIt) != args.end()) {
+                utilityPrefixes_.emplace_back(*++argumentIt);
+            } else if (*argumentIt == "--transition-to" && std::next(argumentIt) != args.end()) {
+                transitionName_ = *++argumentIt;
+            } else if (*argumentIt == "--driver" && std::next(argumentIt) != args.end()) {
+                gpu.driver = *++argumentIt;
+            } else if (*argumentIt == "--snapshot" && std::next(argumentIt) != args.end()) {
+                snapshot_ = *++argumentIt;
+            } else if (*argumentIt == "--shape" && std::next(argumentIt) != args.end()) {
+                modelName_ = *++argumentIt;
+            } else if (*argumentIt == "--skin" && std::next(argumentIt) != args.end()) {
+                skin_ = *++argumentIt;
+            } else if (*argumentIt == "--sequence" && std::next(argumentIt) != args.end()) {
+                sequenceName_ = *++argumentIt;
+            } else if (*argumentIt == "--auto-detail") {
                 automaticDetail_ = true;
-            } else if (args[i] == "--time" && i + 1 < args.size()) {
-                const auto value = args[++i];
+            } else if (*argumentIt == "--time" && std::next(argumentIt) != args.end()) {
+                const auto value = *++argumentIt;
                 const auto parsed = std::from_chars(
                     value.data(), value.data() + value.size(), initialAnimationTime_);
                 require(parsed.ec == std::errc{} && parsed.ptr == value.data() + value.size() &&
                             std::isfinite(initialAnimationTime_),
                         "Invalid --time in seconds");
-            } else if (args[i] == "--assets" && i + 1 < args.size()) {
-                assetRoots_.emplace_back(args[++i]);
-            } else if (args[i] == "--mode" && i + 1 < args.size()) {
-                const auto value = args[++i];
+            } else if (*argumentIt == "--assets" && std::next(argumentIt) != args.end()) {
+                assetRoots_.emplace_back(*++argumentIt);
+            } else if (*argumentIt == "--mode" && std::next(argumentIt) != args.end()) {
+                const auto value = *++argumentIt;
                 require(value == "hardware" || value == "software" || value == "split",
                         "Invalid renderer mode");
                 mode_ = value == "hardware"   ? RenderMode::Hardware
@@ -701,7 +712,7 @@ private:
         const std::array<Point2F, 4> uv{
             {{0, 0}, {textureScale, 0}, {textureScale, textureScale}, {0, textureScale}}};
         std::vector<ViewVertex> polygon;
-        for (std::size_t i = 0; i < 4; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, std::size_t{4})) {
             const auto p = positions[i], view = sub(p, eye_);
             const auto light = normal(sub(light_, p));
             const auto half = normal(add(light, normal(sub(eye_, p))));
@@ -719,7 +730,10 @@ private:
             {{0, 0, 1}, {0, 0, -1}, {1, 0, sx}, {-1, 0, sx}, {0, 1, sy}, {0, -1, sy}}};
         // Clip before perspective division. This small demo only manufactures
         // convex quads; every clipped fan is submitted as individual triangles.
-        for (std::size_t plane = 0; plane < planes.size() && !polygon.empty(); ++plane) {
+        for (auto plane :
+             std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t plane) {
+                 return plane < planes.size() && !polygon.empty();
+             })) {
             std::vector<ViewVertex> clipped;
             auto a = polygon.back();
             const auto distance = [&](const ViewVertex& v) {
@@ -747,7 +761,9 @@ private:
                                  height_ / 2 - focal_ * v.position.y / v.position.z};
             projected.push_back({screen, v.uv, v.color, v.haze, 1 / v.position.z});
         }
-        for (std::size_t i = 1; i + 1 < projected.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{1}) | std::views::take_while([&](std::size_t i) {
+                          return i + 1 < projected.size();
+                      })) {
             const auto a = projected[0].position, b = projected[i].position,
                        c = projected[i + 1].position;
             const auto area = std::abs((double(b.x) - a.x) * (double(c.y) - a.y) -
@@ -770,7 +786,7 @@ private:
         // Project the actual cube from the same point light used for shading
         // onto the floor, then form the union silhouette as a convex hull.
         std::array<Point2F, 8> points;
-        for (std::size_t i = 0; i < corners.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, corners.size())) {
             const auto p =
                 add(light_, mul(sub(corners[i], light_), light_.y / (light_.y - corners[i].y)));
             points[i] = {p.x, p.z};
@@ -810,13 +826,17 @@ private:
         maxX += softness * 2;
         minZ -= softness * 2;
         maxZ += softness * 2;
-        for (Int32 y = 0; y < shadow_->height; ++y) {
-            for (Int32 x = 0; x < shadow_->width; ++x) {
+        for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                          return y < shadow_->height;
+                      })) {
+            for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                              return x < shadow_->width;
+                          })) {
                 const Point2F sample{
                     minX + (Flt32(x) + .5f) / Flt32(shadow_->width) * (maxX - minX),
                     maxZ - (Flt32(y) + .5f) / Flt32(shadow_->height) * (maxZ - minZ)};
                 Flt32 distance = 1000;
-                for (std::size_t i = 0; i < hull.size(); ++i) {
+                for (auto i : std::views::iota(std::size_t{0}, hull.size())) {
                     const auto a = hull[i], b = hull[(i + 1) % hull.size()];
                     const auto dx = b.x - a.x, dz = b.y - a.y;
                     distance =
@@ -1012,7 +1032,7 @@ private:
         constexpr std::array<std::array<unsigned, 4>, 6> faces{
             {{0, 3, 2, 1}, {4, 5, 6, 7}, {0, 4, 7, 3}, {1, 2, 6, 5}, {3, 7, 6, 2}, {0, 1, 5, 4}}};
         std::array<Point3F, 8> worldCorners;
-        for (std::size_t i = 0; i < corners.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, corners.size())) {
             worldCorners[i] = add(rotate(corners[i], angle_), {0, 1.2f, 0});
         }
         if (shadows_) {
@@ -1020,7 +1040,7 @@ private:
         }
         for (const auto& indices : faces) {
             std::array<Point3F, 4> positions;
-            for (std::size_t i = 0; i < 4; ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, std::size_t{4})) {
                 positions[i] = worldCorners[indices[i]];
             }
             const auto n =
@@ -1055,8 +1075,12 @@ private:
             softwareImage_->palette = softwarePalette_;
         }
         if (softwareShadow_) {
-            for (Int32 y = 0; y < shadow_->height; ++y) {
-                for (Int32 x = 0; x < shadow_->width; ++x) {
+            for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                              return y < shadow_->height;
+                          })) {
+                for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                                  return x < shadow_->width;
+                              })) {
                     softwareShadow_->row(y)[std::size_t(x)] =
                         shadow_->row(y)[std::size_t(x) * 2 + 1];
                 }
@@ -1106,7 +1130,7 @@ private:
         software_->clear(nearest({.025f, .045f, .075f}));
         if (!software_->sortedPolygons(polygons)) {
             std::string detail;
-            for (std::size_t i = 0; i < polygons.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, polygons.size())) {
                 if (!software_->sortedPolygons(std::span(polygons).subspan(i, 1))) {
                     detail = std::format("; triangle {} (cube {}, floor {}, shadow {})",
                                          i,
@@ -1374,12 +1398,20 @@ private:
                                 lightChanged);
                 });
             } else {
-                for (Int32 view = 0; view < views; ++view) {
+                for (auto view :
+                     std::views::iota(Int32{0}) | std::views::take_while([&](Int32 view) {
+                         return view < views;
+                     })) {
                     std::size_t litPixels{};
-                    for (Int32 y = h / 4; y < h * 3 / 4; ++y) {
-                        for (Int32 x = view * viewWidth + viewWidth / 4;
-                             x < view * viewWidth + viewWidth * 3 / 4;
-                             ++x) {
+                    for (auto y : std::views::iota(static_cast<Int32>(h / 4)) |
+                                      std::views::take_while([&](Int32 y) {
+                                          return y < h * 3 / 4;
+                                      })) {
+                        for (auto x : std::views::iota(
+                                          static_cast<Int32>(view * viewWidth + viewWidth / 4)) |
+                                          std::views::take_while([&](Int32 x) {
+                                              return x < view * viewWidth + viewWidth * 3 / 4;
+                                          })) {
                             const auto offset = std::size_t(y * w + x) * 4;
                             const auto r = std::to_integer<UInt8>(firstFrame_[offset]),
                                        g = std::to_integer<UInt8>(firstFrame_[offset + 1]),
@@ -1450,8 +1482,12 @@ private:
                 std::array<std::size_t, 2> darkened{};
                 const auto w = surface_->software().bitmap().width,
                            h = surface_->software().bitmap().height;
-                for (Int32 y = 112; y < h - 104; ++y) {
-                    for (Int32 x = 0; x < w; ++x) {
+                for (auto y : std::views::iota(Int32{112}) | std::views::take_while([&](Int32 y) {
+                                  return y < h - 104;
+                              })) {
+                    for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                                      return x < w;
+                                  })) {
                         const auto offset = std::size_t(y * w + x) * 4;
                         if (int(std::to_integer<UInt8>(unshadowed[offset])) -
                                 int(std::to_integer<UInt8>(shadowed[offset])) >

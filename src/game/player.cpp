@@ -1,4 +1,5 @@
 #include <opent1/game/player.hpp>
+#include <ranges>
 #include <opent1/game/player_manager.hpp>
 #include <opent1/game/sensor_manager.hpp>
 #include <opent1/game/sound.hpp>
@@ -51,12 +52,16 @@ bool Player::onAdd() {
 
 void Player::onRemove() {
     stopJetSound();
-    for (Int32 slot = 0; slot < MaxImageSlots; ++slot) {
+    for (auto slot : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 slot) {
+                         return slot < MaxImageSlots;
+                     })) {
         stopImageSound(slot);
     }
     disableSupressionField();
     if (!isGhost()) {
-        for (Int32 slot = 0; slot < MaxImageSlots; ++slot) {
+        for (auto slot : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 slot) {
+                             return slot < MaxImageSlots;
+                         })) {
             stopImageFire(slot);
         }
         removeFromSet(PlayerSetId);
@@ -272,7 +277,7 @@ bool Player::initResources(GameBaseData* inData) {
             resources ? resources->load<world::TsShape>(name) : Resource<world::TsShape>{};
         if (shape) {
             flameShape_ = std::make_shared<world::TsShapeInstance>(shape);
-            for (std::size_t i = 0; i < shape->sequences.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, shape->sequences.size())) {
                 if (shape->names[shape->sequences[i].name] == "activation") {
                     flameThread_ = flameShape_->addThread(Int32(i));
                     break;
@@ -476,7 +481,9 @@ void Player::setDead(bool dead) {
         setType(CorpseObjectType);
         jetting_ = false;
         removeForce(TribesJetForce);
-        for (Int32 i = 0; i < MaxImageSlots; ++i) {
+        for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                          return i < MaxImageSlots;
+                      })) {
             setImageTriggerUp(i);
         }
     } else {
@@ -739,7 +746,7 @@ void Player::updateAnimation(Flt32 seconds) {
     }
     const auto& shape = *shapeInstance_->shape();
     const auto sequence = [&](std::string_view name) -> Int32 {
-        for (std::size_t i = 0; i < shape.sequences.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, shape.sequences.size())) {
             const auto index = shape.sequences[i].name;
             if (index >= 0 && std::size_t(index) < shape.names.size() &&
                 shape.names[index] == name) {
@@ -844,14 +851,14 @@ std::optional<world::TsShapePose> Player::animationPose() const {
     }
     const auto& shape = *pose->shape();
     float rootZ = 0;
-    for (std::size_t i = 0; i < shape.nodes.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, shape.nodes.size())) {
         const auto name = shape.nodes[i].name;
         if (name >= 0 && std::size_t(name) < shape.names.size() &&
             shape.names[name] == "dummyalways root") {
             rootZ = pose->nodeTransforms()[i].p.z;
         }
     }
-    for (std::size_t i = 0; i < shape.nodes.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, shape.nodes.size())) {
         const auto& node = shape.nodes[i];
         if (node.name < 0 || std::size_t(node.name) >= shape.names.size() ||
             !shape.names[node.name].starts_with("lowerback") || node.parent < 0) {
@@ -891,7 +898,9 @@ void Player::appendJetFlame(world::WorldShapeQuery& query) {
         return;
     }
     const auto& shape = *body->shape();
-    for (std::size_t i = 0; i < shape.nodes.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < shape.nodes.size();
+                  })) {
         const auto name = shape.nodes[i].name;
         if (name < 0 || std::size_t(name) >= shape.names.size() ||
             !shape.names[name].starts_with("dummy lowback")) {
@@ -918,7 +927,9 @@ void Player::appendMountedImages(world::WorldShapeQuery& query) {
     if (!shapeInstance_ || dead_) {
         return;
     }
-    for (Int32 index = 0; index < MaxImageSlots; ++index) {
+    for (auto index : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 index) {
+                          return index < MaxImageSlots;
+                      })) {
         auto& slot = itemImageList_[index];
         const auto* data = getImageData(slot.imageId);
         if (!data || !data->shape || (isFirstPersonView() && !data->firstPerson)) {
@@ -991,7 +1002,7 @@ bool Player::getImageTransform(Int32 slot, TMat3F* transform) const {
         return false;
     }
     const auto& shape = *pose->shape();
-    for (std::size_t i = 0; i < shape.nodes.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, shape.nodes.size())) {
         const auto name = shape.nodes[i].name;
         if (name < 0 || std::size_t(name) >= shape.names.size() ||
             !shape.names[name].starts_with(nodes[data->mountPoint])) {
@@ -1035,7 +1046,7 @@ bool Player::getMuzzleTransform(Int32 slot, TMat3F* transform) const {
         TMat3F placed;
         m_mul(TMat3F(root.rotation, root.translation), image, placed);
         image = placed;
-        for (std::size_t i = 0; i < shape.nodes.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, shape.nodes.size())) {
             const auto name = shape.nodes[i].name;
             if (name >= 0 && std::size_t(name) < shape.names.size() &&
                 shape.names[name] == "dummyalways muzzle") {
@@ -1058,7 +1069,7 @@ void Player::updateImageAnimation(ItemImageEntry& image, Flt32 seconds) {
     }
     const auto& shape = *image.shape->shape();
     const auto sequence = [&](std::string_view name) -> Int32 {
-        for (std::size_t i = 0; i < shape.sequences.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, shape.sequences.size())) {
             const auto index = shape.sequences[i].name;
             if (index >= 0 && std::size_t(index) < shape.names.size() &&
                 shape.names[index] == name) {
@@ -1169,7 +1180,7 @@ const TMat3F& Player::getEyeTransform() const {
     if (shapeInstance_) {
         if (const auto pose = animationPose()) {
             const auto& shape = *pose->shape();
-            for (std::size_t i = 0; i < shape.nodes.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, shape.nodes.size())) {
                 const auto name = shape.nodes[i].name;
                 if (name >= 0 && std::size_t(name) < shape.names.size() &&
                     shape.names[name].starts_with("dummy eye")) {
@@ -1211,7 +1222,7 @@ void Player::getCameraTransform(Flt32 camDist, TMat3F* transform) const {
         if (shapeInstance_) {
             if (const auto pose = shapeInstance_->pose()) {
                 const auto& shape = *pose->shape();
-                for (std::size_t i = 0; i < shape.nodes.size(); ++i) {
+                for (auto i : std::views::iota(std::size_t{0}, shape.nodes.size())) {
                     const auto name = shape.nodes[i].name;
                     if (name >= 0 && std::size_t(name) < shape.names.size() &&
                         shape.names[name] == "dummyalways chasecam") {

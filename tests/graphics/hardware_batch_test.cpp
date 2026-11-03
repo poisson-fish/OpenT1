@@ -1,4 +1,5 @@
 #include "gfx_test_support.hpp"
+#include <ranges>
 #include <opent1/gfx/hardware_batch.hpp>
 #include <future>
 #include <limits>
@@ -233,7 +234,7 @@ void mipChainsAndLightMaps() {
     bitmap->detailLevels = 4;
     bitmap->pixels.resize(23);
     auto p = palette(0);
-    for (Int32 i = 0; i < 4; ++i) {
+    for (auto i : std::views::iota(Int32{0}, Int32{4})) {
         std::ranges::fill(bitmap->level(i), std::byte(i + 1));
         p.palettes[0].colors[std::size_t(i + 1)] = {UInt8(10 + i), UInt8(20 + i), UInt8(30 + i), 0};
     }
@@ -248,7 +249,7 @@ void mipChainsAndLightMaps() {
     CHECK(batch->textures()[1].rgba.size() == 64 && batch->textures()[1].mips.size() == 3);
     CHECK(batch->textures()[1].mips[0].width == 4 && batch->textures()[1].mips[0].height == 1);
     CHECK(batch->textures()[1].mips[2].width == 1 && batch->textures()[1].mips[2].height == 1);
-    for (std::size_t i = 0; i < 3; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
         CHECK(batch->textures()[1].mips[i].rgba[0] == std::byte(11 + i));
     }
     CHECK(batch->draws()[0].mipFilter == HardwareMipFilter::Linear &&
@@ -288,7 +289,7 @@ void mipChainsAndLightMaps() {
     CHECK(!prepare(v, m, &p));
     // Exhaust the original RGB444 input domain. The alpha nibble has no effect.
     LightMap map{{64, 64}, {7, 9}, std::vector<UInt16>(4096)};
-    for (std::size_t i = 0; i < map.samples.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, map.samples.size())) {
         map.samples[i] = UInt16(i | ((i & 15) << 12));
     }
     const std::array<Point2F, 4> uv{{{-.5f, 0}, {.5f, 0}, {.5f, 1}, {-.5f, 1}}};
@@ -303,7 +304,7 @@ void mipChainsAndLightMaps() {
         15, 31, 47, 63, 79, 95, 111, 127, 143, 159, 175, 191, 207, 223, 239, 255};
     const auto textureView = batch->textures();
     const auto& rgba = textureView[1].rgba;
-    for (std::size_t i = 0; i < 4096; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{4096})) {
         CHECK(rgba[i * 4] == std::byte(expanded[i / 256]) &&
               rgba[i * 4 + 1] == std::byte(expanded[(i / 16) % 16]));
         CHECK(rgba[i * 4 + 2] == std::byte(expanded[i % 16]) && rgba[i * 4 + 3] == std::byte{255});

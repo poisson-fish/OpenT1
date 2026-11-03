@@ -1,4 +1,5 @@
 #include <opent1/console/console.hpp>
+#include <ranges>
 #include <opent1/core/bit_stream.hpp>
 #include <opent1/core/mem_stream.hpp>
 #include <opent1/core/res_manager.hpp>
@@ -230,7 +231,7 @@ void verifyFixtureParity(const std::filesystem::path& fixturePath) {
     // produce the same rotation as DirectInput's single polled delta.
     {
         InputHandler individual, combined;
-        for (int i = 0; i < 40; ++i) {
+        for ([[maybe_unused]] auto i : std::views::iota(0, 40)) {
             individual.sample(.002f, sim::ActionDelta);
         }
         combined.sample(.08f, sim::ActionDelta);
@@ -660,7 +661,7 @@ void verifyFixtureParity(const std::filesystem::path& fixturePath) {
     CHECK(playerData != nullptr);
     std::array<ItemData*, 8> testItems{};
     std::array<ItemImageData*, 8> testItemImages{};
-    for (int i = 0; i < 8; ++i) {
+    for (auto i : std::views::iota(0, 8)) {
         testItems[static_cast<std::size_t>(i)] = static_cast<ItemData*>(
             dbm.createDataBlock(std::format("TestItem{}", i), DataBlockManager::ItemDataType));
         testItems[static_cast<std::size_t>(i)]->showInventory = true;
@@ -891,7 +892,9 @@ void verifyFixtureParity(const std::filesystem::path& fixturePath) {
         const Point3F unitLat{0.0f, 1.0f, 0.0f};
         const Int32 numChoices = pl.possibleJetForces(jetChoices, &unitLat);
         CHECK(numChoices == r.readI32());
-        for (Int32 i = 0; i < numChoices; ++i) {
+        for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                          return i < numChoices;
+                      })) {
             CHECK(
                 approxEqualPoint(jetChoices[static_cast<std::size_t>(i)], r.readPoint3F(), 1e-3f));
         }
@@ -909,12 +912,12 @@ void verifyFixtureParity(const std::filesystem::path& fixturePath) {
             Point3F{-0.4f, -0.4f, 2.0f},
             Point3F{0.0f, 0.4f, 2.0f},
         };
-        for (std::size_t i = 0; i < testPts.size(); ++i) {
+        for (auto testPt : testPts) {
             const std::string expVert = r.readStr();
             const std::string expQuad = r.readStr();
             std::string_view gotVert{};
             std::string_view gotQuad{};
-            pl.getDamageLocation(testPts[i], gotVert, gotQuad);
+            pl.getDamageLocation(testPt, gotVert, gotQuad);
             CHECK(gotVert == expVert);
             CHECK(gotQuad == expQuad);
         }
@@ -1105,7 +1108,7 @@ void verifyMalformedPacketAndStreamRollback() {
         playerData->boxNormalHeight = 2.3f;
         playerData->boxCrouchHeight = 1.6f;
     }
-    for (int i = 0; i < 8; ++i) {
+    for (auto i : std::views::iota(0, 8)) {
         (void)dbm.createDataBlock(std::format("Item{}", i), DataBlockManager::ItemDataType);
         (void)dbm.createDataBlock(std::format("Img{}", i), DataBlockManager::ItemImageDataType);
     }
@@ -1126,7 +1129,10 @@ void verifyMalformedPacketAndStreamRollback() {
         });
         CHECK(totalBits > 10u);
 
-        for (std::uint32_t truncBits = 3; truncBits < totalBits; ++truncBits) {
+        for (auto truncBits : std::views::iota(std::uint32_t{3}) |
+                                  std::views::take_while([&](std::uint32_t truncBits) {
+                                      return truncBits < totalBits;
+                                  })) {
             BitStream rbs(asByteSpan(bytes));
             rbs.setLimits(static_cast<std::size_t>(truncBits), 0);
             rbs.setCurPos(3);
@@ -1153,7 +1159,10 @@ void verifyMalformedPacketAndStreamRollback() {
         const auto [cBits, cBytes] = captureBits([&](BitStream& bs) {
             CHECK(clientPsc.writePacket(bs, key));
         });
-        for (std::uint32_t trunc = 0; trunc < cBits; ++trunc) {
+        for (auto trunc :
+             std::views::iota(std::uint32_t{0}) | std::views::take_while([&](std::uint32_t trunc) {
+                 return trunc < cBits;
+             })) {
             BitStream rbs(asByteSpan(cBytes));
             rbs.setLimits(static_cast<std::size_t>(trunc), 0);
             PlayerPSC srvPsc(true);
@@ -1218,7 +1227,7 @@ void verifyMalformedPacketAndStreamRollback() {
         const auto persistBytes = capturePersistBytes([&](StreamIO& s) {
             CHECK(pl.write(s, 0, 0, storeCtx) == Persistent::Error::Ok);
         });
-        for (std::size_t truncLen = 0; truncLen < persistBytes.size(); ++truncLen) {
+        for (auto truncLen : std::views::iota(std::size_t{0}, persistBytes.size())) {
             std::span<const std::byte> truncated(
                 reinterpret_cast<const std::byte*>(persistBytes.data()), truncLen);
             MemRWStream rms(truncated);
@@ -1244,7 +1253,7 @@ void verifyFallingAnimationPose() {
     shape->names = {
         "bounds", "hips", "lowerback", "head", "root", "fall", "jet", "tumble loop", "looks"};
     shape->nodes = {{0, -1, 0, 0, 0}, {1, 0, 3, 0, 0}, {2, 1, 1, 3, 0}, {3, 2, 0, 0, 1}};
-    for (Int32 name = 4; name < 9; ++name) {
+    for (auto name : std::views::iota(Int32{4}, Int32{9})) {
         shape->sequences.push_back({name, 1, 1.f, 0});
     }
     shape->transforms = {{{}, {}},
@@ -1418,7 +1427,7 @@ void verifyJumpAnimationPlayback() {
     const auto [bits, bytes] = captureBits([&](BitStream& stream) {
         CHECK(sender.packPlayerUpdate(Player::AnimationMask, stream, nullptr));
     });
-    for (int repeat = 0; repeat < 2; ++repeat) {
+    for ([[maybe_unused]] auto repeat : std::views::iota(0, 2)) {
         BitStream stream(asByteSpan(bytes));
         CHECK(player.unpackPlayerUpdate(stream, nullptr));
         player.updateAnimation(.1f);

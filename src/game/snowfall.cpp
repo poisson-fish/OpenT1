@@ -1,4 +1,5 @@
 #include <opent1/game/snowfall.hpp>
+#include <ranges>
 #include <opent1/game/string_table.hpp>
 #include <opent1/sim/sim_world_game.hpp>
 
@@ -125,7 +126,9 @@ void Snowfall::snowInit(Flt32 currentTime) {
     }
     numFlakes_ =
         std::clamp(static_cast<Int32>(maxFlakes * intensity_), 0, static_cast<Int32>(MAXFLAKES));
-    for (Int32 x = 0; x < numFlakes_; ++x) {
+    for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                      return x < numFlakes_;
+                  })) {
         snowCreateFlake(x, true, currentTime);
     }
 }
@@ -202,7 +205,9 @@ void Snowfall::snowLogicFrame(SimTime dt, Flt32 currentTime) {
     const Point3F maxBox = camPos_ + SnowBox_;
     const Point3F minBox = camPos_ - SnowBox_;
 
-    for (Int32 x = 0; x < numFlakes_; ++x) {
+    for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                      return x < numFlakes_;
+                  })) {
         SnowFlake& flake = flakes_[static_cast<std::size_t>(x)];
         if ((flake.flags & FlakeActive) != 0) {
             if (rain_) {

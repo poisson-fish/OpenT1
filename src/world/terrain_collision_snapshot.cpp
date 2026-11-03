@@ -1,4 +1,5 @@
 #include <opent1/world/terrain_collision_snapshot.hpp>
+#include <ranges>
 #include "collision_geometry.hpp"
 #include <opent1/math/plane.hpp>
 #include <bit>
@@ -41,7 +42,7 @@ struct NativeFile {
     std::map<Int32, NativeBlock> blocks;
 
     explicit NativeFile(const TerrainGridResources& r) : resources(r) {
-        for (std::size_t i = 0; i < r.blocks.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, r.blocks.size())) {
             blocks.emplace(r.grid->blocks[i].id,
                            NativeBlock{r.blocks[i].get(), r.grid->blocks[i].id});
         }
@@ -488,9 +489,8 @@ bool GridCollision::collideBlock(const NativeBlock* block,
     for (;;) {
         collision_detail::spend(work);
         currentT = 1.0f;
-        int i;
         currentI = -1;
-        for (i = 0; i < 4; i++) {
+        for (const auto i : std::views::iota(0, 4)) {
             if (curT[i] < currentT) {
                 currentT = curT[i];
                 currentI = i;
@@ -771,7 +771,7 @@ std::optional<TerrainCollisionSnapshot> TerrainCollisionSnapshot::prepare(Terrai
     const auto n = 1U << (r.grid->detailCount - 1);
     std::map<Int32, bool> ids;
     std::size_t heights{};
-    for (std::size_t i = 0; i < r.blocks.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, r.blocks.size())) {
         if (!ids.emplace(r.grid->blocks[i].id, true).second || r.grid->blocks[i].id < 0) {
             return {};
         }

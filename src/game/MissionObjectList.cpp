@@ -1,4 +1,5 @@
 #include <opent1/game/fear_mission_editor.hpp>
+#include <ranges>
 #include <opent1/game/game_base.hpp>
 
 #include <algorithm>
@@ -66,7 +67,7 @@ void MEObjectList::flattenObject(sim::SimObject* obj,
     if (auto* set = dynamic_cast<sim::SimSet*>(obj)) {
         if (obj->isExpanded()) {
             const auto& children = set->objects();
-            for (std::size_t i = 0; i < children.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, children.size())) {
                 const bool childLast = (i + 1 == children.size());
                 flattenObject(children[i], depth + 1, myIndex, childLast);
             }
@@ -76,7 +77,7 @@ void MEObjectList::flattenObject(sim::SimObject* obj,
 
 void MEObjectList::buildObjectDisplayList() {
     objectDisplayList_.clear();
-    for (std::size_t i = 0; i < roots_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, roots_.size())) {
         const bool isLast = (i + 1 == roots_.size());
         flattenObject(roots_[i], 0, -1, isLast);
     }

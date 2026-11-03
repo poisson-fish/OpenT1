@@ -1,4 +1,5 @@
 #include <opent1/game/status_combat_huds.hpp>
+#include <ranges>
 #include <opent1/game/sensor_manager.hpp>
 
 #include <algorithm>
@@ -164,7 +165,7 @@ void Crosshair::updateLive(sim::SimManager& manager,
                     position = player->getTransform().p;
                     if (const auto pose = player->animationPose()) {
                         const auto& shape = *pose->shape();
-                        for (std::size_t i = 0; i < shape.nodes.size(); ++i) {
+                        for (auto i : std::views::iota(std::size_t{0}, shape.nodes.size())) {
                             const auto name = shape.nodes[i].name;
                             if (name >= 0 && std::size_t(name) < shape.names.size() &&
                                 shape.names[name].starts_with("dummy midback")) {

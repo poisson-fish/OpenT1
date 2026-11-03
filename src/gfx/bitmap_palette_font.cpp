@@ -186,7 +186,10 @@ bool readDarkstarBitmap(Reader& input, Bitmap& bitmap, bool includePalette) {
         return false;
     }
     bool pixels = false, details = false, index = false, palette = false;
-    for (UInt32 i = 0; i < chunks; ++i) {
+    for ([[maybe_unused]] auto i :
+         std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+             return i < chunks;
+         })) {
         if (!input.read(tag) || !input.read(size)) {
             return false;
         }
@@ -385,7 +388,10 @@ bool readArray(Reader& input, BitmapArray& array, bool includePalette) {
         return false;
     }
     bool user = false, remap = false;
-    for (UInt32 i = 0; i < chunks; ++i) {
+    for ([[maybe_unused]] auto i :
+         std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+             return i < chunks;
+         })) {
         const auto start = input.position;
         if (!input.read(tag) || !input.read(size)) {
             return false;
@@ -679,7 +685,9 @@ std::optional<RectI> indexedContentBounds(const Bitmap& bitmap) {
         return {};
     }
     RectI result{bitmap.width, bitmap.height, -1, -1};
-    for (Int32 y = 0; y < bitmap.height; ++y) {
+    for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                      return y < bitmap.height;
+                  })) {
         const auto row = bitmap.row(y);
         std::size_t first = 0, last = row.size();
         // Word loads skip sparse zero spans without alignment assumptions or

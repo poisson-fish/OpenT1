@@ -94,7 +94,9 @@ bool validMeshPolygon(const HardwarePolygon& p) {
         !unit(t.geometry[0]) || !integer(t.ambient[3], 2) || t.ambient[0] < 0 || t.ambient[1] < 0 ||
         t.ambient[2] < 0)
         return false;
-    for (std::size_t i = 0; i < std::size_t(t.ambient[3]); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < std::size_t(t.ambient[3]);
+                  })) {
         const auto& source = t.parameters[i * 4];
         const auto& intensity = t.parameters[i * 4 + 1];
         const auto& attenuation = t.parameters[i * 4 + 2];
@@ -149,7 +151,9 @@ UInt64 expandedBytes(const Bitmap& bitmap) {
         return UInt64(Bitmap::MaxFileBytes) + 1;
     }
     UInt64 result{};
-    for (Int32 level = 0; level < bitmap.detailLevels; ++level) {
+    for (auto level : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 level) {
+                          return level < bitmap.detailLevels;
+                      })) {
         result += UInt64(UInt32(std::max(1, bitmap.width >> level))) *
                   UInt32(std::max(1, bitmap.height >> level)) * 4;
     }
@@ -205,11 +209,11 @@ expand(const Bitmap& bitmap, const HardwareMaterial& material, const Palette* fa
     if (legacy) {
         std::array<UInt8, 256> gammaMap{};
         const Flt32 inverseGamma = 1.f / material.paletteGamma;
-        for (std::size_t i = 0; i < gammaMap.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, gammaMap.size())) {
             // Original setPalette truncates the pow result to GLubyte.
             gammaMap[i] = UInt8(std::pow(Flt32(i) / 255.f, double(inverseGamma)) * 255.);
         }
-        for (std::size_t i = 0; i < translated.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, translated.size())) {
             const auto& c = (*colors)[i];
             auto& t = translated[i];
             t = {gammaMap[c.red], gammaMap[c.green], gammaMap[c.blue], c.flags};
@@ -237,7 +241,7 @@ expand(const Bitmap& bitmap, const HardwareMaterial& material, const Palette* fa
     }
     std::array<std::array<std::byte, 4>, 256> indexed{};
     if (bitmap.bitDepth == 8) {
-        for (std::size_t i = 0; i < indexed.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, indexed.size())) {
             const auto& color = legacy ? translated[i] : (*colors)[i];
             const UInt8 alpha = legacy ? color.flags
                                        : UInt8(transparent && i == 0 ? 0
@@ -249,7 +253,9 @@ expand(const Bitmap& bitmap, const HardwareMaterial& material, const Palette* fa
                           std::byte(alpha)};
         }
     }
-    for (Int32 level = 0; level < bitmap.detailLevels; ++level) {
+    for (auto level : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 level) {
+                          return level < bitmap.detailLevels;
+                      })) {
         const auto width = std::max(1, bitmap.width >> level),
                    height = std::max(1, bitmap.height >> level);
         std::vector<std::byte> rgba(std::size_t(width) * std::size_t(height) * 4);
@@ -257,7 +263,9 @@ expand(const Bitmap& bitmap, const HardwareMaterial& material, const Palette* fa
             const auto row = bitmap.row(y, level);
             if (bitmap.bitDepth == 8) {
                 auto* destination = rgba.data() + std::size_t(y) * std::size_t(width) * 4;
-                for (Int32 x = 0; x < width; ++x) {
+                for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                                  return x < width;
+                              })) {
                     const auto& pixel = indexed[std::to_integer<UInt8>(row[std::size_t(x)])];
                     std::ranges::copy(pixel, destination + std::size_t(x) * 4);
                 }
@@ -322,7 +330,7 @@ HardwareTexture expand(const LightMap& map, HardwareLightMapMode mode) {
         map.size.x, map.size.y, std::vector<std::byte>(map.samples.size() * 4), {}};
     result.lightMap = true;
     result.dynamic = map.dynamic;
-    for (std::size_t i = 0; i < map.samples.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, map.samples.size())) {
         if (map.format == LightMap::Format::Rgb565) {
             const auto v = map.samples[i];
             result.rgba[i * 4] = std::byte(((v >> 11) * 255 + 15) / 31);
@@ -333,7 +341,7 @@ HardwareTexture expand(const LightMap& map, HardwareLightMapMode mode) {
         }
         // Original gOGLTx.cpp dumpOGLLightmap expands each RGB nibble as
         // (n << 4) | 15, not n*17. The alpha nibble is unused by hardware.
-        for (std::size_t c = 0; c < 3; ++c) {
+        for (auto c : std::views::iota(std::size_t{0}, std::size_t{3})) {
             const auto nibble = (map.samples[i] >> ((2 - c) * 4)) & 15;
             result.rgba[i * 4 + c] = mode == HardwareLightMapMode::OpenGLPacked
                                          ? std::byte(((nibble * 2 + 1) * 255 + 15) / 31)
@@ -516,7 +524,7 @@ hardwarePaletteFill(const Palette& palette, UInt8 color, UInt32 paletteIndex, Fl
     HardwareMaterial result;
     result.color = {Flt32(c.red) / 255, Flt32(c.green) / 255, Flt32(c.blue) / 255};
     if (gamma != 1) {
-        for (std::size_t i = 0; i < 3; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
             result.color[i] = Flt32(std::pow(result.color[i], double(1.f / gamma)));
         }
     }

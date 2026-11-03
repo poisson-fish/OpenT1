@@ -1,4 +1,5 @@
 #include "world_collision_corpus.hpp"
+#include <ranges>
 #include "ts_collision_test_support.hpp"
 #include <opent1/world/world_collision_sim.hpp>
 #include <opent1/world/world_scene.hpp>
@@ -59,7 +60,7 @@ struct InteriorData {
     std::vector<InteriorCollisionSurface> surfaces;
 
     InteriorData() {
-        for (std::size_t i = 0; i < 6; ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, std::size_t{6})) {
             const auto p = world_collision_corpus::planes[i];
             planes.emplace_back(p[0], p[1], p[2], p[3]);
             nodes.push_back({UInt32(i), -1, i == 5 ? -2 : Int32(i + 1)});
@@ -94,7 +95,7 @@ void parity() {
     CHECK(file.readBytes(std::as_writable_bytes(std::span(magic))) &&
           std::string_view(magic.data(), 6) == "WCOLL1" && !magic[6] && !magic[7]);
     for (const auto& corners : world_collision_corpus::heights) {
-        for (UInt32 split = 0; split < 2; ++split) {
+        for (auto split : std::views::iota(UInt32{0}, UInt32{2})) {
             std::array<Flt32, 6> heights{};
             heights[split] = corners[0];
             heights[split + 1] = corners[1];
@@ -103,8 +104,8 @@ void parity() {
             const std::array<TerrainCollisionCell, 2> cells{};
             auto terrain = TerrainCollision::prepare(2, 1, 4, heights, cells);
             CHECK(terrain);
-            for (int y = 0; y < 8; ++y) {
-                for (int x = 0; x < 8; ++x) {
+            for (auto y : std::views::iota(0, 8)) {
+                for (auto x : std::views::iota(0, 8)) {
                     Flt32 height{};
                     Point3F normal;
                     CHECK(file.read(height) && file.read(normal.x) && file.read(normal.y) &&
@@ -135,8 +136,10 @@ void parity() {
     }
     const auto geometry = interior();
     std::size_t contacts{};
-    for (std::size_t kind = 0; kind < 3; ++kind) {
-        for (std::size_t i = 0; i < world_collision_corpus::samples; ++i) {
+    for (auto kind : std::views::iota(std::size_t{0}, std::size_t{3})) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < world_collision_corpus::samples;
+                      })) {
             const auto sample = world_collision_corpus::input(kind, i);
             CollisionSurfaceList list;
             const bool hit =
@@ -173,7 +176,9 @@ void parity() {
         }
     }
     std::size_t boxContacts{};
-    for (std::size_t i = 0; i < world_collision_corpus::samples; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < world_collision_corpus::samples;
+                  })) {
         const auto sample = world_collision_corpus::box(i);
         const auto radii = point(sample.radii);
         const TMat3F transform(EulerF(sample.rotation[0], sample.rotation[1], sample.rotation[2]),
@@ -199,7 +204,10 @@ void parity() {
         if (hit) {
             near(list.stepVector, step);
         }
-        for (UInt32 j = 0; j < count; ++j) {
+        for ([[maybe_unused]] auto j :
+             std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 j) {
+                 return j < count;
+             })) {
             CollisionSurface expected;
             CHECK(file.read(expected.normal.x) && file.read(expected.normal.y) &&
                   file.read(expected.normal.z) && file.read(expected.distance) &&
@@ -317,7 +325,7 @@ void interiorBoxesAndValidation() {
     // RPG castle surfaces use the complete serialized UInt8 vertex range.
     auto polygon = wall;
     polygon.vertices.clear();
-    for (int i = 0; i < 51; ++i) {
+    for (auto i : std::views::iota(0, 51)) {
         const auto angle = Flt32(i) * 2.f * std::numbers::pi_v<Flt32> / 51.f;
         polygon.vertices.push_back({0, 2.f * std::cos(angle), 2.f * std::sin(angle)});
     }
@@ -338,7 +346,7 @@ void interiorBoxesAndValidation() {
     const auto repeated = data.surfaces[0];
     data.surfaces.assign(4097, repeated);
     data.leaves[1].surfaces.clear();
-    for (UInt32 i = 0; i < 4097; ++i) {
+    for (auto i : std::views::iota(UInt32{0}, UInt32{4097})) {
         data.leaves[1].surfaces.push_back(i);
     }
     const auto crowded = data.prepare();
@@ -360,7 +368,7 @@ void interiorBoxesAndValidation() {
     // temporary storage independently of earlier traversals.
     std::vector<PlaneF> deepPlanes;
     std::vector<InteriorCollisionNode> deepNodes;
-    for (UInt32 i = 0; i < 96; ++i) {
+    for (auto i : std::views::iota(UInt32{0}, UInt32{96})) {
         const auto angle = Flt32(i) * 2.f * std::numbers::pi_v<Flt32> / 96.f;
         deepPlanes.push_back({std::cos(angle), std::sin(angle), 0, -1});
         deepNodes.push_back({i, -1, i + 1 == 96 ? -2 : Int32(i + 1)});
@@ -368,7 +376,7 @@ void interiorBoxesAndValidation() {
     const std::array<InteriorCollisionLeaf, 2> deepLeaves{{{false, {}}, {true, {}}}};
     const auto deep = InteriorCollision::prepare(deepPlanes, deepNodes, deepLeaves, {});
     CHECK(deep);
-    for (unsigned i = 0; i < 3; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(unsigned{0}, unsigned{3})) {
         CHECK(deep->box({{-2, -2, -2}, {2, 2, 2}}, {}, list) && list.contained);
         CHECK(deep->box({{-.1f, -.1f, -.1f}, {.1f, .1f, .1f}}, {}, list) && list.contained);
         CHECK(!deep->box({{-.1f, -.1f, -.1f}, {.1f, .1f, .1f}}, at({3, 0, 0}), list));

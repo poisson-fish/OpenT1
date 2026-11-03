@@ -1,4 +1,5 @@
 #include "opent1/game/server_irc_controls.hpp"
+#include <ranges>
 
 #include <algorithm>
 #include <cctype>
@@ -9,7 +10,9 @@ namespace {
 
 bool caseInsensitiveNickLess(std::string_view a, std::string_view b) noexcept {
     const std::size_t n = std::min(a.size(), b.size());
-    for (std::size_t i = 0; i < n; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < n;
+                  })) {
         const auto ca = static_cast<unsigned char>(std::tolower(static_cast<unsigned char>(a[i])));
         const auto cb = static_cast<unsigned char>(std::tolower(static_cast<unsigned char>(b[i])));
         if (ca != cb) {

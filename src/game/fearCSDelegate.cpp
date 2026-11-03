@@ -1,4 +1,6 @@
 #include <opent1/game/fear_cs_delegate.hpp>
+#include <iterator>
+#include <ranges>
 #include <opent1/game/player_manager.hpp>
 #include <opent1/core/file_stream.hpp>
 #include <algorithm>
@@ -641,17 +643,18 @@ std::vector<std::byte> FearCSDelegate::encodeBrowserGameInfo() const {
         const auto substitute = [](std::string_view text,
                                    const std::vector<std::pair<char, std::string>>& values) {
             std::string out;
-            for (std::size_t i = 0; i < text.size() && out.size() < 253; ++i) {
-                if (text[i] == '%' && i + 1 < text.size()) {
+            for (auto characterIt = text.begin(); characterIt != text.end() && out.size() < 253;
+                 ++characterIt) {
+                if (*characterIt == '%' && std::next(characterIt) != text.end()) {
                     const auto v = std::ranges::find(
-                        values, text[i + 1], &std::pair<char, std::string>::first);
+                        values, *std::next(characterIt), &std::pair<char, std::string>::first);
                     if (v != values.end()) {
                         out += v->second;
-                        ++i;
+                        ++characterIt;
                         continue;
                     }
                 }
-                out += text[i];
+                out += *characterIt;
             }
             return out.substr(0, 253);
         };
@@ -659,7 +662,9 @@ std::vector<std::byte> FearCSDelegate::encodeBrowserGameInfo() const {
             (void)line("00");
             (void)line("01" + std::string(players->teamScoreHeading()));
             std::vector<const PlayerManager::TeamRep*> teams;
-            for (Int32 i = 0; i < players->getNumTeams(); ++i) {
+            for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                              return i < players->getNumTeams();
+                          })) {
                 if (const auto* team = players->findTeam(i)) {
                     teams.push_back(team);
                 }

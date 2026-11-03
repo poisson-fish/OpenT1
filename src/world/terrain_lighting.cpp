@@ -130,7 +130,7 @@ std::optional<std::vector<UInt16>> TerrainGridBlock::lightSamples(bool hires) co
         if (!decoder.readBytes(delta)) {
             return {};
         }
-        for (std::size_t i = 0; i < result.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, result.size())) {
             result[i] ^= UInt16(std::to_integer<UInt8>(delta[2 * i]) |
                                 UInt16(std::to_integer<UInt8>(delta[2 * i + 1])) << 8);
         }
@@ -158,7 +158,9 @@ std::optional<std::vector<UInt16>> TerrainGridBlock::hiresSamples(UInt32 index,
         return {};
     }
     UInt32 total{}, offset{}, count{};
-    for (UInt32 r = 0; r <= 5; ++r) {
+    for (auto r : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 r) {
+                      return r <= 5;
+                  })) {
         const auto side = r ? (1U << (r - 1)) + 1 : 1;
         if (r == resolution) {
             offset = total;
@@ -185,7 +187,9 @@ std::optional<std::vector<UInt16>> TerrainGridBlock::hiresSamples(UInt32 index,
             map.colors > pool.size() - words) {
             return {};
         }
-        for (UInt32 i = 0; i < count; ++i) {
+        for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                          return i < count;
+                      })) {
             const auto bit = (offset + i) * bits,
                        code = (pool[bit / 16] >> (bit % 16)) & ((1U << bits) - 1);
             if (code >= map.colors) {

@@ -443,11 +443,11 @@ std::optional<ResourceMatch> ResourceManager::findMatch(std::string_view express
         ++next;
     }
     const auto pattern = fold(expression);
-    for (; next != impl_->matches.end(); ++next) {
-        if (matches(pattern, fold(next->name))) {
-            auto name = next->name;
+    for (const auto& match : std::ranges::subrange(next, impl_->matches.end())) {
+        if (matches(pattern, fold(match.name))) {
+            auto name = match.name;
             std::ranges::replace(name, '/', '\\');
-            return ResourceMatch{next->cursor, std::move(name)};
+            return ResourceMatch{match.cursor, std::move(name)};
         }
     }
     return {};
@@ -738,14 +738,15 @@ std::size_t ResourceManager::trimResidency() {
     // This pressure path needs no candidate list or accounting hash table.
     // Erasing parents can release dependency handles, so reconsider after each eviction.
     while (impl_->ledger->bytes > impl_->budget) {
-        auto oldest = impl_->cache.end();
-        for (auto at = impl_->cache.begin(); at != impl_->cache.end(); ++at)
-            if (at->second.use_count() == 1 &&
-                (oldest == impl_->cache.end() || at->second->released < oldest->second->released))
-                oldest = at;
-        if (oldest == impl_->cache.end())
+        auto candidates = impl_->cache | std::views::filter([](const auto& entry) {
+                              return entry.second.use_count() == 1;
+                          });
+        const auto oldest = std::ranges::min_element(candidates, {}, [](const auto& entry) {
+            return entry.second->released;
+        });
+        if (oldest == candidates.end())
             break;
-        impl_->cache.erase(oldest);
+        impl_->cache.erase(oldest.base());
         ++total;
     }
     impl_->budgetEvictions += total;

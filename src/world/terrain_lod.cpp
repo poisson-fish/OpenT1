@@ -7,6 +7,7 @@
 #include <bit>
 #include <map>
 #include <memory_resource>
+#include <ranges>
 #include <set>
 #include <tuple>
 #include <unordered_map>
@@ -61,7 +62,9 @@ struct TerrainTopology {
 // camera-dependent heights and materials remain independent of topology.
 constexpr auto nativeTopologies = [] {
     std::array<TerrainTopology, 32> result{};
-    for (UInt32 key = 0; key < result.size(); ++key) {
+    for (auto key : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 key) {
+                        return key < result.size();
+                    })) {
         auto& topology = result[key];
         const auto emit = [&](UInt32 a, UInt32 b, UInt32 c) {
             topology.indices[topology.count++] = UInt8(a & 7U);
@@ -96,9 +99,9 @@ const auto& hardwareTopologies() {
         std::array<std::shared_ptr<const gfx::HardwareMesh>, 32> result;
         const std::array<Point2F, 8> ring{
             {{0, 0}, {0, .5f}, {0, 1}, {.5f, 1}, {1, 1}, {1, .5f}, {1, 0}, {.5f, 0}}};
-        for (std::size_t i = 0; i < result.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, result.size())) {
             std::vector<gfx::HardwareVertex> vertices(8);
-            for (std::size_t j = 0; j < ring.size(); ++j) {
+            for (auto j : std::views::iota(std::size_t{0}, ring.size())) {
                 vertices[j].position = ring[j];
                 vertices[j].texture = {ring[j].x, 1 - ring[j].y};
                 vertices[j].inverseDepth = Flt32(j); // native input index, not depth
@@ -323,14 +326,18 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
         const auto& clip = selection->clip;
         gfx::ScopedRenderWorkTimer selectPhase(&gfx::RenderWorkStats::terrainSelectMs);
         std::pmr::map<Int32, UInt32> blockIndices(&frameMemory);
-        for (UInt32 i = 0; i < grid.blocks.size(); ++i) {
+        for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                          return i < grid.blocks.size();
+                      })) {
             spend(work);
             if (!blockIndices.emplace(grid.blocks[i].id, i).second) {
                 return {};
             }
         }
         std::pmr::set<const TerrainGridBlock*> validated(&frameMemory);
-        for (std::size_t i = 0; i < grid.blockMap.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < grid.blockMap.size();
+                      })) {
             spend(work);
             const auto id = grid.blockMap[i];
             if (id == -1) {
@@ -371,7 +378,10 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                     return {};
                 }
                 if (geometry) {
-                    for (UInt32 p = 0; p <= scanLevel + 1; ++p) {
+                    for (auto p :
+                         std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 p) {
+                             return p <= scanLevel + 1;
+                         })) {
                         const auto count =
                             p ? UInt64(n >> (p - 1)) * (n >> (p - 1)) : b.heights.size();
                         if (!b.pins[p].empty() && b.pins[p].size() < (count + 7) / 8) {
@@ -455,8 +465,14 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                             ++stats->terrainDistanceRejects;
                         }
                         merge = merge && average >= (*geometry)[level].detailDistance;
-                        for (UInt32 dy = 0; dy < size && merge; ++dy) {
-                            for (UInt32 dx = 0; dx < size; ++dx) {
+                        for (auto dy :
+                             std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 dy) {
+                                 return dy < size && merge;
+                             })) {
+                            for (auto dx : std::views::iota(UInt32{0}) |
+                                               std::views::take_while([&](UInt32 dx) {
+                                                   return dx < size;
+                                               })) {
                                 spend(work);
                                 if (!materialMatches(dx, dy)) {
                                     merge = false;
@@ -470,8 +486,14 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                                    left = height(tile, x, y + size);
                         Flt64 error{};
                         Flt32 low = a, high = a;
-                        for (UInt32 dy = 0; dy <= size && merge; ++dy) {
-                            for (UInt32 dx = 0; dx <= size; ++dx) {
+                        for (auto dy :
+                             std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 dy) {
+                                 return dy <= size && merge;
+                             })) {
+                            for (auto dx : std::views::iota(UInt32{0}) |
+                                               std::views::take_while([&](UInt32 dx) {
+                                                   return dx <= size;
+                                               })) {
                                 ++heightSamples;
                                 spend(work);
                                 const auto h = height(tile, x + dx, y + dy);
@@ -658,7 +680,7 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                 view.nativeTraversal && view.nativeGeometry && view.nativeGeometry->perspective;
             triangle.lit = baked && !block.lights.empty();
             const std::array points{a, b, c};
-            for (std::size_t j = 0; j < 3; ++j) {
+            for (auto j : std::views::iota(std::size_t{0}, std::size_t{3})) {
                 const auto x = UInt32(points[j].x), y = UInt32(points[j].y);
                 auto& v = triangle.vertices[j];
                 v.position = {Flt32(t.bx + x) * square, Flt32(t.by + y) * square, height(t, x, y)};
@@ -914,8 +936,8 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                     previous = coordinate;
                 };
                 if (reverse) {
-                    for (auto at = values.rbegin(); at != values.rend(); ++at) {
-                        visit(at->second);
+                    for (auto value : std::views::reverse(values)) {
+                        visit(value.second);
                     }
                 } else {
                     for (const auto& point : values) {
@@ -984,7 +1006,7 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                     patch.lightMap = drawMap;
                     patch.mapOrigin = mapOrigin;
                     patch.mapScale = mapScale;
-                    for (UInt32 j = 0; j < 8; ++j) {
+                    for (auto j : std::views::iota(UInt32{0}, UInt32{8})) {
                         // Unreached midpoints are not referenced by the topology.
                         const auto p =
                             std::pair{t.bx + UInt32(ring[j].x), t.by + UInt32(ring[j].y)};
@@ -994,7 +1016,10 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                     patches->triangles += topology.count / 3;
                     patches->patches.push_back(std::move(patch));
                     Flt32 minimum = std::numeric_limits<Flt32>::max(), maximum = -minimum;
-                    for (UInt32 j = 0; j < topology.count; ++j) {
+                    for (auto j :
+                         std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 j) {
+                             return j < topology.count;
+                         })) {
                         const auto& v = patches->patches.back().heights[topology.indices[j]];
                         minimum = std::min({minimum, v[0], v[1]});
                         maximum = std::max({maximum, v[0], v[1]});
@@ -1032,7 +1057,7 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                 if (view.nativeTraversal) {
                     return {};
                 } // strict native traversal must use the original corner/midpoint templates
-                for (std::size_t i = 0; i < boundary.size(); ++i) {
+                for (auto i : std::views::iota(std::size_t{0}, boundary.size())) {
                     if (!emit(t, center, boundary[i], boundary[(i + 1) % boundary.size()])) {
                         return {};
                     }

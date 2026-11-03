@@ -42,7 +42,7 @@ double areaOf(std::span<const Point3F> vertices) {
 
 bool convex(std::span<const Point3F> vertices, double area) {
     const double sign = area >= 0 ? 1 : -1;
-    for (std::size_t i = 0; i < vertices.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, vertices.size())) {
         const auto a = vertices[i], b = vertices[(i + 1) % vertices.size()];
         // A repeated circuit of a convex boundary passes half-plane tests but
         // is not a simple polygon and would insert duplicate leading edges.
@@ -375,7 +375,7 @@ sortVisibility(std::span<const VisibilityPolygon> polygons, RectI clip, DepthOrd
     }
     std::vector<Plane> planes(polygons.size());
     std::vector<Edge> edges;
-    for (std::size_t i = 0; i < polygons.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, polygons.size())) {
         const auto vertices = polygons[i].vertices;
         if (vertices.size() < 3 || vertices.size() > 100 ||
             !std::ranges::all_of(vertices, [](const auto& v) {
@@ -413,7 +413,10 @@ sortVisibility(std::span<const VisibilityPolygon> polygons, RectI clip, DepthOrd
     std::size_t cursor = 0, operations = 0;
     RowSorter sorter{{}, planes, output, clip, order};
     const auto firstRow = std::min(clip.top, std::ranges::min(edges, {}, &Edge::first).first);
-    for (Int32 y = firstRow; y <= clip.bottom; ++y) {
+    for (auto y :
+         std::views::iota(static_cast<Int32>(firstRow)) | std::views::take_while([&](Int32 y) {
+             return y <= clip.bottom;
+         })) {
         std::erase_if(active, [&](auto i) {
             return edges[i].last <= y;
         });
@@ -479,7 +482,7 @@ sortVisibility(std::span<const VisibilityPolygon> polygons, RectI clip, DepthOrd
     }
     std::size_t next = 0;
     for (const bool transparent : {false, true}) {
-        for (std::size_t i = 0; i < polygons.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, polygons.size())) {
             if (polygons[i].transparent == transparent) {
                 offsets[i] = next;
                 next += counts[i];

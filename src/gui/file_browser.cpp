@@ -1,4 +1,5 @@
 #include <opent1/gui/file_browser.hpp>
+#include <ranges>
 #include <cstdio>
 #include <set>
 
@@ -330,14 +331,18 @@ bool FileBrowser::open(FileBrowserRequest request) {
             !p->root.addObject(p->filters)) {
             return false;
         }
-        for (std::size_t i = 0; i < p->request.filters.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < p->request.filters.size();
+                      })) {
             if (!p->filters.list().insert({Int32(i), p->request.filters[i].label})) {
                 return false;
             }
         }
         p->filters.text = p->request.filters.front().label;
         p->filters.message = 5;
-        for (std::size_t i = 0; i < p->buttons.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < p->buttons.size();
+                      })) {
             auto& b = p->buttons[i];
             b.text = std::array{"OK", "Cancel", "Up"}[i];
             b.message = UInt32(i + 1);
@@ -459,7 +464,9 @@ bool FileBrowser::browse(const std::filesystem::path& directory) {
         list.noDuplicates = false;
         list.cellSize = p->list.cellSize;
         std::vector<std::string> labels;
-        for (std::size_t i = 0; i < entries->size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < entries->size();
+                      })) {
             labels.push_back(((*entries)[i].directory ? "[dir] " : "") + (*entries)[i].name);
             if (!list.insert({Int32(i), labels.back()})) {
                 return false;

@@ -1,4 +1,5 @@
 #include "test_registry.hpp"
+#include <ranges>
 #include "test_support.hpp"
 #include <opent1/game/game_app.hpp>
 #include <opent1/game/snowfall.hpp>
@@ -25,7 +26,9 @@ void weatherArguments() {
     CHECK(rain && rain->isRain() && !rain->isRenderingSuspended());
     CHECK(near(rain->getWind(), {-.5f, 0, -75}));
     CHECK(rain->numFlakes() == 819);
-    for (Int32 i = 0; i < rain->numFlakes(); ++i)
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < rain->numFlakes();
+                  }))
         CHECK(near(rain->flakes()[i].vel, {-1, 0, -150}));
 
     Snowfall snow;
@@ -48,7 +51,9 @@ void rainMotion() {
     rain.snowInit();
     const auto before = rain.flakes();
     rain.snowLogicFrame(.1f);
-    for (Int32 i = 0; i < rain.numFlakes(); ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < rain.numFlakes();
+                  })) {
         CHECK(near(rain.flakes()[i].vel, {4, -6, -150}));
         CHECK(near(rain.flakes()[i].pos - before[i].pos, {.4f, -.6f, -15}));
     }
@@ -92,7 +97,9 @@ void weatherFrameRate() {
     const auto slow = sampleClientWeather(32);
     const auto fast = sampleClientWeather(8);
     CHECK(slow.count == fast.count && slow.seed == fast.seed);
-    for (Int32 i = 0; i < slow.count; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < slow.count;
+                  })) {
         CHECK(near(slow.flakes[i].pos, fast.flakes[i].pos));
         CHECK(std::abs(slow.flakes[i].timeout - fast.flakes[i].timeout) < .001f);
     }

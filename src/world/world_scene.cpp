@@ -1,4 +1,5 @@
 #include <opent1/gfx/render_limits.hpp>
+#include <ranges>
 #include <opent1/world/world_scene.hpp>
 #include <opent1/world/world_mission.hpp>
 #include <opent1/world/scene_objects.hpp>
@@ -42,12 +43,14 @@ bool rigid(const TMat3F& transform, bool allowReflection = false) {
     if (!finite(transform.p)) {
         return false;
     }
-    for (std::size_t i = 0; i < 3; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
         const Point3F row{transform.m[i][0], transform.m[i][1], transform.m[i][2]};
         if (!finite(row) || std::abs(m_dot(row, row) - 1) > .0001f) {
             return false;
         }
-        for (std::size_t j = 0; j < i; ++j) {
+        for (auto j : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t j) {
+                          return j < i;
+                      })) {
             const Point3F other{transform.m[j][0], transform.m[j][1], transform.m[j][2]};
             if (std::abs(m_dot(row, other)) > .0001f) {
                 return false;
@@ -129,7 +132,9 @@ std::optional<ContainerSelection> selectContainers(sim::SimManager& manager,
         {root->getBoundingBox(), -1, -1, root->getType(), root->getContainerMask(), true});
     std::pmr::unordered_map<const sim::SimObject*, UInt32> indices{&scratch.memory};
     indices.emplace(root, 0);
-    for (std::size_t i = 0; i < objects.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < objects.size();
+                  })) {
         auto* parent = objects[i];
         if (!parent->isOpen()) {
             continue;
@@ -242,7 +247,9 @@ scopedSceneObjects(sim::SimManager& manager,
         return {};
     }
     std::vector<sim::SimAddress> result;
-    for (std::size_t i = 0; i < candidates.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < candidates.size();
+                  })) {
         if (selected->visible[i]) {
             result.push_back(candidates[i]);
         }
@@ -665,7 +672,10 @@ WorldSceneFrame::captureImpl(sim::SimWorld& world,
             } else if (interiorRoots) {
                 std::vector<InteriorLinkInstance> interiors;
                 std::vector<std::size_t> sourceIndices;
-                for (std::size_t i = 0; i < sources.size(); ++i) {
+                for (auto i :
+                     std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                         return i < sources.size();
+                     })) {
                     auto* provider = dynamic_cast<SimInteriorSurface*>(sources[i].resolve(manager));
                     if (!provider || provider->isRemoved()) {
                         continue;
@@ -712,7 +722,10 @@ WorldSceneFrame::captureImpl(sim::SimWorld& world,
             }
             std::size_t polygons{};
             auto& linkDetails = workspace.get().linkDetails;
-            for (std::size_t sourceIndex = 0; sourceIndex < sources.size(); ++sourceIndex) {
+            for (auto sourceIndex : std::views::iota(std::size_t{0}) |
+                                        std::views::take_while([&](std::size_t sourceIndex) {
+                                            return sourceIndex < sources.size();
+                                        })) {
                 if (!selected[sourceIndex]) {
                     continue;
                 }
@@ -833,7 +846,10 @@ WorldSceneFrame::captureImpl(sim::SimWorld& world,
             }
             auto& volumeSources = workspace.get().volumeSources;
             if (containers) {
-                for (std::size_t i = 0; i < sources.size(); ++i) {
+                for (auto i :
+                     std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                         return i < sources.size();
+                     })) {
                     if (selected[i]) {
                         volumeSources.push_back(sources[i]);
                     }
@@ -894,7 +910,7 @@ WorldSceneFrame::hardware(const gfx::Palette& palette,
 
     detail::ScratchLease<HardwareScratch> workspace;
     auto& polygons = workspace.get().polygons;
-    for (std::size_t i = 0; i < surfaceFrames_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, surfaceFrames_.size())) {
         const auto& image = surfaces_[i];
         TsStaticView view;
         m_mul(image.placement, camera_.worldToCamera, view.shapeToCamera);
@@ -911,7 +927,7 @@ WorldSceneFrame::hardware(const gfx::Palette& palette,
             return {};
         }
     }
-    for (std::size_t i = 0; i < shapes_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, shapes_.size())) {
         const auto first = polygons.size();
         if (!shapes_[i].appendHardwarePolygons(polygons, &palette, paletteGamma)) {
             return {};
@@ -945,7 +961,9 @@ bool WorldSceneFrame::draw(gfx::SoftwareSurface& surface,
     std::vector<gfx::SortedPolygon> polygons;
     // Lazy software projections must outlive the borrowed polygon spans submitted below.
     std::vector<std::optional<TsStaticShapeFrame>> softwareFrames(surfaceFrames_.size());
-    for (std::size_t i = 0; i < surfaceFrames_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < surfaceFrames_.size();
+                  })) {
         auto& software = softwareFrames[i];
         if (retainedHardware_ && surfaces_[i].mesh->retainedHardwareCompatible()) {
             TsStaticView view;
@@ -1117,8 +1135,8 @@ std::optional<std::vector<WorldShadow>> WorldSceneFrame::shadows(Point3F directi
             }
             std::vector<UInt8> pixels;
             pixels.reserve(66 * 66);
-            for (Int32 y = 0; y < 66; ++y) {
-                for (Int32 x = 0; x < 66; ++x) {
+            for (auto y : std::views::iota(Int32{0}, Int32{66})) {
+                for (auto x : std::views::iota(Int32{0}, Int32{66})) {
                     pixels.push_back(std::to_integer<UInt8>(mask->row(y)[x]));
                 }
             }

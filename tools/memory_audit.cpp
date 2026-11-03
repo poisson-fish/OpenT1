@@ -2,6 +2,9 @@
 // into this optional tool. Counts requested C++ allocation bytes, not allocator
 // metadata, malloc in shared libraries, process RSS, or GPU allocations.
 #include <opent1/core/file_stream.hpp>
+#include <iterator>
+#include <span>
+#include <ranges>
 #include <opent1/core/vol_stream.hpp>
 #include <opent1/game/game_app.hpp>
 #include <opent1/game/observer_camera.hpp>
@@ -293,7 +296,7 @@ void metrics(std::ostream& out, const meter::Metrics& m) {
     if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))))
         return;
     UInt64 local{}, shared{};
-    for (UINT index = 0;; ++index) {
+    for (auto index : std::views::iota(UINT{0})) {
         IDXGIAdapter1* adapter{};
         if (factory->EnumAdapters1(index, &adapter) == DXGI_ERROR_NOT_FOUND)
             break;
@@ -321,7 +324,9 @@ void metrics(std::ostream& out, const meter::Metrics& m) {
 meter::Metrics inspect(const gfx::Bitmap& b) {
     meter::Metrics m;
     m.bitmapPixels = b.pixels.size();
-    for (Int32 i = 0; i < b.detailLevels; ++i)
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < b.detailLevels;
+                  }))
         m.rgbaBytes += UInt64(std::max(1, b.width >> i)) * UInt32(std::max(1, b.height >> i)) * 4;
     return m;
 }
@@ -414,7 +419,9 @@ void snapshot(std::ostream& out, std::string_view stage) {
         << ",\"process_private_bytes\":" << processPrivate
         << ",\"working_set_bytes\":" << workingSet
         << ",\"peak_working_set_bytes\":" << peakWorkingSet << ",\"tags\":{";
-    for (unsigned i = 0; i < meter::Count; ++i) {
+    for (auto i : std::views::iota(unsigned{0}) | std::views::take_while([&](unsigned i) {
+                      return i < meter::Count;
+                  })) {
         if (i)
             out << ',';
         quote(out, meter::names[i]);
@@ -524,7 +531,7 @@ void catalog(const std::filesystem::path& root,
             quote(out, source);
             out << ",\"disk_bytes\":" << std::filesystem::file_size(file)
                 << ",\"entries\":" << volume.getVolumeItems().size() << "}\n";
-            for (std::size_t i = 0; i < volume.getVolumeItems().size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, volume.getVolumeItems().size())) {
                 const auto& entry = volume.getVolumeItems()[i];
                 if (!entry.name)
                     continue;
@@ -589,7 +596,7 @@ void mission(const std::filesystem::path& root,
         << ",\"archive_mapped_bytes\":" << archiveMemory.mappedBytes
         << ",\"archive_owned_buffer_bytes\":" << archiveMemory.ownedBufferBytes
         << ",\"archive_decode_staging_bytes\":" << archiveMemory.decodeStagingBytes << "}\n";
-    for (unsigned i = 0; i < 8; ++i)
+    for (auto i : std::views::iota(unsigned{0}, unsigned{8}))
         require(app.stepFrame((i + 1) * .032, false), "warmup failed");
     snapshot(out, "simulation_warm");
     const auto& client = app.fearPlugin().clientGlobals();
@@ -635,7 +642,9 @@ void mission(const std::filesystem::path& root,
                          : nullptr;
         const auto pos = observer ? observer->getEyeTransform().p : Point3F{};
         const auto rotation = observer ? observer->rotation() : EulerF{};
-        for (unsigned f = 0; f < frames; ++f) {
+        for (auto f : std::views::iota(unsigned{0}) | std::views::take_while([&](unsigned f) {
+                          return f < frames;
+                      })) {
             require(app.stepFrame((f + 9) * .032, false), "simulation step failed");
             if (observer && serverObserver) {
                 auto rot = rotation;
@@ -730,20 +739,25 @@ int main(int argc, char** argv) {
             << ",\"allocation_header_bytes\":" << sizeof(meter::Header) << "}\n";
         if (mode == "catalog") {
             std::vector<std::string_view> directories;
-            for (int i = 4; i < argc; ++i)
+            for (auto i : std::views::iota(4) | std::views::take_while([&](int i) {
+                              return i < argc;
+                          }))
                 directories.emplace_back(argv[i]);
             catalog(argv[2], out, directories);
         } else if (mode == "mission") {
             bool rpg{}, gpu{};
             unsigned frames{};
-            for (int i = 5; i < argc; ++i) {
-                const std::string_view option = argv[i];
+            const auto arguments = std::span(argv, std::size_t(argc));
+            for (auto argumentIt = std::ranges::next(arguments.begin(), 5, arguments.end());
+                 argumentIt != arguments.end();
+                 ++argumentIt) {
+                const std::string_view option = *argumentIt;
                 if (option == "--rpg")
                     rpg = true;
                 else if (option == "--gpu")
                     gpu = true;
-                else if (option == "--frames" && i + 1 < argc)
-                    frames = unsigned(std::stoul(argv[++i]));
+                else if (option == "--frames" && std::next(argumentIt) != arguments.end())
+                    frames = unsigned(std::stoul(*++argumentIt));
                 else
                     throw std::runtime_error("unknown mission option");
             }

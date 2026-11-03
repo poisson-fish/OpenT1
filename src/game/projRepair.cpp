@@ -1,4 +1,5 @@
 #include <opent1/game/player.hpp>
+#include <ranges>
 #include <opent1/game/proj_repair.hpp>
 #include "projectile_beam.hpp"
 
@@ -215,7 +216,9 @@ void RepairEffect::createSegments(UInt32 in_currTime,
 
     Flt32 randFactor = m_pRepairData_->displaceBias;
     while (numToSubdivide < csm_SubdivisionMenuSize) {
-        for (UInt32 i = 0; i < numToSubdivide; ++i) {
+        for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                          return i < numToSubdivide;
+                      })) {
             const UInt32 startIndex = m_line_.segs[i].startIndex;
             const UInt32 endIndex = m_line_.segs[i].endIndex;
             const UInt32 midIndex = (startIndex + endIndex) / 2u;
@@ -234,7 +237,9 @@ void RepairEffect::createSegments(UInt32 in_currTime,
         numToSubdivide *= 2u;
     }
 
-    for (UInt32 i = 0; i < csm_SubdivisionMenuSize; ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < csm_SubdivisionMenuSize;
+                  })) {
         m_line_.segs[i].startPoint = m_line_.points[m_line_.segs[i].startIndex];
         m_line_.segs[i].endPoint = m_line_.points[m_line_.segs[i].endIndex];
     }

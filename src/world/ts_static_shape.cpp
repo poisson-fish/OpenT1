@@ -552,7 +552,7 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
                 localToCamera.preTranslate(object.offset);
                 std::array<bool, 6> outside;
                 outside.fill(true);
-                for (UInt32 corner = 0; corner < 8; ++corner) {
+                for (auto corner : std::views::iota(UInt32{0}, UInt32{8})) {
                     const Point3F local{
                         corner & 1U ? sourceMesh->bounds.fMax.x : sourceMesh->bounds.fMin.x,
                         corner & 2U ? sourceMesh->bounds.fMax.y : sourceMesh->bounds.fMin.y,
@@ -573,7 +573,7 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
                     const auto margin = 1e-5 * (std::abs(Flt64(p.x) * view.focal.x) +
                                                 std::abs(Flt64(p.y)) * (view.width + view.height) +
                                                 std::abs(Flt64(p.z) * view.focal.y) + 1);
-                    for (std::size_t j = 0; j < outside.size(); ++j)
+                    for (auto j : std::views::iota(std::size_t{0}, outside.size()))
                         outside[j] = outside[j] && planes[j] < -margin;
                 }
                 if (std::ranges::any_of(outside, std::identity{}))
@@ -585,7 +585,7 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
                     if (finite(inverse.p))
                         localEye = inverse.p;
                 }
-                for (std::size_t i = 0; i < 3; ++i)
+                for (auto i : std::views::iota(std::size_t{0}, std::size_t{3}))
                     transform.camera[i] = {localToCamera.m[0][i],
                                            localToCamera.m[1][i],
                                            localToCamera.m[2][i],
@@ -601,7 +601,7 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
                         return mode == 1 || mode == 2;
                     });
                     std::size_t active{};
-                    for (std::size_t i = 0; i < light.lights.size(); ++i) {
+                    for (auto i : std::views::iota(std::size_t{0}, light.lights.size())) {
                         const auto& l = light.lights[i];
                         const auto& s = preparedLights->states()[i];
                         if (!lit || (l.type == TsLight::Type::Point &&
@@ -661,7 +661,7 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
                     if (localEye) {
                         const auto& plane = sourceMesh->facePlanes[faceIndex];
                         Flt64 distance = plane[3], magnitude = std::abs(plane[3]) + 1;
-                        for (std::size_t i = 0; i < 3; ++i) {
+                        for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
                             const auto value = plane[i] * (*localEye)[i];
                             distance += value;
                             magnitude += std::abs(value);
@@ -809,7 +809,7 @@ bool TsStaticShapeFrame::appendHardwarePolygons(std::vector<gfx::HardwarePolygon
             }
             material.color = color(source, palette);
             if (source.type() == 1 && paletteGamma != 1) {
-                for (std::size_t i = 0; i < 3; ++i) {
+                for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
                     material.color[i] =
                         Flt32(std::pow(material.color[i], double(1.f / paletteGamma)));
                 }
@@ -962,8 +962,7 @@ NativeSoftwareTextureCache::prepare(const Resource<gfx::Bitmap>& texture,
         hash(value);
     }
     const auto [first, last] = index_.equal_range(key);
-    for (auto i = first; i != last; ++i) {
-        const auto entry = i->second;
+    for (const auto& [cachedKey, entry] : std::ranges::subrange(first, last)) {
         const auto& settings = entry->native->settings;
         if (entry->texture.get() == texture.get() && entry->mip == mip && settings.size == s.size &&
             settings.offset == s.offset && settings.lightScale == s.lightScale &&
@@ -994,11 +993,12 @@ NativeSoftwareTextureCache::prepare(const Resource<gfx::Bitmap>& texture,
            (entries_.size() >= 2048 || bytes_ > gfx::Bitmap::MaxFileBytes - bytes)) {
         const auto evicted = std::prev(entries_.end());
         const auto [begin, end] = index_.equal_range(evicted->key);
-        for (auto i = begin; i != end; ++i) {
-            if (i->second == evicted) {
-                index_.erase(i);
-                break;
-            }
+        const auto found =
+            std::ranges::find(std::ranges::subrange(begin, end), evicted, [](const auto& item) {
+                return item.second;
+            });
+        if (found != end) {
+            index_.erase(found);
         }
         bytes_ -= entries_.back().bitmap->pixels.size();
         entries_.pop_back();
@@ -1173,7 +1173,7 @@ const TsStaticShapeFrame* TsStaticShapeFrame::projected() const {
             const auto mode = part.mesh->vertices()[indices[0]].opacity;
             const bool lit = part.lighting && mode != 0;
             vertices.clear();
-            for (std::size_t j = 0; j < 3; ++j) {
+            for (auto j : std::views::iota(std::size_t{0}, std::size_t{3})) {
                 const auto& v = part.mesh->vertices()[indices[j]];
                 Point3F point{v.position.x, v.position.y, v.inverseDepth};
                 Point3F color{1, 1, 1};
@@ -1193,7 +1193,10 @@ const TsStaticShapeFrame* TsStaticShapeFrame::projected() const {
             const auto flat =
                 lit && mode == 2 ? std::min(1.f, c.x * .299f + c.z * .587f + c.y * .114f) : 1.f;
             const auto clipped = clip(vertices, scratch, view);
-            for (std::size_t i = 1; i + 1 < clipped.size(); ++i) {
+            for (auto i :
+                 std::views::iota(std::size_t{1}) | std::views::take_while([&](std::size_t i) {
+                     return i + 1 < clipped.size();
+                 })) {
                 Polygon p{
                     {project(clipped[0], view),
                      project(clipped[i], view),

@@ -1,4 +1,5 @@
 #include <opent1/audio/audio.hpp>
+#include <ranges>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -9,7 +10,9 @@ namespace opent1::audio {
 namespace {
 UInt32 le(std::span<const std::byte> b, std::size_t p, std::size_t n) {
     UInt32 v{};
-    for (std::size_t i = 0; i < n; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < n;
+                  })) {
         v |= UInt32(std::to_integer<UInt8>(b[p + i])) << (8 * i);
     }
     return v;

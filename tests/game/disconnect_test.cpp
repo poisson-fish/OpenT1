@@ -1,4 +1,5 @@
 #include "test_registry.hpp"
+#include <ranges>
 #include "test_support.hpp"
 #include <opent1/game/game_app.hpp>
 #include <opent1/game/shell_controls.hpp>
@@ -55,7 +56,7 @@ void disconnectShellResources() {
     fields.command = "EndGame();";
     CHECK(click->configure(fields));
     CHECK(app.guiRuntime()->show(gui::Graph::create(std::move(button))));
-    for (int attempt = 0; attempt < 2; ++attempt) {
+    for ([[maybe_unused]] auto attempt : std::views::iota(0, 2)) {
         CHECK(app.fearPlugin().createServerWorld());
         CHECK(app.console().execute("localConnect").value == "True");
         CHECK(app.fearPlugin().focusClient());
@@ -117,14 +118,14 @@ void installedDisconnect() {
     app.console().setVariable("PCFG::Name", "DisconnectTest");
     app.console().setVariable("PCFG::Info", "disconnect-test");
     CHECK(app.loadMission("rpgmap5"));
-    for (int frame = 0; frame < 8; ++frame) {
+    for (auto frame : std::views::iota(0, 8)) {
         CHECK(app.stepFrame(frame * .032));
     }
     CHECK(app.fearPlugin().focusServer());
     CHECK(app.console()
               .evaluate("processMenupickgroup(2049, 3); processMenupickclass(2049, 1);")
               .ok());
-    for (int frame = 8; frame < 16; ++frame) {
+    for (auto frame : std::views::iota(8, 16)) {
         CHECK(app.stepFrame(frame * .032));
     }
     CHECK(app.setGameplayGuiMode(1));

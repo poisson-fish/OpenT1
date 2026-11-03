@@ -1,4 +1,5 @@
 #include <opent1/gui/terrain_tools.hpp>
+#include <ranges>
 #include <opent1/core/file_stream.hpp>
 #include <charconv>
 #include <cctype>
@@ -248,7 +249,7 @@ void TerrainTools::initializeUi() {
     };
     button(tedRoot_, "Menu", tedMenu, {264, 0}, {56, 24});
     constexpr std::array modes{"Select", "Raise", "Height", "Pin", "Rotate", "Smooth"};
-    for (UInt32 i = 0; i < 6; ++i) {
+    for (auto i : std::views::iota(UInt32{0}, UInt32{6})) {
         button(tedRoot_, modes[i], 65700 + i, {320 + Int32(i) * 48, 0}, {48, 24});
     }
     button(landscapeRoot_, "Menu", lsMenu, {264, 0}, {56, 24});
@@ -279,7 +280,9 @@ void TerrainTools::initializeUi() {
                                "Highlight frame",
                                "Shadow fill",
                                "Shadow frame"};
-    for (UInt32 i = 0; i < names.size(); ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < names.size();
+                  })) {
         button(displayRoot_,
                names[i],
                65600 + i,
@@ -293,7 +296,7 @@ bool TerrainTools::resizeUi(bool ls, Point2I size) {
         return true;
     }
     const auto width = std::min(88, (size.x - 56) / 3);
-    for (std::size_t i = 0; i < 3; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
         if (!buttons_[i + (ls ? 3 : 0)]->resize({Int32(i) * width, 0}, {width, 24})) {
             return false;
         }
@@ -304,7 +307,7 @@ bool TerrainTools::resizeUi(bool ls, Point2I size) {
         return false;
     }
     if (!ls) {
-        for (UInt32 i = 0; i < 6; ++i) {
+        for (auto i : std::views::iota(UInt32{0}, UInt32{6})) {
             if (auto* mode = root.findTag(65700 + i)) {
                 mode->visible(size.x >= 608);
             }
@@ -351,7 +354,9 @@ std::vector<std::string> TerrainTools::ruleItems() const {
     const auto types = terrainTypes();
     std::vector<std::string> result;
     const auto& rules = editor_->mapper.rules();
-    for (std::size_t i = 0; i < rules.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < rules.size();
+                  })) {
         const auto g = rules[i].group;
         result.push_back(std::format("Rule: {} - {}",
                                      i,
@@ -372,7 +377,9 @@ bool TerrainTools::landscapeTab(LandscapeTab tab) {
         TextList staged;
         staged.noDuplicates = false;
         staged.cellSize = ui_->rules.cellSize;
-        for (std::size_t i = 0; i < names.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < names.size();
+                      })) {
             if (!staged.insert({Int32(i), names[i]})) {
                 return false;
             }
@@ -500,7 +507,9 @@ std::vector<TerrainMenuItem> TerrainTools::menuItems(bool ls) const {
     add(1036, "Brush", "Snap to detail", terrain, editor_->settings().snap);
     add(1037, "Brush", "Auto feather", terrain, editor_->settings().feather);
     if (terrain) {
-        for (UInt32 i = 0; i < UInt32(editor_->snapshot()->grid.detailCount); ++i) {
+        for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                          return i < UInt32(editor_->snapshot()->grid.detailCount);
+                      })) {
             add(4096 + i,
                 "Detail",
                 std::format("Level {}", i),
@@ -509,7 +518,9 @@ std::vector<TerrainMenuItem> TerrainTools::menuItems(bool ls) const {
         }
     }
     const auto actions = world::TerrainEditor::actions();
-    for (UInt32 i = 0; i < actions.size(); ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < actions.size();
+                  })) {
         if (i == 1 || i == 5 || i == 9 || i == 11 || i == 12) {
             continue;
         }
@@ -527,7 +538,7 @@ std::vector<TerrainMenuItem> TerrainTools::menuItems(bool ls) const {
     }
     constexpr std::array modes{"Select", "Adjust height", "Set height", "Pin", "Rotate", "Smooth"};
     constexpr std::array<UInt32, 6> left{20, 14, 24, 13, 17, 27}, right{6, 10, 28, 4, 18, 28};
-    for (UInt32 i = 0; i < 6; ++i) {
+    for (auto i : std::views::iota(UInt32{0}, UInt32{6})) {
         add(700 + i,
             "Toolbar",
             modes[i],
@@ -541,7 +552,7 @@ std::vector<TerrainMenuItem> TerrainTools::menuItems(bool ls) const {
     add(1049, "Misc", "Clear pin maps", terrain);
     add(1045, "Misc", "Relight terrain", terrain);
     add(1046, "Misc", "About");
-    for (UInt32 i = 0; i < 6; ++i) {
+    for (auto i : std::views::iota(UInt32{0}, UInt32{6})) {
         add(65600 + i,
             "Colors",
             std::array{"Selection fill",
@@ -612,7 +623,9 @@ bool TerrainTools::showUi(const std::shared_ptr<Ui::Panel>& p) {
     p->list.cellSize = {std::max(240, width - 30), 24};
     p->list.message = uiChoose;
     p->list.noDuplicates = false;
-    for (std::size_t i = 0; i < p->names.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < p->names.size();
+                  })) {
         if (!p->list.insert({Int32(i), p->names[i]})) {
             return false;
         }
@@ -796,7 +809,9 @@ bool TerrainTools::browse(const std::filesystem::path& path) {
         TextList list;
         list.noDuplicates = false;
         list.cellSize = p->list.cellSize;
-        for (std::size_t i = 0; i < staged.names.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < staged.names.size();
+                      })) {
             if (!list.insert({Int32(i), staged.names[i]})) {
                 return false;
             }

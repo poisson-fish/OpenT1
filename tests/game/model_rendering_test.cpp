@@ -1,4 +1,5 @@
 #include "test_registry.hpp"
+#include <ranges>
 #include "ts_test_support.hpp"
 #include <opent1/core/filename.hpp>
 #include <opent1/game/player.hpp>
@@ -59,8 +60,12 @@ void modelRendering() {
     const auto expectedLighting = litReference->softwarePolygons(&palette);
     const auto frozenLighting = litSnapshot->softwarePolygons(&palette);
     CHECK(expectedLighting && frozenLighting && expectedLighting->size() == frozenLighting->size());
-    for (std::size_t i = 0; i < expectedLighting->size(); ++i)
-        for (std::size_t j = 0; j < (*expectedLighting)[i].vertices.size(); ++j) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < expectedLighting->size();
+                  }))
+        for (auto j : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t j) {
+                          return j < (*expectedLighting)[i].vertices.size();
+                      })) {
             const auto& a = (*expectedLighting)[i].vertices[j];
             const auto& b = (*frozenLighting)[i].vertices[j];
             CHECK(a.position == b.position && a.color == b.color && a.texture == b.texture);

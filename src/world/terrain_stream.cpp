@@ -1,4 +1,5 @@
 #include "terrain_window.hpp"
+#include <ranges>
 #include <bit>
 #include <map>
 #include <cmath>
@@ -79,7 +80,9 @@ UInt32 TerrainResourceStream::residentBlocks() const {
 }
 
 TerrainResourceStream::~TerrainResourceStream() {
-    for (UInt32 i = 0; i < resources_.blocks.size(); ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < resources_.blocks.size();
+                  })) {
         if (!resources_.blocks[i]) {
             continue;
         }
@@ -107,11 +110,13 @@ std::optional<WorldSurfaceMesh> TerrainResourceStream::prepare(const TerrainLodV
         return {};
     }
     std::map<Int32, UInt32> indices;
-    for (UInt32 i = 0; i < grid.blocks.size(); ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < grid.blocks.size();
+                  })) {
         indices.emplace(grid.blocks[i].id, i);
     }
     std::vector<bool> needed(grid.blocks.size());
-    for (std::size_t i = 0; i < grid.blockMap.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, grid.blockMap.size())) {
         const auto id = grid.blockMap[i];
         if (id == -1) {
             continue;
@@ -125,7 +130,7 @@ std::optional<WorldSurfaceMesh> TerrainResourceStream::prepare(const TerrainLodV
         needed[index] = true;
     }
     auto combined = needed;
-    for (std::size_t i = 0; i < combined.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, combined.size())) {
         combined[i] = combined[i] || collisionNeeded_[i];
     }
     Evictions evictions{*manager_, {}};
@@ -164,7 +169,9 @@ TerrainResourceStream::stage(const std::vector<bool>& needed,
     auto next = resources_;
     std::size_t heights{};
     bytes = 0;
-    for (UInt32 i = 0; i < next.blocks.size(); ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < next.blocks.size();
+                  })) {
         const auto name = TerrainGridFile::blockName(name_, grid.blocks[i].id);
         if (!needed[i]) {
             if (next.blocks[i]) {
@@ -211,11 +218,13 @@ TerrainResourceStream::prepareCollision(const Box2F& region) {
     const auto& grid = *resources_.grid;
     const auto width = Flt64(1U << (grid.detailCount - 1 + grid.scale));
     std::map<Int32, UInt32> indices;
-    for (UInt32 i = 0; i < grid.blocks.size(); ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < grid.blocks.size();
+                  })) {
         indices.emplace(grid.blocks[i].id, i);
     }
     std::vector<bool> needed(grid.blocks.size());
-    for (std::size_t i = 0; i < grid.blockMap.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, grid.blockMap.size())) {
         const auto id = grid.blockMap[i];
         if (id == -1) {
             continue;
@@ -231,7 +240,7 @@ TerrainResourceStream::prepareCollision(const Box2F& region) {
         needed[indices.at(id)] = true;
     }
     auto combined = needed;
-    for (std::size_t i = 0; i < combined.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, combined.size())) {
         combined[i] = combined[i] || renderNeeded_[i];
     }
     Evictions evictions{*manager_, {}};

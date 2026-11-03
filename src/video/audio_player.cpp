@@ -1,4 +1,5 @@
 #include <opent1/video/audio_player.hpp>
+#include <ranges>
 #include <algorithm>
 #include <stdexcept>
 
@@ -46,7 +47,9 @@ bool AudioPlayer::start(std::shared_ptr<const Movie> movie, bool loop) {
     }
     try {
         std::array<Track, 7> staged;
-        for (UInt32 t = 0; t < staged.size(); ++t) {
+        for (auto t : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 t) {
+                          return t < staged.size();
+                      })) {
             if (!movie->audioFormat(t).rate || !movie->audioSamples(t)) {
                 continue;
             }
@@ -81,7 +84,9 @@ bool AudioPlayer::update() {
         return true;
     }
     try {
-        for (UInt32 t = 0; t < tracks_.size(); ++t) {
+        for (auto t : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 t) {
+                          return t < tracks_.size();
+                      })) {
             auto& track = tracks_[t];
             if (!track.queue) {
                 continue;
@@ -93,7 +98,10 @@ bool AudioPlayer::update() {
             auto next = track.nextSample;
             std::vector<std::shared_ptr<const audio::Buffer>> buffers;
             buffers.reserve(processed);
-            for (UInt32 i = 0; i < processed; ++i) {
+            for ([[maybe_unused]] auto i :
+                 std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                     return i < processed;
+                 })) {
                 buffers.push_back(chunk(*movie_, t, next, loop_));
             }
             track.queue->recycle(buffers);
@@ -121,7 +129,7 @@ void AudioPlayer::stop() noexcept {
 
 std::array<std::shared_ptr<audio::QueuedSource>, 7> AudioPlayer::queues() const {
     std::array<std::shared_ptr<audio::QueuedSource>, 7> result;
-    for (std::size_t t = 0; t < tracks_.size(); ++t) {
+    for (auto t : std::views::iota(std::size_t{0}, tracks_.size())) {
         result[t] = tracks_[t].queue;
     }
     return result;

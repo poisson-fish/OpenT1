@@ -1,5 +1,6 @@
 #pragma once
 #include <opent1/world/interior_shape.hpp>
+#include <ranges>
 #include <opent1/world/terrain_grid.hpp>
 #include <opent1/world/terrain_collision_snapshot.hpp>
 #include <opent1/world/terrain_textures.hpp>
@@ -165,7 +166,7 @@ struct WorldSurfaceMesh {
                        triangle.nativeSoftware = interiorMesh->software[id];
                    if (!geometryOnly && interiorMaps)
                        triangle.lightMap = (*interiorMaps)[id];
-                   for (std::size_t j = 0; j < 3; ++j) {
+                   for (auto j : std::views::iota(std::size_t{0}, std::size_t{3})) {
                        const auto& v =
                            interiorMesh->hardware
                                ->vertices()[interiorMesh->hardware->indices()[i * 3 + j]];

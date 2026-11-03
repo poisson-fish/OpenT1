@@ -1,4 +1,5 @@
 #include <opent1/world/interior_collision.hpp>
+#include <ranges>
 #include "collision_geometry.hpp"
 #include <functional>
 #include <numeric>
@@ -289,7 +290,7 @@ InteriorCollision::prepare(std::span<const PlaneF> planes,
             return {};
         }
         bool area = false;
-        for (std::size_t i = 0; i < s.vertices.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, s.vertices.size())) {
             const auto a = s.vertices[i], b = s.vertices[(i + 1) % s.vertices.size()];
             Point3F edgeNormal;
             m_cross(b - a, normal, edgeNormal);

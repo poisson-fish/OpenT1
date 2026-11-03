@@ -1,5 +1,6 @@
 #pragma once
 #include "ts_test_support.hpp"
+#include <ranges>
 #include "ts_collision_corpus.hpp"
 #include <opent1/world/ts_collision.hpp>
 
@@ -30,7 +31,9 @@ inline std::unique_ptr<world::TsShape> cube(std::size_t frame = 0) {
     for (const auto& v : ts_collision_corpus::vertices) {
         mesh.vertices.push_back({v[0], v[1], v[2], 0});
     }
-    for (std::size_t i = 0; i < ts_collision_corpus::faces.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < ts_collision_corpus::faces.size();
+                  })) {
         const auto& f = ts_collision_corpus::faces[i];
         mesh.faces.push_back({{{{f[0], 0}, {f[1], 0}, {f[2], 0}}}, Int32(i % 3)});
     }

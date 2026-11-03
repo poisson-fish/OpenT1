@@ -1,4 +1,5 @@
 #include <opent1/game/flier.hpp>
+#include <ranges>
 #include <opent1/game/player.hpp>
 #include <opent1/game/proj_seek_missile.hpp>
 #include <opent1/game/smoke_puff.hpp>
@@ -367,7 +368,10 @@ void SeekingMissile::clientProcess(UInt32 in_currTime) {
         if (count > 0) {
             if (auto* smoke = SmokeManager::get(getManager())) {
                 const Point3F step = delta * (m_pMissileData_->projSpecialTime / length);
-                for (Int32 i = 0; i < count; ++i) {
+                for ([[maybe_unused]] auto i :
+                     std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                         return i < count;
+                     })) {
                     m_lastPuffPosition_ += step;
                     if (m_pMissileData_->smokeShape) {
                         smoke->addPuff(m_pMissileData_->smokeShape, 0.4f, m_lastPuffPosition_, {});

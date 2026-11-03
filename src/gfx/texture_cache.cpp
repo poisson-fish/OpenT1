@@ -146,13 +146,17 @@ std::unique_ptr<Bitmap> lightTexture(const Bitmap& texture,
         // when the dividend was exactly divisible. Wrapping C++ does not.
         return value + (l.aligned && value < 0 ? 1 : 0);
     };
-    for (Int32 cy = 0; cy < map.size.y - 1; ++cy) {
+    for (auto cy : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 cy) {
+                       return cy < map.size.y - 1;
+                   })) {
         const Int32 dy = cy * l.cell - l.mapY;
         const Int32 startY = std::max(0, -dy), endY = std::min(l.cell, l.height - dy);
         if (endY <= startY) {
             continue;
         }
-        for (Int32 cx = 0; cx < map.size.x - 1; ++cx) {
+        for (auto cx : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 cx) {
+                           return cx < map.size.x - 1;
+                       })) {
             const Int32 dx = cx * l.cell - l.mapX;
             const Int32 startX = std::max(0, -dx), endX = std::min(l.cell, l.width - dx);
             if (endX <= startX) {
@@ -163,14 +167,20 @@ std::unique_ptr<Bitmap> lightTexture(const Bitmap& texture,
                         rightStep = step(corner(cx + 1, cy + 1) - right);
             left += leftStep * startY;
             right += rightStep * startY;
-            for (Int32 iy = startY; iy < endY; ++iy) {
+            for (auto iy : std::views::iota(static_cast<Int32>(startY)) |
+                               std::views::take_while([&](Int32 iy) {
+                                   return iy < endY;
+                               })) {
                 const Int32 lightStep = step(right - left);
                 Int32 light = left + lightStep * startX;
                 const auto sy = UInt64(Int64(dy) + iy + l.offsetY) & UInt64(l.sourceHeight - 1);
                 const auto srcRow = source.subspan(std::size_t(sy) * std::size_t(sourceStride),
                                                    std::size_t(l.sourceWidth));
                 auto dstRow = output->row(dy + iy);
-                for (Int32 ix = startX; ix < endX; ++ix) {
+                for (auto ix : std::views::iota(static_cast<Int32>(startX)) |
+                                   std::views::take_while([&](Int32 ix) {
+                                       return ix < endX;
+                                   })) {
                     const Int32 lit =
                         std::clamp(light + sampleNoise(), 0, l.aligned ? 0xffff : 0xf000);
                     const auto level = UInt32(lit) >> (16 - palette.shadeShift);
@@ -346,12 +356,13 @@ std::shared_ptr<const Bitmap> TextureCache::prepare(TextureHandle handle) {
             return {};
         }
         const auto bytes = prepared->pixels.size();
-        for (auto old = entries_.rbegin();
-             preparedBytes_ + bytes > limits_.preparedBytes && old != entries_.rend();
-             ++old) {
-            if (old->prepared) {
-                preparedBytes_ -= old->prepared->pixels.size();
-                old->prepared.reset();
+        for (auto& old : entries_ | std::views::reverse) {
+            if (preparedBytes_ + bytes <= limits_.preparedBytes) {
+                break;
+            }
+            if (old.prepared) {
+                preparedBytes_ -= old.prepared->pixels.size();
+                old.prepared.reset();
             }
         }
         it->prepared = std::move(prepared);

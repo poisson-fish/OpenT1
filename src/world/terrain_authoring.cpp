@@ -1,4 +1,5 @@
 #include <opent1/world/terrain_authoring.hpp>
+#include <ranges>
 #include <opent1/world/terrain_collision_snapshot.hpp>
 #include <opent1/world/ts_lighting.hpp>
 #include <opent1/core/file_stream.hpp>
@@ -29,7 +30,10 @@ struct Bytes {
         if constexpr (std::is_floating_point_v<T>) {
             put(std::bit_cast<UInt32>(value));
         } else {
-            for (std::size_t i = 0; i < sizeof(T); ++i) {
+            for (auto i :
+                 std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                     return i < sizeof(T);
+                 })) {
                 data.push_back(std::byte((std::make_unsigned_t<T>(value) >> (i * 8)) & 255));
             }
         }
@@ -119,7 +123,9 @@ bool blockShape(const TerrainGridBlock& b) {
         b.treeTable.size() > 1'398'101) {
         return false;
     }
-    for (UInt32 i = 0; i < b.pins.size(); ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < b.pins.size();
+                  })) {
         const auto side = i ? b.width >> (i - 1) : b.width + 1;
         const auto size = side * side / 8 + 2 * side / 8 + 1;
         if (!b.pins[i].empty() && b.pins[i].size() != size) {
@@ -330,7 +336,7 @@ bool setTerrainHiresDelta(TerrainGridBlock& b, std::span<const UInt16> samples) 
         return false;
     }
     Bytes raw;
-    for (std::size_t i = 0; i < samples.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, samples.size())) {
         raw.put(UInt16(samples[i] ^ b.lights[i]));
     }
     auto packed = compress(raw.data);
@@ -364,8 +370,8 @@ bool pinTerrainSquare(TerrainGridBlock& b, UInt32 detail, Point2I pos, UInt32 ma
     const auto recurse = [&](auto&& self, UInt32 d, Point2I p) -> void {
         bit(d + 1, UInt32(p.y) * (b.width >> d) + UInt32(p.x));
         const auto x = UInt32(p.x) << d, y = UInt32(p.y) << d, step = 1U << (d - 1);
-        for (UInt32 j = 0; j < 3; ++j) {
-            for (UInt32 i = 0; i < 3; ++i) {
+        for (auto j : std::views::iota(UInt32{0}, UInt32{3})) {
+            for (auto i : std::views::iota(UInt32{0}, UInt32{3})) {
                 bit(0, (y + j * step) * (b.width + 1) + x + i * step);
             }
         }
@@ -404,7 +410,7 @@ bool setTerrainHiresMaps(TerrainGridBlock& b, std::span<const TerrainAuthoredLig
         }
         TerrainHiresLightMap m{h.x, h.y, h.flags, 5, 0, 0, UInt32(pool.size())};
         std::vector<UInt16> raw;
-        for (UInt32 r = 0; r < 6; ++r) {
+        for (auto r : std::views::iota(UInt32{0}, UInt32{6})) {
             if (h.resolutions[r].empty()) {
                 continue;
             }
@@ -435,7 +441,7 @@ bool setTerrainHiresMaps(TerrainGridBlock& b, std::span<const TerrainAuthoredLig
             m.colors = UInt8(colors.size());
             const auto start = pool.size();
             pool.resize(start + (raw.size() * bits + 15) / 16);
-            for (std::size_t i = 0; i < raw.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, raw.size())) {
                 const auto code = UInt16(std::ranges::lower_bound(colors, raw[i]) - colors.begin());
                 pool[start + i * bits / 16] |= UInt16(code << (i * bits % 16));
             }
@@ -456,7 +462,7 @@ bool setTerrainHiresMaps(TerrainGridBlock& b, std::span<const TerrainAuthoredLig
         std::array<UInt32, 4> nodes{};
         UInt32 mask{};
         side /= 2;
-        for (UInt32 i = 0; i < 4; ++i) {
+        for (auto i : std::views::iota(UInt32{0}, UInt32{4})) {
             nodes[i] = self(self, x + (i & 1) * side, y + (i >> 1) * side, side);
             if (nodes[i]) {
                 mask |= 1U << i;
@@ -466,7 +472,7 @@ bool setTerrainHiresMaps(TerrainGridBlock& b, std::span<const TerrainAuthoredLig
             return 0;
         }
         const auto node = (UInt32(tree.size()) << 4) | mask;
-        for (UInt32 i = 0; i < 4; ++i) {
+        for (auto i : std::views::iota(UInt32{0}, UInt32{4})) {
             if (mask & (1U << i)) {
                 tree.push_back(nodes[i]);
             }
@@ -507,8 +513,12 @@ TerrainDocument::create(Point2I size, UInt32 width, Int32 scale, Int32 pattern, 
     // represented by explicit IDs. Mosaic has 16 repeated outer blocks and
     // 16 unique central blocks (active SimTerrain::createGridBlocks).
     const auto offset = ((size.x - 4) >> 1) & 3;
-    for (Int32 y = 0; y < size.y; ++y) {
-        for (Int32 x = 0; x < size.x; ++x) {
+    for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                      return y < size.y;
+                  })) {
+        for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                          return x < size.x;
+                      })) {
             auto& id = g.blockMap[std::size_t(y) * size.x + x];
             id = pattern == 0   ? 0
                  : pattern == 1 ? y * size.x + x
@@ -517,7 +527,7 @@ TerrainDocument::create(Point2I size, UInt32 width, Int32 scale, Int32 pattern, 
     }
     if (pattern == 2) {
         const auto center = (size.x - 4) >> 1;
-        for (Int32 i = 0; i < 16; ++i) {
+        for (auto i : std::views::iota(Int32{0}, Int32{16})) {
             g.blockMap[std::size_t(center + (i >> 2)) * size.x + center + (i & 3)] = 16 + i;
         }
     }
@@ -527,7 +537,9 @@ TerrainDocument::create(Point2I size, UInt32 width, Int32 scale, Int32 pattern, 
         MaxDocumentBytes) {
         return {};
     }
-    for (Int32 i = 0; i < count; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < count;
+                  })) {
         g.blocks.push_back({i, std::format("Block{}", i)});
         d.blocks.push_back(*block);
         d.blocks.back().name = g.blocks.back().name;
@@ -562,7 +574,9 @@ bool TerrainDocument::valid() const {
         return false;
     }
     std::set<std::string> names{folded(gridName)};
-    for (std::size_t i = 0; i < blocks.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < blocks.size();
+                  })) {
         if (!blockShape(blocks[i]) || blocks[i].detailCount != grid.detailCount ||
             !names.insert(folded(TerrainGridFile::blockName(gridName, grid.blocks[i].id))).second) {
             return false;
@@ -582,7 +596,7 @@ std::optional<TerrainDocument> TerrainDocument::load(std::span<const std::byte> 
     }
     const auto word = [&](std::size_t at) {
         UInt32 n{};
-        for (UInt32 i = 0; i < 4; ++i) {
+        for (auto i : std::views::iota(UInt32{0}, UInt32{4})) {
             n |= std::to_integer<UInt32>(ted[at + i]) << (i * 8);
         }
         return n;
@@ -695,7 +709,7 @@ std::optional<std::vector<std::byte>> TerrainDocument::encode() const {
     };
     auto gridBytes = writeTerrainGrid(grid);
     entry(0, gridName, *gridBytes);
-    for (std::size_t i = 0; i < blocks.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, blocks.size())) {
         auto bytes = writeTerrainBlock(blocks[i]);
         if (!bytes) {
             return {};
@@ -712,7 +726,7 @@ std::optional<std::vector<std::byte>> TerrainDocument::encode() const {
         }
     }
     const auto offset = UInt32(out.data.size());
-    for (UInt32 i = 0; i < 4; ++i) {
+    for (auto i : std::views::iota(UInt32{0}, UInt32{4})) {
         out.data[4 + i] = std::byte((offset >> (i * 8)) & 255);
     }
     out.block(kVolStringTag, strings.data);
@@ -784,7 +798,9 @@ TerrainDocument::resources(TsMaterialResources materials) const {
         return {};
     }
     result.grid = owner.load<TerrainGridFile>(gridName);
-    for (std::size_t i = 0; i < blocks.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < blocks.size();
+                  })) {
         const auto name = TerrainGridFile::blockName(gridName, grid.blocks[i].id);
         if (!owner.add(name, std::make_unique<TerrainGridBlock>(blocks[i]))) {
             return {};
@@ -922,8 +938,12 @@ bool relightTerrainLowResolution(TerrainDocument& document,
                    ? nullptr
                    : &next.blocks[std::size_t(entry - next.grid.blocks.begin())];
     };
-    for (Int32 by = 0; by < next.grid.size.y; ++by) {
-        for (Int32 bx = 0; bx < next.grid.size.x; ++bx) {
+    for (auto by : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 by) {
+                       return by < next.grid.size.y;
+                   })) {
+        for (auto bx : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 bx) {
+                           return bx < next.grid.size.x;
+                       })) {
             auto* block = blockAt(bx, by);
             if (!block) {
                 continue;
@@ -933,8 +953,12 @@ bool relightTerrainLowResolution(TerrainDocument& document,
             }
             const UInt32 side = (block->width << block->lightScale) + 1;
             const auto heightSide = block->width + 1;
-            for (UInt32 j = 0; j < side; ++j) {
-                for (UInt32 i = 0; i < side; ++i) {
+            for (auto j : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 j) {
+                              return j < side;
+                          })) {
+                for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                                  return i < side;
+                              })) {
                     const UInt32 x = i >> block->lightScale, y = j >> block->lightScale;
                     const auto h = [&](UInt32 px, UInt32 py) {
                         return block->heights[std::size_t(py) * heightSide + px];
@@ -950,8 +974,10 @@ bool relightTerrainLowResolution(TerrainDocument& document,
                     auto visible = lighting;
                     visible.lights.clear();
                     visible.worldSources.clear();
-                    for (std::size_t lightIndex = 0; lightIndex < lighting.lights.size();
-                         ++lightIndex) {
+                    for (auto lightIndex : std::views::iota(std::size_t{0}) |
+                                               std::views::take_while([&](std::size_t lightIndex) {
+                                                   return lightIndex < lighting.lights.size();
+                                               })) {
                         const auto& light = lighting.lights[lightIndex];
                         if (light.type == TsLight::Type::Directional) {
                             const auto start = point + Point3F{0, 0, .5f};
@@ -981,7 +1007,10 @@ bool relightTerrainLowResolution(TerrainDocument& document,
             if (bx) {
                 if (auto* previous = blockAt(bx - 1, by);
                     previous && previous->lights.size() == block->lights.size()) {
-                    for (UInt32 j = 0; j < side; ++j) {
+                    for (auto j :
+                         std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 j) {
+                             return j < side;
+                         })) {
                         previous->lights[std::size_t(j) * side + side - 1] =
                             block->lights[std::size_t(j) * side];
                     }
@@ -1023,26 +1052,36 @@ void downsampleTerrainLight(TerrainAuthoredLight& map) {
         const auto& source = map.resolutions[from];
         auto& destination = map.resolutions[from - 1];
         destination.resize(destinationWidth * destinationWidth);
-        for (UInt32 y = 0; y < destinationWidth; ++y) {
-            for (UInt32 x = 0; x < destinationWidth; ++x) {
+        for (auto y : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 y) {
+                          return y < destinationWidth;
+                      })) {
+            for (auto x : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 x) {
+                              return x < destinationWidth;
+                          })) {
                 std::array<Int32, 4> sum{};
                 Int32 divisor = 0;
                 const auto add = [&](UInt32 sx, UInt32 sy, Int32 weight) {
                     const UInt16 color = source[sy * sourceWidth + sx];
                     divisor += weight;
-                    for (UInt32 channel = 0; channel < 4; ++channel) {
+                    for (auto channel : std::views::iota(UInt32{0}, UInt32{4})) {
                         sum[channel] += Int32((color >> (channel * 4)) & 15) * 65536 * weight;
                     }
                 };
                 if (from == 1) {
-                    for (UInt32 sy = 0; sy < 2; ++sy) {
-                        for (UInt32 sx = 0; sx < 2; ++sx) {
+                    for (auto sy : std::views::iota(UInt32{0}, UInt32{2})) {
+                        for (auto sx : std::views::iota(UInt32{0}, UInt32{2})) {
                             add(sx, sy, 1);
                         }
                     }
                 } else {
-                    for (Int32 dy = -1; dy <= 1; ++dy) {
-                        for (Int32 dx = -1; dx <= 1; ++dx) {
+                    for (auto dy :
+                         std::views::iota(Int32{-1}) | std::views::take_while([&](Int32 dy) {
+                             return dy <= 1;
+                         })) {
+                        for (auto dx :
+                             std::views::iota(Int32{-1}) | std::views::take_while([&](Int32 dx) {
+                                 return dx <= 1;
+                             })) {
                             const Int32 sx = Int32(x * 2) + dx, sy = Int32(y * 2) + dy;
                             if (sx >= 0 && sy >= 0 && sx < Int32(sourceWidth) &&
                                 sy < Int32(sourceWidth)) {
@@ -1052,7 +1091,7 @@ void downsampleTerrainLight(TerrainAuthoredLight& map) {
                     }
                 }
                 UInt16 color = 0;
-                for (UInt32 channel = 0; channel < 4; ++channel) {
+                for (auto channel : std::views::iota(UInt32{0}, UInt32{4})) {
                     color |= UInt16(((sum[channel] / divisor + 32768) >> 16) << (channel * 4));
                 }
                 destination[y * destinationWidth + x] = color;
@@ -1161,8 +1200,12 @@ bool relightTerrainDetailed(TerrainDocument& document,
         }
     };
     const auto copySeams = [&] {
-        for (Int32 y = 0; y < grid.size.y; ++y) {
-            for (Int32 x = 0; x < grid.size.x; ++x) {
+        for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                          return y < grid.size.y;
+                      })) {
+            for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                              return x < grid.size.x;
+                          })) {
                 const auto at = placement(x, y);
                 if (!at) {
                     continue;
@@ -1174,7 +1217,10 @@ bool relightTerrainDetailed(TerrainDocument& document,
                 const UInt32 side = (block.width << block.lightScale) + 1;
                 if (const auto left = placement(x - 1, y);
                     left && next.blocks[*left].lights.size() == block.lights.size()) {
-                    for (UInt32 row = 0; row < side; ++row) {
+                    for (auto row :
+                         std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 row) {
+                             return row < side;
+                         })) {
                         next.blocks[*left].lights[std::size_t(row) * side + side - 1] =
                             block.lights[std::size_t(row) * side];
                     }
@@ -1245,7 +1291,7 @@ bool relightTerrainDetailed(TerrainDocument& document,
             auto direction = towardLight(light);
             Area projected{{1e5f, 1e5f}, {-1e5f, -1e5f}};
             bool missed = false;
-            for (UInt32 corner = 0; corner < 8; ++corner) {
+            for (auto corner : std::views::iota(UInt32{0}, UInt32{8})) {
                 const Point3F point{(corner & 1 ? bounds.fMin.x : bounds.fMax.x) - context.x,
                                     (corner & 2 ? bounds.fMin.y : bounds.fMax.y) - context.y,
                                     corner & 4 ? bounds.fMin.z : bounds.fMax.z};
@@ -1322,7 +1368,9 @@ bool relightTerrainDetailed(TerrainDocument& document,
 
     std::vector<std::vector<TerrainAuthoredLight>> maps(next.blocks.size());
     std::vector<std::vector<UInt16>> firstPass;
-    for (UInt32 pass = 0; pass < (options.hiresShadows ? 2U : 1U); ++pass) {
+    for (auto pass : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 pass) {
+                         return pass < (options.hiresShadows ? 2U : 1U);
+                     })) {
         const bool detailed = options.hiresShadows && pass == 0;
         for (const auto& area : areas) {
             Point3F lo, hi;
@@ -1336,7 +1384,9 @@ bool relightTerrainDetailed(TerrainDocument& document,
             }
             const auto row = [&](Int32 rowY) {
                 std::vector<Sample> samples(std::size_t(width) + 2);
-                for (Int32 x = 0; x < width + 2; ++x) {
+                for (auto x : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 x) {
+                                  return x < width + 2;
+                              })) {
                     const Point2F point{Flt32(first.x + x - 1) * step + offset,
                                         Flt32(rowY) * step + offset};
                     const auto surface = collision->surface(point);
@@ -1366,13 +1416,23 @@ bool relightTerrainDetailed(TerrainDocument& document,
                 return samples;
             };
             auto previous = row(first.y - 1), current = row(first.y), following = row(first.y + 1);
-            for (Int32 y = 0; y < height; ++y) {
-                for (Int32 x = 1; x <= width; ++x) {
+            for (auto y : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 y) {
+                              return y < height;
+                          })) {
+                for (auto x : std::views::iota(Int32{1}) | std::views::take_while([&](Int32 x) {
+                                  return x <= width;
+                              })) {
                     auto& sample = current[std::size_t(x)];
                     Int32 count = 0;
                     Point3F sum{};
-                    for (Int32 dy = -1; dy <= 1; ++dy) {
-                        for (Int32 dx = -1; dx <= 1; ++dx) {
+                    for (auto dy :
+                         std::views::iota(Int32{-1}) | std::views::take_while([&](Int32 dy) {
+                             return dy <= 1;
+                         })) {
+                        for (auto dx :
+                             std::views::iota(Int32{-1}) | std::views::take_while([&](Int32 dx) {
+                                 return dx <= 1;
+                             })) {
                             const auto& neighbor = (dy < 0 ? previous
                                                     : dy   ? following
                                                            : current)[std::size_t(x + dx)];
@@ -1396,7 +1456,9 @@ bool relightTerrainDetailed(TerrainDocument& document,
                              sum);
                 }
                 if (detailed) {
-                    for (Int32 x = 1; x <= width; ++x) {
+                    for (auto x : std::views::iota(Int32{1}) | std::views::take_while([&](Int32 x) {
+                                      return x <= width;
+                                  })) {
                         const auto& sample = current[std::size_t(x)];
                         if (!sample.valid || !sample.hires) {
                             continue;
@@ -1411,8 +1473,8 @@ bool relightTerrainDetailed(TerrainDocument& document,
                         map.resolutions[5].resize(17 * 17);
                         const Flt32 spacing = step / 17, quarter = spacing / 4;
                         bool hitObject = false;
-                        for (Int32 sy = 0; sy < 17; ++sy) {
-                            for (Int32 sx = 0; sx < 17; ++sx) {
+                        for (auto sy : std::views::iota(Int32{0}, Int32{17})) {
+                            for (auto sx : std::views::iota(Int32{0}, Int32{17})) {
                                 const Point2F center{
                                     sample.point.x + Flt32(sx) * spacing + spacing / 2,
                                     sample.point.y + Flt32(sy) * spacing + spacing / 2};
@@ -1478,7 +1540,7 @@ bool relightTerrainDetailed(TerrainDocument& document,
         }
     }
     if (options.hiresShadows) {
-        for (std::size_t index = 0; index < next.blocks.size(); ++index) {
+        for (auto index : std::views::iota(std::size_t{0}, next.blocks.size())) {
             auto& block = next.blocks[index];
             if (!setTerrainHiresMaps(block, maps[index]) ||
                 (block.lightScale >= 0 && !setTerrainHiresDelta(block, firstPass[index]))) {

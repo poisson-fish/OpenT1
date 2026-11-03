@@ -1,4 +1,5 @@
 #include <opent1/gui/gui.hpp>
+#include <ranges>
 #include <opent1/gui/controls.hpp>
 #include <algorithm>
 #include <cmath>
@@ -1288,7 +1289,10 @@ bool TextEdit::event(const Event& e) {
         if (multiline) {
             const auto height = std::max(1, font ? font->info.height : 12);
             const auto row = std::max(0, (local.y + lineScroll_) / height);
-            for (Int32 i = 0; i < row && at < text.size(); ++i) {
+            for ([[maybe_unused]] auto i :
+                 std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                     return i < row && at < text.size();
+                 })) {
                 const auto end = text.find('\n', at);
                 at = end == text.npos ? text.size() : end + 1;
             }
@@ -1401,7 +1405,7 @@ bool TextEdit::event(const Event& e) {
         candidate.replace(first, last - first, insert);
         if (numbersOnly) {
             bool dot = false;
-            for (std::size_t i = 0; i < candidate.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, candidate.size())) {
                 const auto c = candidate[i];
                 if (multiline && c == '.' && !dot) {
                     dot = true;
@@ -2441,7 +2445,7 @@ void Canvas::tab(bool prev) {
     const auto it = std::ranges::find(tabs_, focus_);
     auto index = it == tabs_.end() ? (prev ? 0 : tabs_.size() - 1)
                                    : static_cast<std::size_t>(it - tabs_.begin());
-    for (std::size_t i = 0; i < tabs_.size(); ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(std::size_t{0}, tabs_.size())) {
         index = prev ? (index + tabs_.size() - 1) % tabs_.size() : (index + 1) % tabs_.size();
         if (makeFirstResponder(tabs_[index])) {
             break;

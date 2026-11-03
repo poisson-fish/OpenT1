@@ -1,4 +1,5 @@
 #include <opent1/world/interior_shape.hpp>
+#include <ranges>
 #include "collision_geometry.hpp"
 
 namespace opent1::world {
@@ -14,7 +15,9 @@ std::optional<UInt32> InteriorShape::detailByPixels(UInt32 state, Flt32 pixels) 
         return {};
     }
     const auto count = UInt32(pixels);
-    for (UInt32 i = 0; i < s.lodCount; ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < s.lodCount;
+                  })) {
         if (lods[s.firstLod + i].minPixels < count) {
             return s.firstLod + i;
         }

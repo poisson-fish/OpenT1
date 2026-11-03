@@ -1,4 +1,5 @@
 #include "test_registry.hpp"
+#include <ranges>
 #include "test_support.hpp"
 #include <opent1/game/game_app.hpp>
 #include <opent1/game/ai.hpp>
@@ -282,14 +283,18 @@ void installedRpgRegressions() {
     }
     CHECK(town.size() >= 20);
     std::vector<std::pair<Moveable*, Point3F>> ferries;
-    for (int i = 1; i <= 3; ++i) {
+    for (auto i : std::views::iota(1) | std::views::take_while([&](int i) {
+                      return i <= 3;
+                  })) {
         auto* ferry = dynamic_cast<Moveable*>(globals.manager->findObject(
             std::format("MissionGroup/Ferry/System{0}/PlatformFerry{0}", i)));
         CHECK(ferry);
         CHECK(ferry->getWaypointCount() > 2);
         ferries.emplace_back(ferry, ferry->getPos());
     }
-    for (int tick = 0; tick <= 96; ++tick)
+    for (auto tick : std::views::iota(0) | std::views::take_while([&](int tick) {
+                         return tick <= 96;
+                     }))
         CHECK(app.stepFrame(tick * .032));
     CHECK(app.fearPlugin().focusServer());
     for (const auto& [ferry, start] : ferries) {
@@ -312,7 +317,7 @@ void installedRpgRegressions() {
         const auto& authored = ghost->getTSShape()->materials->materials;
         const auto& rendered = query.image->resources.materials.list().materials;
         CHECK(authored.size() == rendered.size());
-        for (std::size_t i = 0; i < authored.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, authored.size())) {
             if (authored[i].mapFile.starts_with("base.")) {
                 const auto map =
                     std::string(bot->getSkinBase()) + "." + authored[i].mapFile.substr(5);
@@ -364,7 +369,9 @@ void installedRpgRegressions() {
     auto* pack = dynamic_cast<Item*>(globals.manager->findObject(packId));
     CHECK(pack && pack->throwSource() == player);
     const auto packStart = pack->getPos();
-    for (int tick = 97; tick <= 160; ++tick)
+    for (auto tick : std::views::iota(97) | std::views::take_while([&](int tick) {
+                         return tick <= 160;
+                     }))
         CHECK(app.stepFrame(tick * .032));
     CHECK(globals.manager->findObject(packId));
     CHECK((pack->getPos() - packStart).len() > 1);
@@ -389,7 +396,9 @@ void installedRpgRegressions() {
               .ok());
     const auto deathPackId = std::atoi(console.getVariable("DeathPackList").c_str());
     CHECK(globals.manager->findObject(deathPackId));
-    for (int tick = 161; tick <= 200; ++tick)
+    for (auto tick : std::views::iota(161) | std::views::take_while([&](int tick) {
+                         return tick <= 200;
+                     }))
         CHECK(app.stepFrame(tick * .032));
     CHECK(globals.manager->findObject(deathPackId));
     auto* deathPackGhost =
@@ -413,7 +422,9 @@ void installedRpgRegressions() {
     player->setLinearVelocity({});
     const auto damageBefore = player->getDamageLevel();
     bool cast = false;
-    for (int tick = 201; tick <= 440 && player->getDamageLevel() == damageBefore; ++tick) {
+    for (auto tick : std::views::iota(201) | std::views::take_while([&](int tick) {
+                         return tick <= 440 && player->getDamageLevel() == damageBefore;
+                     })) {
         CHECK(app.stepFrame(tick * .032));
         CHECK(app.fearPlugin().focusServer());
         cast |=
@@ -453,7 +464,7 @@ void installedRpgMap1Rendering() {
     console.setVariable("PCFG::Script", "");
     console.setVariable("PCFG::Info", "regression-password");
     CHECK(app.loadMission("rpgmap1"));
-    for (int frame = 0; frame < 8; ++frame)
+    for (auto frame : std::views::iota(0, 8))
         CHECK(app.stepFrame(frame * .032));
     const auto& server = app.fearPlugin().serverGlobals();
     const auto& client = app.fearPlugin().clientGlobals();
@@ -479,7 +490,7 @@ void installedRpgMap1Rendering() {
                                     localId))
               .ok());
     CHECK(dynamic_cast<Player*>(local->ownedObject));
-    for (int frame = 8; frame < 16; ++frame)
+    for (auto frame : std::views::iota(8, 16))
         CHECK(app.stepFrame(frame * .032));
     CHECK(dynamic_cast<Player*>(client.playerPSC->getControlObject()));
     CHECK(app.renderFrame(*surface, &hardware));

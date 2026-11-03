@@ -144,11 +144,11 @@ void TerrainTextureCache::rebuildIndexes() {
     mapReferences_.clear();
     sharedMaps_.clear();
     decodedSamples_.clear();
-    for (auto at = entries_.begin(); at != entries_.end(); ++at) {
+    for (const auto at : std::views::iota(entries_.begin(), entries_.end())) {
         entryIndex_.emplace(lookupKey(at->key), at);
         retain(*at);
     }
-    for (auto at = handles_.begin(); at != handles_.end(); ++at) {
+    for (const auto at : std::views::iota(handles_.begin(), handles_.end())) {
         handleIndex_.emplace(lookupKey(at->requested), at);
     }
 }
@@ -165,7 +165,9 @@ void TerrainTextureCache::clear() {
     wrap_ = 0;
     bytes_ = 0;
     supported_.resize(resources_.materials.list().materials.size());
-    for (UInt32 i = 0; i < supported_.size(); ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < supported_.size();
+                  })) {
         supported_[i] = supported(resources_.materials, i);
     }
 }
@@ -176,19 +178,19 @@ bool TerrainTextureCache::matches(const TerrainGridResources& r) const {
         r.materials.list().materials.size() != resources_.materials.list().materials.size()) {
         return false;
     }
-    for (std::size_t i = 0; i < r.blocks.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, r.blocks.size())) {
         if (r.blocks[i].get() != resources_.blocks[i].get()) {
             return false;
         }
     }
-    for (std::size_t i = 0; i < r.materials.textures().size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, r.materials.textures().size())) {
         if (r.materials.textures()[i].get() != resources_.materials.textures()[i].get()) {
             return false;
         }
     }
     // Material records are copied into the bound snapshot; compare rendering
     // policy too, so reusing a cache across a changed material list is rejected.
-    for (std::size_t i = 0; i < r.materials.list().materials.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, r.materials.list().materials.size())) {
         if (r.materials.list().materials[i].flags != resources_.materials.list().materials[i].flags) {
             return false;
         }
@@ -413,8 +415,12 @@ std::optional<TerrainTextureCache::BuiltTile> TerrainTextureCache::build(const K
         return {};
     }
     bitmap->paletteIndex = resources_.materials.textures()[first]->paletteIndex;
-    for (UInt32 y = 0; y < key.cells; ++y) {
-        for (UInt32 x = 0; x < key.cells; ++x) {
+    for (auto y : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 y) {
+                      return y < key.cells;
+                  })) {
+        for (auto x : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 x) {
+                          return x < key.cells;
+                      })) {
             const auto material =
                 block.materials[std::size_t(key.y + key.cells - 1 - y) * n + key.x + x];
             if ((!key.nativeEmptyLevels && material.hole()) || !compatible(material.index, first)) {
@@ -426,9 +432,13 @@ std::optional<TerrainTextureCache::BuiltTile> TerrainTextureCache::build(const K
                 return {};
             }
             const auto stride = texture.detailLevels == 1 ? UInt32(texture.stride()) : unit;
-            for (UInt32 dy = 0; dy < unit; ++dy) {
+            for (auto dy : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 dy) {
+                               return dy < unit;
+                           })) {
                 auto dst = bitmap->row(Int32(y * unit + dy));
-                for (UInt32 dx = 0; dx < unit; ++dx) {
+                for (auto dx : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 dx) {
+                                   return dx < unit;
+                               })) {
                     const auto p = source(dx, dy, unit, material.flags);
                     dst[x * unit + dx] = src[std::size_t(p.y) * stride + std::size_t(p.x)];
                 }
@@ -521,8 +531,13 @@ std::optional<TerrainTextureCache::BuiltTile> TerrainTextureCache::build(const K
                 auto map = std::make_shared<gfx::LightMap>();
                 map->size = {Int32(side), Int32(side)};
                 map->samples.resize(std::size_t(side) * side);
-                for (UInt32 y = 0; y < side; ++y) {
-                    for (UInt32 x = 0; x < side; ++x) {
+                for (auto y : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 y) {
+                                  return y < side;
+                              })) {
+                    for (auto x :
+                         std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 x) {
+                             return x < side;
+                         })) {
                         map->samples[std::size_t(y) * side + x] =
                             sample(*low,
                                    lowSide,
@@ -563,8 +578,14 @@ std::optional<TerrainTextureCache::BuiltTile> TerrainTextureCache::build(const K
                         const auto hside = res ? (1U << (res - 1)) + 1 : 1;
                         const auto ox = (UInt32(h.x) - key.x) * rate,
                                    oy = (key.y + key.cells - UInt32(h.y) - 1) * rate;
-                        for (UInt32 y = 0; y <= rate; ++y) {
-                            for (UInt32 x = 0; x <= rate; ++x) {
+                        for (auto y :
+                             std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 y) {
+                                 return y <= rate;
+                             })) {
+                            for (auto x : std::views::iota(UInt32{0}) |
+                                              std::views::take_while([&](UInt32 x) {
+                                                  return x <= rate;
+                                              })) {
                                 map->samples[std::size_t(oy + y) * side + ox + x] =
                                     sample(*colors,
                                            hside,

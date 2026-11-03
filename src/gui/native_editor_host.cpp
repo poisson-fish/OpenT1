@@ -1,4 +1,5 @@
 #include <opent1/gui/native_editor_host.hpp>
+#include <ranges>
 #include <opent1/gui/containers.hpp>
 #include <opent1/gui/sdl_presentation.hpp>
 #include <charconv>
@@ -103,7 +104,7 @@ struct Panel {
             return false;
         }
         gfx::Palette palette;
-        for (unsigned i = 0; i < 256; ++i) {
+        for (auto i : std::views::iota(unsigned{0}, unsigned{256})) {
             palette.palettes[0].colors[i] = {UInt8(i), UInt8(i), UInt8(i), 0};
         }
         return presentation.draw(canvas,
@@ -210,7 +211,7 @@ struct NativeEditorHost::State : std::enable_shared_from_this<State> {
         }
         try {
             auto next = std::make_shared<Panel>(app, "GUI Editor", 154, font, gpu, hidden);
-            for (std::size_t i = 0; i < buttons.size(); ++i) {
+            for (auto i : std::views::iota(std::size_t{0}, buttons.size())) {
                 next->button(std::string(buttons[i]),
                              UInt32(i + 1),
                              {Int32(i % 4) * 104 + 2, Int32(i / 4) * 29 + 2});
@@ -355,7 +356,7 @@ struct NativeEditorHost::State : std::enable_shared_from_this<State> {
         constexpr std::array names = {
             "Left", "Right", "Center", "Top", "Bottom", "Vertical space", "Horizontal space"};
         constexpr std::array modes = {"0", "2", "1", "3", "4", "5", "6"};
-        for (std::size_t i = 0; i < names.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}, names.size())) {
             if (name == names[i]) {
                 return run("GuiJustify", std::array<std::string, 1>{modes[i]});
             }

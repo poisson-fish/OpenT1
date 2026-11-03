@@ -1,4 +1,5 @@
 #include "opent1/game/server_irc_controls.hpp"
+#include <ranges>
 
 #include <algorithm>
 
@@ -60,7 +61,9 @@ void FGIRCBanCtrl::tick(double time) {
         }
     }
     ready_ = true;
-    for (UInt32 tag = 141110; tag <= 141113; ++tag) {
+    for (auto tag : std::views::iota(UInt32{141110}) | std::views::take_while([&](UInt32 tag) {
+                        return tag <= 141113;
+                    })) {
         if (auto* value = dynamic_cast<gui::Active*>(findTag(tag))) {
             value->active = true;
         }

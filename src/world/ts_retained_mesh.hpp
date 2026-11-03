@@ -1,5 +1,6 @@
 #pragma once
 #include <opent1/world/ts_static_shape.hpp>
+#include <ranges>
 #include <list>
 
 namespace opent1::world::ts_detail {
@@ -63,15 +64,16 @@ inline std::shared_ptr<const RetainedMesh> retainedMesh(const Resource<TsShape>&
                               active * 3 * (sizeof(gfx::HardwareVertex) + sizeof(UInt32));
     if (plannedBytes > cache.budget)
         return {}; // avoid expanding an oversized source before falling back
-    for (auto it = cache.entries.begin(); it != cache.entries.end(); ++it) {
-        const auto& e = **it;
-        if (e.source.get() == source.get() && e.mesh == index && e.frame == state.frame &&
-            e.textureFrame == state.textureFrame && e.modes == modes) {
-            auto result = *it;
-            cache.entries.splice(cache.entries.begin(), cache.entries, it);
-            ++cache.hits;
-            return result;
-        }
+    const auto found = std::ranges::find_if(cache.entries, [&](const auto& entry) {
+        return entry->source.get() == source.get() && entry->mesh == index &&
+               entry->frame == state.frame && entry->textureFrame == state.textureFrame &&
+               entry->modes == modes;
+    });
+    if (found != cache.entries.end()) {
+        auto result = *found;
+        cache.entries.splice(cache.entries.begin(), cache.entries, found);
+        ++cache.hits;
+        return result;
     }
     auto result = std::make_shared<RetainedMesh>();
     result->source = source;
@@ -85,7 +87,9 @@ inline std::shared_ptr<const RetainedMesh> retainedMesh(const Resource<TsShape>&
     std::vector<UInt32> indices;
     vertices.reserve(active * 3);
     indices.reserve(active * 3);
-    for (std::size_t i = 0; i < mesh.faces.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < mesh.faces.size();
+                  })) {
         if (result->modes[i] == 255)
             continue;
         result->firstIndices[i] = UInt32(indices.size());

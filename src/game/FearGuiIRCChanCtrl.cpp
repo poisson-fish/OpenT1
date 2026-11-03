@@ -1,4 +1,5 @@
 #include "opent1/game/server_irc_controls.hpp"
+#include <ranges>
 
 #include <algorithm>
 
@@ -25,8 +26,11 @@ void FGIRCChannelCtrl::syncFromClient(const IRCClient& client) {
 
 bool FGIRCChannelCtrl::canScrollRight() const noexcept {
     Int32 totalWidth = 0;
-    for (std::size_t i = static_cast<std::size_t>(std::max(0, firstChannel_)); i < tabs_.size();
-         ++i) {
+    for (auto i : std::views::iota(static_cast<std::size_t>(
+                      static_cast<std::size_t>(std::max(0, firstChannel_)))) |
+                      std::views::take_while([&](std::size_t i) {
+                          return i < tabs_.size();
+                      })) {
         totalWidth += tabs_[i].width;
     }
     const Int32 availWidth = std::max(240, fields_.extent.x);
@@ -34,7 +38,9 @@ bool FGIRCChannelCtrl::canScrollRight() const noexcept {
 }
 
 bool FGIRCChannelCtrl::msgWaitingLeft() const noexcept {
-    for (Int32 i = 0; i < firstChannel_ && static_cast<std::size_t>(i) < tabs_.size(); ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < firstChannel_ && static_cast<std::size_t>(i) < tabs_.size();
+                  })) {
         if ((tabs_[static_cast<std::size_t>(i)].flags & IRCClient::CHANNEL_NEW_MESSAGE) != 0U) {
             return true;
         }
@@ -43,8 +49,11 @@ bool FGIRCChannelCtrl::msgWaitingLeft() const noexcept {
 }
 
 bool FGIRCChannelCtrl::msgWaitingRight() const noexcept {
-    for (std::size_t i = static_cast<std::size_t>(std::max(0, firstChannel_ + 1)); i < tabs_.size();
-         ++i) {
+    for (auto i : std::views::iota(static_cast<std::size_t>(
+                      static_cast<std::size_t>(std::max(0, firstChannel_ + 1)))) |
+                      std::views::take_while([&](std::size_t i) {
+                          return i < tabs_.size();
+                      })) {
         if ((tabs_[i].flags & IRCClient::CHANNEL_NEW_MESSAGE) != 0U) {
             return true;
         }
@@ -84,7 +93,10 @@ void FGIRCChannelCtrl::selectChannel(Int32 index) {
 bool FGIRCChannelCtrl::event(const gui::Event& eventValue) {
     if (eventValue.type == gui::EventType::Down && eventValue.button == 1) {
         Int32 x = globalToLocal(eventValue.point).x;
-        for (Int32 index = firstChannel_; index < static_cast<Int32>(tabs_.size()); ++index) {
+        for (auto index : std::views::iota(static_cast<Int32>(firstChannel_)) |
+                              std::views::take_while([&](Int32 index) {
+                                  return index < static_cast<Int32>(tabs_.size());
+                              })) {
             const auto width = tabs_[static_cast<std::size_t>(index)].width;
             if (x >= 0 && x < width) {
                 selectChannel(index);
@@ -101,9 +113,11 @@ bool FGIRCChannelCtrl::draw(gfx::SoftwareSurface& surface, Point2I offset, gui::
         return false;
     }
     Int32 x = offset.x;
-    for (Int32 index = firstChannel_;
-         index < static_cast<Int32>(tabs_.size()) && x < offset.x + fields_.extent.x;
-         ++index) {
+    for (auto index : std::views::iota(static_cast<Int32>(firstChannel_)) |
+                          std::views::take_while([&](Int32 index) {
+                              return index < static_cast<Int32>(tabs_.size()) &&
+                                     x < offset.x + fields_.extent.x;
+                          })) {
         const auto& tab = tabs_[static_cast<std::size_t>(index)];
         surface.rectangle({x, offset.y, x + tab.width - 1, offset.y + fields_.extent.y - 1},
                           index == selectedChannel_ ? 255 : 100);

@@ -1,4 +1,5 @@
 #include <opent1/game/debris.hpp>
+#include <ranges>
 #include <opent1/world/scene_objects.hpp>
 
 #include <algorithm>
@@ -23,7 +24,9 @@ void ensureRandomRotations() noexcept {
         return;
     }
     Random rotRand{};
-    for (std::size_t i = 0; i < kNumRandomRotations; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < kNumRandomRotations;
+                  })) {
         const EulerF e{
             rotRand.getFloat(kTwoPi), rotRand.getFloat(kTwoPi), rotRand.getFloat(kTwoPi)};
         g_randomRotations[i].set(e);
@@ -180,7 +183,9 @@ Flt32 DebrisTable::getShortList(const DataBlockManager& dbm,
     sl.clear();
     Flt32 p = 0.0f;
     const Int32 count = dbm.getDataGroupSize(DataBlockManager::DebrisDataType);
-    for (Int32 i = 0; i < count; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < count;
+                  })) {
         const auto* pData = dynamic_cast<const DebrisData*>(
             dbm.lookupDataBlock(i, DataBlockManager::DebrisDataType));
         if (!pData) {

@@ -1,4 +1,5 @@
 #include "test_support.hpp"
+#include <ranges>
 #include <opent1/core/persist.hpp>
 #include <opent1/core/mem_stream.hpp>
 #include <opent1/core/block_stream.hpp>
@@ -300,7 +301,7 @@ void legacyScale() {
     CHECK(registry.registerClass<Empty>("Empty", 302));
     std::vector<Graph> graph(160);
     Empty tail;
-    for (std::size_t i = 0; i < graph.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, graph.size())) {
         graph[i].next = i + 1 < graph.size() ? static_cast<Base*>(&graph[i + 1]) : &tail;
     }
     std::array<std::byte, 8192> bytes{};

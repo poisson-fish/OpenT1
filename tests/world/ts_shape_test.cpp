@@ -1,4 +1,5 @@
 #include "ts_test_support.hpp"
+#include <ranges>
 #include <opent1/world/ts_shape_pose.hpp>
 #include <opent1/world/ts_shape_instance.hpp>
 #include <opent1/world/ts_collision.hpp>
@@ -37,7 +38,10 @@ void skins() {
         CHECK(skinned->textures()[offset].get() == manager.load<gfx::Bitmap>("storm.body.bmp").get());
         // Each base.* slot keeps its own suffix and falls back independently.
         CHECK(skinned->list().materials[offset + 2].mapFile == "base.trim.bmp");
-        for (std::size_t slot = offset + 1; slot < offset + 4; ++slot) {
+        for (auto slot : std::views::iota(static_cast<std::size_t>(offset + 1)) |
+                             std::views::take_while([&](std::size_t slot) {
+                                 return slot < offset + 4;
+                             })) {
             CHECK(skinned->list().materials[slot].mapFile == original.materials[slot].mapFile);
             CHECK(skinned->textures()[slot].get() == source->textures()[slot].get());
         }
@@ -121,13 +125,15 @@ void damageSkins() {
                                                                      "11112111",
                                                                      "11134111",
                                                                      "11111111"}}}};
-    for (Int32 level = 1; level <= 3; ++level) {
+    for (auto level : std::views::iota(Int32{1}) | std::views::take_while([&](Int32 level) {
+                          return level <= 3;
+                      })) {
         const auto damaged = TsMaterialResources::withDamageSkin(manager, *source, level, names);
         CHECK(damaged);
         const auto& bitmap = *damaged->textures()[0];
         CHECK(bitmap.valid() && bitmap.paletteIndex == 7 && bitmap.detailLevels == 2);
-        for (Int32 y = 0; y < 8; ++y) {
-            for (Int32 x = 0; x < 8; ++x) {
+        for (auto y : std::views::iota(Int32{0}, Int32{8})) {
+            for (auto x : std::views::iota(Int32{0}, Int32{8})) {
                 CHECK(std::to_integer<int>(bitmap.row(y)[x]) == expected[level - 1][y][x] - '0');
             }
         }
@@ -163,7 +169,9 @@ void damageSkins() {
 void unit() {
     skins();
     damageSkins();
-    for (Int32 version = 0; version <= 8; ++version) {
+    for (auto version : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 version) {
+                            return version <= 8;
+                        })) {
         const auto bytes = shape(version, 3, 4, 0, true);
         const auto historical = load(bytes);
         CHECK(historical && historical->version == version);
@@ -283,7 +291,7 @@ void unit() {
         return v;
     };
     CHECK(word() == 0x4654314f && word() == 1 && word() == 37);
-    for (Int32 test = 0; test < 36; ++test) {
+    for (auto test : std::views::iota(Int32{0}, Int32{36})) {
         const auto s = load(shape(5 + test / 9, 1 + (test / 3) % 3, 2 + test % 3));
         CHECK(s);
         CHECK(hash(s->meshes[0]) == word());
@@ -477,7 +485,7 @@ void assets(const std::filesystem::path& directory) {
                 CHECK(overridden.nodeTransforms().data() != cached->nodeTransforms().data());
                 CHECK(evaluated.pose()->revision() == cached->revision());
             }
-            for (std::size_t detail = 0; detail < resource->details.size(); ++detail) {
+            for (auto detail : std::views::iota(std::size_t{0}, resource->details.size())) {
                 if (!TsShapeCollision::prepare(*defaultPose, Int32(detail))) {
                     std::fprintf(stderr,
                                  "Rejected original collision detail: %s/%s detail %zu\n",
@@ -532,12 +540,12 @@ void assets(const std::filesystem::path& directory) {
                         }
                     }
                 });
-            for (std::size_t index = 0; index < resource->transitions.size(); ++index) {
+            for (auto index : std::views::iota(std::size_t{0}, resource->transitions.size())) {
                 const auto& edge = resource->transitions[index];
                 TsShapeInstance instance(resource);
                 CHECK(instance.addThread(edge.startSequence, edge.startPosition));
                 CHECK(instance.setTransition(0, Int32(index)));
-                for (int step = 0; step < 5; ++step) {
+                for ([[maybe_unused]] auto step : std::views::iota(0, 5)) {
                     CHECK(instance.advance(Flt64(edge.duration) * .3));
                     ++transitionSamples;
                 }
@@ -564,7 +572,7 @@ void assets(const std::filesystem::path& directory) {
 int opent1_test_ts_shape(int argc, char** argv) {
     if (argc == 3 && std::string_view(argv[1]) == "--formats") {
         std::filesystem::create_directories(argv[2]);
-        for (Int32 test = 0; test < 37; ++test) {
+        for (auto test : std::views::iota(Int32{0}, Int32{37})) {
             const auto bytes = test == 36 ? shape(8, 3, 4, -1)
                                           : shape(5 + test / 9, 1 + (test / 3) % 3, 2 + test % 3);
             FileWStream file(std::filesystem::path(argv[2]) / std::format("format-{}.dts", test));

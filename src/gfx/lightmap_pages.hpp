@@ -30,12 +30,13 @@ struct LightMapPage {
     }
 
     std::optional<Rect> reserve(UInt32 width, UInt32 height) {
-        for (auto it = free.begin(); it != free.end(); ++it) {
-            if (it->width == width && it->height == height) {
-                auto result = *it;
-                free.erase(it);
-                return result;
-            }
+        const auto it = std::ranges::find_if(free, [&](const auto& rect) {
+            return rect.width == width && rect.height == height;
+        });
+        if (it != free.end()) {
+            auto result = *it;
+            free.erase(it);
+            return result;
         }
         if (x + width > Side) {
             x = 0;

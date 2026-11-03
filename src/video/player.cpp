@@ -1,4 +1,5 @@
 #include <opent1/video/player.hpp>
+#include <ranges>
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
@@ -53,7 +54,7 @@ bool Player::publish(Decoder decoder,
         if (next.refreshAudio) {
             next.audio = {};
             next.audioOriginUs = time;
-            for (UInt32 track = 0; track < 7; ++track) {
+            for (auto track : std::views::iota(UInt32{0}, UInt32{7})) {
                 const auto format = movie->audioFormat(track);
                 if (!(options.tracks & (1U << track)) || !format.rate ||
                     state != PlayState::Playing) {

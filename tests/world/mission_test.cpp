@@ -1,4 +1,5 @@
 #include "sim_net_test_support.hpp"
+#include <ranges>
 #undef CHECK
 #include "ts_test_support.hpp"
 #include <opent1/world/world_mission.hpp>
@@ -86,7 +87,9 @@ InteriorMissionState interior(UInt32 n) {
     s.editMode = n % 2 != 0;
     s.checks = {123, 456, 789, 111};
     s.lights.resize((n / 3) % 8);
-    for (UInt32 i = 0; i < s.lights.size(); ++i) {
+    for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
+                      return i < s.lights.size();
+                  })) {
         s.lights[i].time = Flt32(i) * .25f;
         s.lights[i].active = (i + n) % 2 != 0;
         s.lights[i].dummy1 = i + 77;
@@ -118,7 +121,9 @@ template <class S> void packet(const S& state, UInt32 mask, const Record& expect
     if constexpr (std::same_as<S, InteriorMissionState>) {
         initial.lights.resize(state.lights.size());
     }
-    for (UInt32 cut = 0; cut < expected.bits; ++cut) {
+    for (auto cut : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 cut) {
+                        return cut < expected.bits;
+                    })) {
         auto candidate = initial;
         BitStream in{std::span<const std::byte>(expected.bytes)};
         in.setLimits(cut, 0);
@@ -139,7 +144,7 @@ void parity() {
     FileRStream file(OPENT1_WORLD_MISSION_FIXTURE);
     CHECK(scalar<UInt32>(file) == 0x4d57314f && scalar<UInt32>(file) == 1);
     CHECK(scalar<UInt32>(file) == 216);
-    for (UInt32 n = 0; n < 216; ++n) {
+    for (auto n : std::views::iota(UInt32{0}, UInt32{216})) {
         CHECK(scalar<UInt32>(file) == n);
         const auto mask = scalar<UInt32>(file);
         const auto expected = record(file);
@@ -154,7 +159,7 @@ void parity() {
         CHECK(state.write(out));
         CHECK(UInt32(out.getPosition()) * 8 == persist.bits);
         CHECK(std::ranges::equal(std::span(bytes).first(persist.bytes.size()), persist.bytes));
-        for (std::size_t cut = 0; cut < persist.bytes.size(); ++cut) {
+        for (auto cut : std::views::iota(std::size_t{0}, persist.bytes.size())) {
             MemRWStream in{std::span<const std::byte>(persist.bytes).first(cut)};
             auto v = state;
             CHECK(!v.read(in) && v == state);
@@ -168,7 +173,7 @@ void parity() {
               v.checks.empty()); // native persistence omits these
     }
     CHECK(scalar<UInt32>(file) == 256);
-    for (UInt32 n = 0; n < 256; ++n) {
+    for (auto n : std::views::iota(UInt32{0}, UInt32{256})) {
         CHECK(scalar<UInt32>(file) == n);
         const auto mask = scalar<UInt32>(file);
         const auto expected = record(file);
@@ -183,7 +188,7 @@ void parity() {
             CHECK(state.write(out, version));
             CHECK(UInt32(out.getPosition()) * 8 == persist.bits);
             CHECK(std::ranges::equal(std::span(bytes).first(persist.bytes.size()), persist.bytes));
-            for (std::size_t cut = 0; cut < persist.bytes.size(); ++cut) {
+            for (auto cut : std::views::iota(std::size_t{0}, persist.bytes.size())) {
                 MemRWStream in{std::span<const std::byte>(persist.bytes).first(cut)};
                 auto v = state;
                 CHECK(!v.read(in, version) && v == state);
@@ -196,7 +201,7 @@ void parity() {
         }
     }
     CHECK(scalar<UInt32>(file) == 126);
-    for (UInt32 n = 0; n < 126; ++n) {
+    for ([[maybe_unused]] auto n : std::views::iota(UInt32{0}, UInt32{126})) {
         InteriorGeometry g;
         g.expandBoundaryVertices = true;
         const auto a = point(file), b = point(file);
@@ -206,7 +211,7 @@ void parity() {
               expected); // exact binary32; includes zero-width/native sequential tests
     }
     CHECK(scalar<UInt32>(file) == 9);
-    for (UInt32 n = 0; n < 9; ++n) {
+    for ([[maybe_unused]] auto n : std::views::iota(UInt32{0}, UInt32{9})) {
         const auto extent = scalar<Flt32>(file);
         InteriorMissionState s;
         s.container = scalar<Int32>(file);
@@ -214,7 +219,7 @@ void parity() {
         CHECK(scalar<UInt32>(file) == 0 && scalar<UInt32>(file) == 1);
     }
     CHECK(scalar<UInt32>(file) == 16);
-    for (UInt32 n = 0; n < 16; ++n) {
+    for ([[maybe_unused]] auto n : std::views::iota(UInt32{0}, UInt32{16})) {
         const auto r = record(file);
         MemRWStream in{std::span<const std::byte>(r.bytes)};
         TerrainMissionState s;
@@ -224,14 +229,14 @@ void parity() {
         CHECK(s.hazeMin == scalar<Flt32>(file) && s.hazeMax == scalar<Flt32>(file) &&
               s.drag == scalar<Flt32>(file));
         CHECK(s.filename == "old.dtf");
-        for (std::size_t cut = 0; cut < r.bytes.size(); ++cut) {
+        for (auto cut : std::views::iota(std::size_t{0}, r.bytes.size())) {
             MemRWStream truncated{std::span<const std::byte>(r.bytes).first(cut)};
             auto next = s;
             CHECK(!next.read(truncated, 1) && next == s);
         }
     }
     CHECK(scalar<UInt32>(file) == 27);
-    for (UInt32 n = 0; n < 27; ++n) {
+    for ([[maybe_unused]] auto n : std::views::iota(UInt32{0}, UInt32{27})) {
         TerrainMissionPreferences preferences{
             scalar<Flt32>(file), scalar<Flt32>(file), scalar<Flt32>(file)};
         TerrainMissionState s;
@@ -245,7 +250,7 @@ void parity() {
               p->textureDetail == scalar<Int32>(file));
     }
     CHECK(scalar<UInt32>(file) == 2);
-    for (UInt32 n = 0; n < 2; ++n) {
+    for (auto n : std::views::iota(UInt32{0}, UInt32{2})) {
         sim::SimWorld world(nullptr, clockResources());
         auto owned = std::make_unique<SimMissionInterior>();
         auto* room = owned.get();
@@ -257,7 +262,7 @@ void parity() {
         CHECK(room->setState(s));
         CHECK(world.manager().addObject(std::move(owned)));
         std::array<Flt32, 2> scale{};
-        for (Int32 i = 0; i < 2; ++i) {
+        for (auto i : std::views::iota(Int32{0}, Int32{2})) {
             CHECK(room->state().lights[std::size_t(i)].time == scalar<Flt32>(file));
             CHECK(room->state().lights[std::size_t(i)].active == (scalar<UInt32>(file) != 0));
             scale[std::size_t(i)] = scalar<Flt32>(file);
@@ -267,10 +272,10 @@ void parity() {
                   playback->time == scalar<Flt32>(file));
         }
         CHECK(scalar<UInt32>(file) == 9);
-        for (UInt32 j = 0; j < 9; ++j) {
+        for ([[maybe_unused]] auto j : std::views::iota(UInt32{0}, UInt32{9})) {
             const auto now = scalar<UInt32>(file), expected = scalar<UInt32>(file);
             CHECK(room->advanceClientTime(now) && room->clientTime() == expected);
-            for (Int32 i = 0; i < 2; ++i) {
+            for (auto i : std::views::iota(Int32{0}, Int32{2})) {
                 const auto elapsed = scalar<Flt32>(file);
                 auto time = elapsed * scale[std::size_t(i)];
                 const auto duration = i ? 4.f : 2.f;
@@ -307,7 +312,7 @@ void children() {
     CHECK(scalar<UInt32>(file) == 0x4348314f && scalar<UInt32>(file) == 1 &&
           scalar<UInt32>(file) == 768);
     UInt32 mismatches{}, accepted{}, scoped{};
-    for (UInt32 n = 0; n < 768; ++n) {
+    for (auto n : std::views::iota(UInt32{0}, UInt32{768})) {
         EnvironmentCamera c;
         c.viewport = {0, 0, 126, 94};
         c.focal = {63.5f, 47.5f / .75f};

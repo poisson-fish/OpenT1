@@ -1,4 +1,5 @@
 #include <opent1/game/ai.hpp>
+#include <ranges>
 
 #include <algorithm>
 #include <cctype>
@@ -76,7 +77,9 @@ bool AIGraph::connectNodes(Int32 a, Int32 b) {
     const Flt32 dist = (nodeB.pos - nodeA.pos).len();
 
     auto insertEdge = [](GraphPoint& node, Int32 peer, Flt32 d) {
-        for (std::size_t i = 0; i < std::size_t(node.maxDirections); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < std::size_t(node.maxDirections);
+                      })) {
             if (node.connections[i] == peer) {
                 node.distances[i] = d;
                 return true;
@@ -105,14 +108,18 @@ void AIGraph::buildGraph(std::span<const Point3F> points, Flt32 maxLinkDist) {
         addNode(p);
     }
     const Int32 n = static_cast<Int32>(nodes_.size());
-    for (Int32 i = 0; i < n; ++i) {
+    for (auto i : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 i) {
+                      return i < n;
+                  })) {
         struct Candidate {
             Int32 peer{-1};
             Flt32 dist{0.0f};
         };
 
         std::vector<Candidate> cands{};
-        for (Int32 j = 0; j < n; ++j) {
+        for (auto j : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 j) {
+                          return j < n;
+                      })) {
             if (i == j) {
                 continue;
             }
@@ -126,7 +133,9 @@ void AIGraph::buildGraph(std::span<const Point3F> points, Flt32 maxLinkDist) {
         std::sort(cands.begin(), cands.end(), [](const Candidate& a, const Candidate& b) {
             return a.dist < b.dist;
         });
-        for (std::size_t k = 0; k < cands.size() && k < MaxConnections; ++k) {
+        for (auto k : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t k) {
+                          return k < cands.size() && k < MaxConnections;
+                      })) {
             connectNodes(i, cands[k].peer);
         }
     }
@@ -135,7 +144,7 @@ void AIGraph::buildGraph(std::span<const Point3F> points, Flt32 maxLinkDist) {
 Int32 AIGraph::findClosestNode(const Point3F& pos) const noexcept {
     Int32 best = -1;
     Flt32 bestDistSq = std::numeric_limits<Flt32>::max();
-    for (std::size_t i = 0; i < nodes_.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, nodes_.size())) {
         const Flt32 dSq = (nodes_[i].pos - pos).lenSq();
         if (dSq < bestDistSq) {
             bestDistSq = dSq;
@@ -174,7 +183,9 @@ bool AIGraph::getShortestPath(Int32 startNode, Int32 endNode, std::vector<Int32>
             continue;
         }
         const GraphPoint& node = nodes_[static_cast<std::size_t>(u)];
-        for (std::size_t k = 0; k < MaxConnections; ++k) {
+        for (auto k : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t k) {
+                          return k < MaxConnections;
+                      })) {
             const Int32 v = node.connections[k];
             if (v < 0 || v >= n) {
                 continue;
@@ -266,9 +277,9 @@ void AIObj::addDirective(const Directive& input, bool overwrite) {
         Int32 order = directives_.empty() ? 100 : directives_.back().order;
         if (order >= maxUserOrder) {
             order = 100;
-            for (auto entry = directives_.rbegin(); entry != directives_.rend(); ++entry) {
-                if (entry->order < maxUserOrder - 150) {
-                    order = entry->order + 150;
+            for (const auto& entry : directives_ | std::views::reverse) {
+                if (entry.order < maxUserOrder - 150) {
+                    order = entry.order + 150;
                     break;
                 }
             }
@@ -493,7 +504,10 @@ void AIObj::updateDirectives(SimTime dt, PlayerMove& pm) {
             if (directive.pts.empty()) {
                 route.push_back({&directive, 0, directive.pos});
             } else {
-                for (std::size_t n = 0; n < directive.pts.size(); ++n) {
+                for (auto n :
+                     std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t n) {
+                         return n < directive.pts.size();
+                     })) {
                     route.push_back({&directive, Int32(n), directive.pts[n]});
                 }
             }
@@ -536,10 +550,11 @@ void AIObj::updateDirectives(SimTime dt, PlayerMove& pm) {
             });
             if (pathType_ == TwoWay && pathDirection_ < 0) {
                 next = route.end();
-                for (auto point = route.begin();
-                     point != route.end() && point->directive->order < pathOrder_;
-                     ++point) {
-                    next = point;
+                const auto firstLater = std::ranges::find_if(route, [&](const auto& point) {
+                    return point.directive->order >= pathOrder_;
+                });
+                if (firstLater != route.begin()) {
+                    next = std::prev(firstLater);
                 }
             }
             if (next == route.end() && pathType_ == TwoWay) {
@@ -553,7 +568,10 @@ void AIObj::updateDirectives(SimTime dt, PlayerMove& pm) {
                 pathActive_ = false;
             }
         }
-        for (std::size_t attempts = 0; index >= 0 && attempts < route.size(); ++attempts) {
+        for ([[maybe_unused]] auto attempts :
+             std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t attempts) {
+                 return index >= 0 && attempts < route.size();
+             })) {
             const auto point = route[std::size_t(index)];
             const auto delta = point.position - myPos;
             const bool within = jetSkill_.stage != JetSkill::NoNav

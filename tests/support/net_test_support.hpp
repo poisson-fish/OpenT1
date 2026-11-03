@@ -1,5 +1,6 @@
 #pragma once
 #include "test_support.hpp"
+#include <ranges>
 #include <opent1/platform/net_transport.hpp>
 #include <algorithm>
 #include <deque>
@@ -88,7 +89,7 @@ struct Pair {
     ConnectionId clientId{}, serverId{};
 
     void pump(UInt32 now = 0) {
-        for (unsigned i = 0; i < 10; ++i) {
+        for ([[maybe_unused]] auto i : std::views::iota(unsigned{0}, unsigned{10})) {
             transfer(a, b);
             CHECK(server.process(now) == Result::Ok);
             transfer(b, a);

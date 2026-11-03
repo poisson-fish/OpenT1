@@ -238,7 +238,9 @@ std::optional<std::vector<gfx::PolygonVertex>> project(const Input& input,
     bool changed = true;
     while (changed && result.size() >= 3) {
         changed = false;
-        for (std::size_t i = 0; i < result.size(); ++i) {
+        for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                          return i < result.size();
+                      })) {
             const auto a = result[(i + result.size() - 1) % result.size()].position;
             const auto b = result[i].position, d = result[(i + 1) % result.size()].position;
             const double ax = double(b.x) - a.x, ay = double(b.y) - a.y, bx = double(d.x) - b.x,

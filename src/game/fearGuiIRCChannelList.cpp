@@ -1,4 +1,5 @@
 #include "opent1/game/server_irc_controls.hpp"
+#include <ranges>
 
 namespace opent1::game {
 namespace {
@@ -94,7 +95,7 @@ void FGIRCChannelList::tick(double time) {
             }
         }
         if (auto* manager = target->getManager(); manager && manager->console()) {
-            for (unsigned i = 0; i < 100; ++i) {
+            for (auto i : std::views::iota(unsigned{0}, unsigned{100})) {
                 const auto name =
                     manager->console()->getVariable("IRC::ChannelName" + std::to_string(i));
                 if (name.empty()) {

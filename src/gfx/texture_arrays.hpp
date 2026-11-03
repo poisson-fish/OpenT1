@@ -1,5 +1,6 @@
 #pragma once
 #include <opent1/gfx/hardware_batch.hpp>
+#include <ranges>
 #include <SDL3/SDL_gpu.h>
 #include <algorithm>
 #include <memory>
@@ -59,7 +60,9 @@ public:
         if (source.lightMap || source.dynamic)
             return {};
         const auto levels = UInt32(source.mips.size() + 1);
-        for (UInt32 i = 1; i < levels; ++i) {
+        for (auto i : std::views::iota(UInt32{1}) | std::views::take_while([&](UInt32 i) {
+                          return i < levels;
+                      })) {
             if (source.mips[i - 1].width != std::max(1, source.width >> i) ||
                 source.mips[i - 1].height != std::max(1, source.height >> i))
                 return {};

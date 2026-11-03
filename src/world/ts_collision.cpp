@@ -1,4 +1,5 @@
 #include <opent1/world/ts_collision.hpp>
+#include <ranges>
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -16,12 +17,14 @@ bool rigid(const TMat3F& t, Flt32 tolerance = .0001f) {
     if (!finite(t.p)) {
         return false;
     }
-    for (std::size_t i = 0; i < 3; ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, std::size_t{3})) {
         const Point3F a{t.m[i][0], t.m[i][1], t.m[i][2]};
         if (!finite(a) || std::abs(m_dot(a, a) - 1) > tolerance) {
             return false;
         }
-        for (std::size_t j = 0; j < i; ++j) {
+        for (auto j : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t j) {
+                          return j < i;
+                      })) {
             if (std::abs(m_dot(a, Point3F{t.m[j][0], t.m[j][1], t.m[j][2]})) > tolerance) {
                 return false;
             }
@@ -160,7 +163,7 @@ std::optional<TsShapeCollision> TsShapeCollision::prepare(const TsShapePose& pos
         return {};
     }
     std::vector<UInt8> selected(shape.nodes.size());
-    for (std::size_t i = 0; i < shape.nodes.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}, shape.nodes.size())) {
         const auto parent = shape.nodes[i].parent;
         if (parent < -1 || (parent >= 0 && std::size_t(parent) >= i)) {
             return {};
@@ -171,7 +174,9 @@ std::optional<TsShapeCollision> TsShapeCollision::prepare(const TsShapePose& pos
     result.center_ = shape.center;
     result.authoredBounds_ = shape.bounds;
     std::size_t remaining = MaxWork;
-    for (std::size_t i = 0; i < shape.objects.size(); ++i) {
+    for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
+                      return i < shape.objects.size();
+                  })) {
         const auto& object = shape.objects[i];
         const auto& state = pose.objects()[i];
         if (object.node < 0 || std::size_t(object.node) >= selected.size() || object.mesh < 0 ||
@@ -219,7 +224,9 @@ std::optional<TsShapeCollision> TsShapeCollision::prepare(const TsShapePose& pos
             result.bounds_->fMin.setMin(box.fMin);
             result.bounds_->fMax.setMax(box.fMax);
         }
-        for (std::size_t f = 0; f < mesh.faces.size(); ++f) {
+        for (auto f : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t f) {
+                          return f < mesh.faces.size();
+                      })) {
             const auto& face = mesh.faces[f];
             Triangle triangle;
             triangle.material = face.material;
@@ -227,7 +234,7 @@ std::optional<TsShapeCollision> TsShapeCollision::prepare(const TsShapePose& pos
             if (face.material < -1) {
                 return {};
             }
-            for (std::size_t k = 0; k < 3; ++k) {
+            for (auto k : std::views::iota(std::size_t{0}, std::size_t{3})) {
                 const auto p = mesh.point(face.corners[k].vertex, state.frame);
                 if (!p || !finite(*p)) {
                     return {};
@@ -323,7 +330,7 @@ bool TsShapeCollision::sphere(Point3F center,
         if (level == TsCollisionLevel::Parts) {
             const auto boxCenter = (part.box.fMin + part.box.fMax) * .5f,
                        radii = (part.box.fMax - part.box.fMin) * .5f, offset = c - boxCenter;
-            for (std::size_t k = 0; k < 3; ++k) {
+            for (auto k : std::views::iota(std::size_t{0}, std::size_t{3})) {
                 if (std::abs(offset[k]) + radius < radii[k]) {
                     continue;
                 }
@@ -355,7 +362,7 @@ bool TsShapeCollision::sphere(Point3F center,
             bool found = m_pointInTriangle(projected, normal, v[0], v[1], v[2]);
             if (!found) {
                 const auto circle = radius * radius - distance * distance;
-                for (std::size_t k = 0; k < 3; ++k) {
+                for (auto k : std::views::iota(std::size_t{0}, std::size_t{3})) {
                     const auto edge = v[(k + 1) % 3] - v[k];
                     const auto edgeLength = edge.len();
                     if (edgeLength == 0) {
@@ -437,14 +444,14 @@ bool TsShapeCollision::tube(Point3F start,
             const auto& v = face.vertices;
             std::array<Point3F, 3> radial;
             std::array<Flt32, 3> along;
-            for (std::size_t k = 0; k < 3; ++k) {
+            for (auto k : std::views::iota(std::size_t{0}, std::size_t{3})) {
                 along[k] = m_dot(v[k], direction) - m_dot(a, direction);
                 radial[k] = v[k] - a - direction * along[k];
             }
             auto time = std::min(best.time, 1.f);
             Point3F hit;
             bool edgeHit = false;
-            for (std::size_t k = 0; k < 3; ++k) {
+            for (auto k : std::views::iota(std::size_t{0}, std::size_t{3})) {
                 const auto n = (k + 1) % 3;
                 edgeHit |= edgeInTube(
                     radial[k], radial[n], along[k], along[n], radius, 1 / length, time, hit);

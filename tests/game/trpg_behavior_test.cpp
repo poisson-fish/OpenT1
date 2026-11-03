@@ -1,4 +1,5 @@
 #include "test_registry.hpp"
+#include <ranges>
 #include "test_support.hpp"
 #include <opent1/game/game_app.hpp>
 #include <opent1/game/ai.hpp>
@@ -116,7 +117,9 @@ void botTeams() {
     bot->setVar("triggerPct", "1");
     bot->player()->setRot({0, 0, std::numbers::pi_v<float>});
     bool fired = false;
-    for (int tick = 1; tick <= 96; ++tick) {
+    for (auto tick : std::views::iota(1) | std::views::take_while([&](int tick) {
+                         return tick <= 96;
+                     })) {
         globals.aiManager->doServerProcesses(tick * .032f);
         bot->player()->serverProcess(tick * 32);
         fired |= bot->lastGeneratedMove().trigger;
@@ -161,7 +164,9 @@ void botIdentityAndOwnership() {
     CHECK(players->findBaseRep(id)->ownedObject == replacement);
     follower->setAutomaticTargets(true);
     follower->setVar("iq", "100");
-    for (int tick = 1; tick <= 16; ++tick)
+    for (auto tick : std::views::iota(1) | std::views::take_while([&](int tick) {
+                         return tick <= 16;
+                     }))
         aiManager->doServerProcesses(tick * .032f);
     CHECK(follower->currentTarget().obj == replacement);
     CHECK(app.console().evaluate(std::format(
@@ -193,7 +198,9 @@ void botIdentityAndOwnership() {
     const auto controlOnly = players->clientAdded("Observer", "male1", "base", true);
     players->findClient(controlOnly)->playerPSC = globals.playerPSC;
     globals.playerPSC->setControlObject(replacement);
-    for (int tick = 17; tick <= 32; ++tick)
+    for (auto tick : std::views::iota(17) | std::views::take_while([&](int tick) {
+                         return tick <= 32;
+                     }))
         aiManager->doServerProcesses(tick * .032f);
     CHECK(follower->currentTarget().id == -1);
 
@@ -404,7 +411,7 @@ void movementTrajectory() {
     player.setPos({16, 16, 8.1f});
     player.addForce(sim::MovementGravityForce, {0, 0, -20}, true);
     PlayerMove idle;
-    for (int tick = 0; tick < 8; ++tick)
+    for ([[maybe_unused]] auto tick : std::views::iota(0, 8))
         player.updateMove(&idle, true);
     CHECK(player.didContact());
     player.setLinearVelocity({});
@@ -427,7 +434,7 @@ void movementTrajectory() {
     CHECK(player.getLinearVelocity().x < -.1f);
     run.turnRot = 0;
     const auto start = player.getPos();
-    for (int tick = 0; tick < 24; ++tick)
+    for ([[maybe_unused]] auto tick : std::views::iota(0, 24))
         player.updateMove(&run, true);
     CHECK(player.getPos().y > start.y + 4 && player.getPos().z > start.z + 2);
 
@@ -438,7 +445,7 @@ void movementTrajectory() {
     PlayerMove jump;
     jump.jumpAction = true;
     float z = 100, velocity = 75.f / 9.f;
-    for (int tick = 0; tick < 28; ++tick) {
+    for (auto tick : std::views::iota(0, 28)) {
         z += (velocity + velocity - .64f) * .016f;
         velocity -= .64f;
         player.updateMove(tick == 0 ? &jump : &idle, true);
@@ -481,7 +488,7 @@ void installedRpgCombat() {
     console.setVariable("PCFG::Script", "");
     console.setVariable("PCFG::Info", "combat-test-password");
     CHECK(app.loadMission("rpgmap5"));
-    for (int tick = 0; tick < 8; ++tick)
+    for (auto tick : std::views::iota(0, 8))
         CHECK(app.stepFrame(tick * .032));
     CHECK(app.fearPlugin().focusServer());
     CHECK(console.evaluate("processMenupickgroup(2049, 3); processMenupickclass(2049, 1);").ok());
@@ -510,7 +517,9 @@ void installedRpgCombat() {
               .ok());
     const auto damage = bot->player()->getDamageLevel();
     player->setImageTriggerDown(0);
-    for (int tick = 1; tick <= 640 && bot->player()->getDamageLevel() == damage; ++tick) {
+    for (auto tick : std::views::iota(1) | std::views::take_while([&](int tick) {
+                         return tick <= 640 && bot->player()->getDamageLevel() == damage;
+                     })) {
         globals.currentTime = 10000 + tick * 32;
         player->updateImageState(0, .032f);
     }
@@ -520,7 +529,9 @@ void installedRpgCombat() {
     bot->player()->setRot({0, 0, std::numbers::pi_v<float>});
     bool fired = false;
     const auto playerDamage = player->getDamageLevel();
-    for (int tick = 1; tick <= 640 && player->getDamageLevel() == playerDamage; ++tick) {
+    for (auto tick : std::views::iota(1) | std::views::take_while([&](int tick) {
+                         return tick <= 640 && player->getDamageLevel() == playerDamage;
+                     })) {
         globals.currentTime = 40000 + tick * 32;
         globals.aiManager->doServerProcesses(globals.currentTime * .001f);
         bot->player()->serverProcess(globals.currentTime);
@@ -610,7 +621,7 @@ void installedRpgCombat() {
     CHECK(chat);
     auto surface = gfx::SoftwareSurface::create(640, 480);
     CHECK(surface && app.renderFrame(*surface));
-    for (int i = 0; i < 2; ++i) {
+    for ([[maybe_unused]] auto i : std::views::iota(0, 2)) {
         chat->activate();
         CHECK(app.renderFrame(*surface));
         gui::Event input;

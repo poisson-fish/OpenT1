@@ -42,6 +42,7 @@ add_executable(
     game/rpg_regressions_test.cpp
     game/compatibility_test.cpp
     game/model_rendering_test.cpp
+    game/weather_test.cpp
     video/video_test.cpp
 )
 target_link_libraries(opent1_tests PRIVATE opent1_game)

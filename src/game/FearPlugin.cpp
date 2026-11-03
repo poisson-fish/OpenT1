@@ -1651,7 +1651,8 @@ void FearPlugin::stepClientSimulation() {
                 control->getCameraTransform(cg_.playerPSC->camDist(), &camera);
                 sn->setCameraState(camera.p, control->getLinearVelocity(), 1.0f);
             }
-            sn->snowLogicFrame(0.032f, static_cast<Flt32>(cg_.currentTime) * 0.001f);
+            sn->snowLogicFrame(static_cast<Flt32>(cg_.currentTime - cg_.lastTime) * 0.001f,
+                               static_cast<Flt32>(cg_.currentTime) * 0.001f);
         }
     }
 }

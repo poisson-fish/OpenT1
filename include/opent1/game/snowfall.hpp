@@ -33,7 +33,7 @@ public:
         Point3F pos{};
         Point3F vel{};
         Int32 size{0};
-        Int32 timeout{0};
+        Flt32 timeout{0.0f}; // remaining lifetime in seconds
         Flt32 nextLookupTime{0.0f};
         Int32 flags{0};
     };

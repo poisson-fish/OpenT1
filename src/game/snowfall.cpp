@@ -51,7 +51,7 @@ void Snowfall::setWind(const Point3F& w) {
 }
 
 void Snowfall::setWind(const Point2F& w) {
-    wind_.set(w.x, w.y, -35.0f);
+    wind_.set(w.x, w.y, rain_ ? -75.0f : -35.0f);
     setMaskBits(updateWind);
 }
 
@@ -69,20 +69,24 @@ bool Snowfall::processArguments(std::span<const std::string> args) {
     if (args.empty()) {
         return true;
     }
-    if (args.size() >= 1) {
-        setIntensity(parseFloatArg(args[0]));
+    setIntensity(parseFloatArg(args[0]));
+    if (args.size() <= 4) {
+        // Native newObject arguments are intensity, wind-x, wind-y, rain.
+        // Reading the rain flag as wind-z makes RPG rain drift upward.
+        setRain(args.size() >= 4 && parseIntArg(args[3]) != 0);
+        setWind(Point2F{args.size() >= 2 ? parseFloatArg(args[1]) : 0.0f,
+                        args.size() >= 3 ? parseFloatArg(args[2]) : 0.0f});
+        setRendering(intensity_ > 0.0f);
+    } else {
+        // Preserve the extended XYZ, suspension, optional rain form.
+        setWind(Point3F{parseFloatArg(args[1]), parseFloatArg(args[2]), parseFloatArg(args[3])});
+        setRendering(parseIntArg(args[4]) == 0);
+        if (args.size() >= 6) {
+            setRain(parseIntArg(args[5]) != 0);
+        }
     }
-    if (args.size() >= 4) {
-        wind_.x = parseFloatArg(args[1]);
-        wind_.y = parseFloatArg(args[2]);
-        wind_.z = parseFloatArg(args[3]);
-    }
-    if (args.size() >= 5) {
-        suspendRendering_ = (parseIntArg(args[4]) != 0);
-    }
-    if (args.size() >= 6) {
-        rain_ = (parseIntArg(args[5]) != 0);
-    }
+    // newObject calls onAdd before processArguments; replace its default flakes.
+    snowInit();
     return true;
 }
 
@@ -163,22 +167,31 @@ void Snowfall::snowCreateFlake(Int32 index, bool startRandom, Flt32 currentTime)
         flake.pos.y += nearDist_ * 2.0f;
     }
 
-    flake.vel.x =
-        static_cast<Flt32>(static_cast<Int32>((fastRand() >> 12U) % 40U) - 20) / 10.0f + wind_.x;
-    flake.vel.y =
-        static_cast<Flt32>(static_cast<Int32>((fastRand() >> 12U) % 40U) - 20) / 10.0f + wind_.y;
-    flake.vel.z =
-        (-static_cast<Flt32>(static_cast<Int32>((fastRand() >> 12U) % 20U)) / 10.0f) + wind_.z;
-    if (!rain_) {
+    if (rain_) {
+        // Native rain follows one wind vector at twice the configured speed.
+        flake.vel = wind_ * 2.0f;
+    } else {
+        flake.vel.x =
+            static_cast<Flt32>(static_cast<Int32>((fastRand() >> 12U) % 40U) - 20) / 10.0f +
+            wind_.x;
+        flake.vel.y =
+            static_cast<Flt32>(static_cast<Int32>((fastRand() >> 12U) % 40U) - 20) / 10.0f +
+            wind_.y;
+        flake.vel.z =
+            (-static_cast<Flt32>(static_cast<Int32>((fastRand() >> 12U) % 20U)) / 10.0f) + wind_.z;
         flake.vel *= 0.25f;
     }
-    flake.timeout = static_cast<Int32>(50U + (fastRand() >> 12U) % 100U);
+    // Preserve the lifetime at the former 32 ms step without counting render frames.
+    flake.timeout = static_cast<Flt32>(50U + (fastRand() >> 12U) % 100U) * 0.032f;
     flake.flags = FlakeActive | FlakeOutside;
     flake.nextLookupTime = currentTime + (static_cast<Flt32>(fastRand() & 0xFFU) / 512.0f);
     flake.size = static_cast<Int32>((fastRand() >> 13U) & 0x01U);
 }
 
 void Snowfall::snowLogicFrame(SimTime dt, Flt32 currentTime) {
+    if (!std::isfinite(dt) || dt <= 0.0f) {
+        return;
+    }
     Flt32 maxFlakes = rain_ ? 2048.0f : 1024.0f;
     if (precipPref >= 0.0f && precipPref <= 1.0f) {
         maxFlakes *= precipPref;
@@ -192,6 +205,9 @@ void Snowfall::snowLogicFrame(SimTime dt, Flt32 currentTime) {
     for (Int32 x = 0; x < numFlakes_; ++x) {
         SnowFlake& flake = flakes_[static_cast<std::size_t>(x)];
         if ((flake.flags & FlakeActive) != 0) {
+            if (rain_) {
+                flake.vel = wind_ * 2.0f;
+            }
             flake.pos += flake.vel * dt;
             if (flake.pos.z < minBox.z) {
                 flake.pos.z += SnowBox_.z * 2.0f;
@@ -212,7 +228,7 @@ void Snowfall::snowLogicFrame(SimTime dt, Flt32 currentTime) {
                 flake.pos.x -= SnowBox_.x * 2.0f;
             }
         }
-        --flake.timeout;
+        flake.timeout -= dt;
         if (flake.timeout <= 0) {
             snowCreateFlake(x, false, currentTime);
         }

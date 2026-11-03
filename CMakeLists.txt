@@ -611,26 +611,14 @@ if(OPENT1_BUILD_PLATFORM)
         target_link_libraries(opent1_gui_tools_sdl PRIVATE shell32)
     endif()
     target_link_libraries(opent1_game INTERFACE opent1_gui_tools_sdl opent1_sim_gfx_sdl)
+    # The runtime source in this library includes SDL directly. Package aliases
+    # may forward their headers through SDL3::Headers rather than expose paths.
+    target_link_libraries(opent1_game PRIVATE SDL3::SDL3)
     set_property(
         SOURCE src/main/main.cpp
         APPEND
         PROPERTY COMPILE_DEFINITIONS OPENT1_HAS_SDL3_MAIN=1
     )
-    if(DEFINED sdl3_SOURCE_DIR)
-        set_property(
-            SOURCE src/main/main.cpp
-            APPEND
-            PROPERTY INCLUDE_DIRECTORIES "${sdl3_SOURCE_DIR}/include"
-        )
-    endif()
-    get_target_property(OPENT1_SDL3_INTERFACE_INCLUDES SDL3::SDL3 INTERFACE_INCLUDE_DIRECTORIES)
-    if(OPENT1_SDL3_INTERFACE_INCLUDES)
-        set_property(
-            SOURCE src/main/main.cpp
-            APPEND
-            PROPERTY INCLUDE_DIRECTORIES ${OPENT1_SDL3_INTERFACE_INCLUDES}
-        )
-    endif()
 endif()
 if(OPENT1_BUILD_AUDIO)
     target_link_libraries(opent1_game INTERFACE opent1_world_audio)

@@ -77,7 +77,7 @@ bool TerrainView::projection(std::optional<sim::EnvironmentCamera> camera,
         }
     }
     camera_ = std::move(camera);
-    if (!materials.list.materials.empty()) {
+    if (!materials.list().materials.empty()) {
         materials_ = std::move(materials);
     }
     return true;
@@ -99,7 +99,7 @@ world::TsStaticView terrainCamera(const sim::EnvironmentCamera& c, Point2I exten
 }
 
 world::TsMaterialResources flatTerrainMaterials() {
-    world::TsMaterialResources materials;
+    world::TsMaterialResources::Data materials;
     materials.list.details = 1;
     materials.list.materialsPerDetail = 256;
     materials.list.materials.resize(256);
@@ -108,7 +108,7 @@ world::TsMaterialResources flatTerrainMaterials() {
         materials.list.materials[i].flags = 1;
         materials.list.materials[i].index = i;
     }
-    return materials;
+    return world::TsMaterialResources(std::move(materials));
 }
 }
 
@@ -121,7 +121,7 @@ std::shared_ptr<const world::TsStaticShapeFrame> TerrainView::projectedFrame() c
         return {};
     }
     auto resources =
-        d->resources(materials_.list.materials.empty() ? flatTerrainMaterials() : materials_);
+        d->resources(materials_.list().materials.empty() ? flatTerrainMaterials() : materials_);
     if (!resources) {
         return {};
     }

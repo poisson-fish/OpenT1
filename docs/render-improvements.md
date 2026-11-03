@@ -543,6 +543,43 @@ were reviewed. GPU/CPU transform rounding is not pixel-identical. Metal compilat
 and runtime, Linux desktop Vulkan, Android/iOS devices, exhaustive traversal,
 remote-client-only timing and GPU timestamps remain unverified or unmeasured.
 
+## Scene scratch and shared inputs (2026-11-03)
+
+Scene capture, container selection, shape clipping and hardware submission reuse
+thread-local scratch capacities. Nested calls receive independent workspaces;
+every exit clears borrowed pointers and retained resource handles. Individual
+scratch vectors above 8 MiB release their allocation on exit. Container and batch
+lookup nodes use fixed 128/256 KiB arenas, with scoped heap overflow for larger
+inputs. Published frames and batches own their output independently of scratch.
+
+Material snapshots now share immutable material tables and texture handles.
+Skinning and terrain builders publish replacement tables after construction.
+Surface queries share one immutable scene-light snapshot, and simulation/TS light
+adapters share immutable directional shadow maps. Per-mesh lighting still samples
+those maps into owned prepared scalars. Map-content equality remains available for
+independently constructed equivalent maps. Scene and shape polygons append into
+the same submission vector, and translucent sorting borrows source geometry until
+synchronous batch preparation finishes.
+
+Fresh 240-frame D3D12 RPG audits compare the clean baseline with this change.
+Final-interval render allocations/frame (last 60 frames, excluding simulation):
+
+| Mission | Before | After | Reduction |
+| --- | ---: | ---: | ---: |
+| RPG map 1 | 5,656.42 | 3,820.43 | 32.46% |
+| RPG map 5 | 7,188.37 | 4,829.07 | 32.82% |
+
+Final polygon, surface, shape, draw, texture and mesh-upload counts match.
+Ordinary scratch capacity retention raises tracked live C++ heap by 1.60/2.15 MiB;
+the fixed lookup arenas additionally occupy 384 KiB per thread outside that heap
+counter. Both 800x600 rotating RPG readbacks match the baseline exactly. All 13
+Release CTest suites, real-device D3D12 platform tests and allocator self-checks
+pass. Sharing/replacement isolation, resource-manager destruction, nested scratch,
+exception cleanup, stable translucent order and repeated/failing preparations have
+regression coverage. These audits measure allocation churn, not a timing benefit.
+Capture hashes, executable hashes and counters are in
+[`render-allocation-followup.json`](data/render-allocation-followup.json).
+
 ## Reproduction
 
 ```powershell

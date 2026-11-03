@@ -212,6 +212,11 @@ struct WorldSurfaceMesh {
     [[nodiscard]] bool retainedHardwareCompatible() const;
     [[nodiscard]] std::optional<std::vector<gfx::HardwarePolygon>>
     hardwareInterior(const TsStaticView&, const gfx::Palette&, Flt32 gamma = 1) const;
+    // Append borrowed inputs into reusable scene storage. Failure restores size.
+    bool appendHardwareInterior(std::vector<gfx::HardwarePolygon>&,
+                                const TsStaticView&,
+                                const gfx::Palette&,
+                                Flt32 gamma = 1) const;
     // Select from a complete interior mesh while retaining its immutable maps.
     [[nodiscard]] std::optional<WorldSurfaceMesh>
     visibleInterior(std::span<const UInt32> surfaces) const;

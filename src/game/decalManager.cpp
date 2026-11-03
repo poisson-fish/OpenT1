@@ -56,7 +56,7 @@ bool DecalManager::onAdd() {
 std::optional<world::TsStaticShapeFrame>
 DecalManager::prepareFrame(ResourceManager& resources, const sim::EnvironmentCamera& camera) {
     if (!materials_) {
-        world::TsMaterialResources materials;
+        world::TsMaterialResources::Data materials;
         materials.list.details = 1;
         materials.list.materialsPerDetail = DECALS;
         for (const auto& desc : kDecalTypes) {

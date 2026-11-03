@@ -114,10 +114,10 @@ WorldVolumeMaterials::load(ResourceManager& manager,
         Entry entry{key, std::move(*resources), {}};
         for (Int32 i = 0; i < list->materialsPerDetail; ++i) {
             const auto n = std::size_t(i);
-            if (list->materials[n].type() != 3 || !entry.resources.textures[n]) {
+            if (list->materials[n].type() != 3 || !entry.resources.textures()[n]) {
                 return {};
             }
-            entry.frames.push_back(entry.resources.textures[n].get());
+            entry.frames.push_back(entry.resources.textures()[n].get());
         }
         result.entries_.push_back(std::move(entry));
     }

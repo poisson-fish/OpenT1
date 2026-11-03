@@ -11,8 +11,15 @@ struct TsLight {
     Point3F direction{0, 0, -1}, position{}, intensity{1, 1, 1};
     Flt32 range{1}, shadowAttenuation{1};
     Point3F attenuation{1, 0, 0}; // a0 + (a1 + a2 * distance) * distance
-    std::optional<gfx::DirectionalShadowMap> shadowMap{};
-    bool operator==(const TsLight&) const = default;
+    std::shared_ptr<const gfx::DirectionalShadowMap> shadowMap{};
+
+    bool operator==(const TsLight& other) const {
+        return type == other.type && direction == other.direction && position == other.position &&
+               intensity == other.intensity && range == other.range &&
+               shadowAttenuation == other.shadowAttenuation && attenuation == other.attenuation &&
+               (shadowMap == other.shadowMap ||
+                (shadowMap && other.shadowMap && *shadowMap == *other.shadowMap));
+    }
 };
 
 struct TsLighting {

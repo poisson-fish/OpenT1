@@ -459,14 +459,16 @@ SimTsShape* movingShape(SimWorld& world, Point3F displacement, Point3F placement
     shape->nodes[0].subSequenceCount = 1;
     TsShapeResources resources;
     resources.shape = resource(std::move(shape));
-    resources.materials.list.details = 1;
-    resources.materials.list.materialsPerDetail = 3;
-    resources.materials.list.materials.resize(3);
-    resources.materials.textures.resize(3);
-    for (auto& m : resources.materials.list.materials) {
+    TsMaterialResources::Data materialData;
+    materialData.list.details = 1;
+    materialData.list.materialsPerDetail = 3;
+    materialData.list.materials.resize(3);
+    materialData.textures.resize(3);
+    for (auto& m : materialData.list.materials) {
         m.flags = 1;
         m.index = 2;
     }
+    resources.materials = TsMaterialResources(std::move(materialData));
     auto object = std::make_unique<SimTsShape>();
     CHECK(object->setResources(std::move(resources)) && object->setCollisionDetail(0) &&
           object->setTransform(at(placement)));

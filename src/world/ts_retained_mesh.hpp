@@ -44,10 +44,10 @@ inline std::shared_ptr<const RetainedMesh> retainedMesh(const Resource<TsShape>&
         const auto id = pose.materialRemap().empty()
                             ? face.material
                             : pose.materialRemap()[std::size_t(face.material)];
-        if (id < 0 || id >= materials.list.materialsPerDetail ||
-            std::size_t(id) >= materials.list.materials.size())
+        if (id < 0 || id >= materials.list().materialsPerDetail ||
+            std::size_t(id) >= materials.list().materials.size())
             return {};
-        const auto& m = materials.list.materials[std::size_t(id)];
+        const auto& m = materials.list().materials[std::size_t(id)];
         const auto shading = m.flags & 0xf00U;
         modes.push_back(!m.type()                              ? 255
                         : m.type() == 3 && (m.flags & 0x3000U) ? 0

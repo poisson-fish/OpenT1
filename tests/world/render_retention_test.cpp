@@ -1,10 +1,119 @@
 #include "test_support.hpp"
 #include "test_registry.hpp"
 #include <opent1/world/world_surfaces.hpp>
+#include <opent1/world/world_scene.hpp>
+#include <opent1/core/reusable_scratch.hpp>
 
 using namespace opent1;
 
 namespace {
+int sharedRenderInputs() {
+    return test::run([] {
+        world::TsMaterialResources retained;
+        std::weak_ptr<const gfx::DirectionalShadowMap> mapLifetime;
+        std::optional<world::TsLighting> lighting;
+        {
+            ResourceManager manager;
+            CHECK(manager.add("shared.bmp", gfx::Bitmap::create(2, 2)));
+            world::TsMaterialList list;
+            list.details = list.materialsPerDetail = 1;
+            list.materials.push_back({.flags = 3, .mapFile = "shared.bmp"});
+            auto source = world::TsMaterialResources::load(manager, list);
+            CHECK(source);
+            retained = *source;
+            CHECK(&retained.data() == &source->data());
+            auto replacement = source->data();
+            replacement.list.materials[0].flags = 1;
+            *source = world::TsMaterialResources(std::move(replacement));
+            CHECK(retained.list().materials[0].flags == 3);
+            CHECK(source->list().materials[0].flags == 1);
+            sim::SimSceneLighting scene;
+            sim::SimLight sun;
+            sun.type = sim::SimLight::Type::Directional;
+            sun.direction = {0, 0, -1};
+            sun.intensity = {1, 1, 1};
+            sun.shadowMap = std::make_shared<const gfx::DirectionalShadowMap>(
+                gfx::DirectionalShadowMap{2, {}, 1, {64, 64, 64, 64}});
+            mapLifetime = sun.shadowMap;
+            scene.lights.push_back(sun);
+            lighting = world::tsSceneLighting(scene, {});
+            CHECK(lighting && lighting->lights[0].shadowMap == sun.shadowMap);
+            auto sameMap = *lighting;
+            sameMap.lights[0].shadowMap =
+                std::make_shared<const gfx::DirectionalShadowMap>(*sun.shadowMap);
+            CHECK(sameMap == *lighting); // cache equality still compares map contents
+        }
+        CHECK(retained.textures()[0] && retained.textures()[0]->width == 2);
+        CHECK(!mapLifetime.expired());
+        const auto prepared = world::TsPreparedLighting::prepare(*lighting, {}, 1);
+        CHECK(prepared && !prepared->lighting().lights[0].shadowMap);
+        lighting.reset();
+        CHECK(mapLifetime.expired()); // prepared scalars do not retain the source map
+    });
+}
+
+int renderScratchLifetimes() {
+    return test::run([] {
+        struct Scratch {
+            std::vector<std::shared_ptr<const int>> inputs;
+            void clear() {
+                inputs.clear();
+            }
+        };
+        std::weak_ptr<const int> lifetime;
+        {
+            detail::ScratchLease<Scratch> outer;
+            outer.get().inputs.push_back(std::make_shared<const int>(7));
+            lifetime = outer.get().inputs.front();
+            {
+                detail::ScratchLease<Scratch> nested;
+                CHECK(nested.get().inputs.empty());
+                nested.get().inputs.push_back(std::make_shared<const int>(9));
+                CHECK(*outer.get().inputs[0] == 7);
+            }
+            CHECK(!lifetime.expired());
+        }
+        CHECK(lifetime.expired());
+        try {
+            detail::ScratchLease<Scratch> failing;
+            failing.get().inputs.push_back(std::make_shared<const int>(11));
+            lifetime = failing.get().inputs.front();
+            throw std::runtime_error("failed capture");
+        } catch (const std::runtime_error&) {
+        }
+        detail::ScratchLease<Scratch> next;
+        CHECK(next.get().inputs.empty() && lifetime.expired());
+    });
+}
+
+int environmentScratchOwnership() {
+    return test::run([] {
+        sim::EnvironmentCamera camera;
+        camera.viewport = {0, 0, 31, 31};
+        gfx::Palette palette;
+        std::array<gfx::PolygonVertex, 3> vertices{{{{1, 1}}, {{10, 1}}, {{1, 10}}}};
+        std::array<gfx::HardwarePolygon, 3> scene;
+        for (std::size_t i = 0; i < scene.size(); ++i) {
+            scene[i].vertices = vertices;
+            scene[i].material.blend = gfx::HardwareBlend::Alpha;
+            scene[i].material.depth = gfx::HardwareDepth::TestOnly;
+            scene[i].material.color = {Flt32(i) * .25f, 1, 1};
+            scene[i].imageSortValue = i == 0 ? .7f : .2f;
+        }
+        const auto first = sim::prepareHardwareEnvironment(camera, {}, {}, palette, {}, scene);
+        CHECK(first && first->draws().size() == 3 && first->vertices().size() == 9);
+        CHECK(first->draws()[0].color.x == .25f && first->draws()[1].color.x == .5f &&
+              first->draws()[2].color.x == 0); // stable order for equal image keys
+        vertices[0].position.x = 2;
+        scene[0].material.opacity = -1;
+        CHECK(!sim::prepareHardwareEnvironment(camera, {}, {}, palette, {}, scene));
+        scene[0].material.opacity = 1;
+        const auto next = sim::prepareHardwareEnvironment(camera, {}, {}, palette, {}, scene);
+        CHECK(next && next->draws().size() == 3 && next->vertices()[0].position.x == 2);
+        CHECK(first->vertices()[0].position.x == 1); // published batches own their geometry
+    });
+}
+
 int retainedInteriorLighting() {
     return test::run([] {
         ResourceManager manager;
@@ -29,9 +138,11 @@ int retainedInteriorLighting() {
         resources.shape = manager.load<world::InteriorShape>("retain.dis");
         resources.geometry.push_back(manager.load<world::InteriorGeometry>("retain.dig"));
         resources.lighting.push_back(manager.load<world::InteriorLighting>("retain.dil"));
-        resources.materials.list.materials.resize(1);
-        resources.materials.list.materials[0].flags = 2;
-        resources.materials.textures.resize(1);
+        world::TsMaterialResources::Data materialData;
+        materialData.list.materials.resize(1);
+        materialData.list.materials[0].flags = 2;
+        materialData.textures.resize(1);
+        resources.materials = world::TsMaterialResources(std::move(materialData));
         const std::array<world::InteriorLightSlot, 1> dark{{{-1, {}}}},
             bright{{{0, {255, 255, 255, 255}}}};
         world::InteriorSurfaceLighting options;
@@ -66,6 +177,14 @@ int retainedInteriorLighting() {
         view.twoSided = true;
         view.shapeToCamera.p = {0, 5, 0};
         CHECK(next->prepare(view));
+        gfx::Palette palette;
+        std::vector<gfx::HardwarePolygon> inputs;
+        CHECK(next->appendHardwareInterior(inputs, view, palette));
+        const auto count = inputs.size();
+        CHECK(count > 0 && next->appendHardwareInterior(inputs, view, palette));
+        CHECK(inputs.size() == count * 2);
+        CHECK(!next->appendHardwareInterior(inputs, view, palette, -1));
+        CHECK(inputs.size() == count * 2);
         options.slots = std::span<const world::InteriorLightSlot>{};
         CHECK(!world::WorldSurfaceMesh::interior(resources, 0, 0, true, options));
         CHECK(first->triangleCount() == 2); // a failed update leaves published geometry intact
@@ -106,11 +225,13 @@ int retainedTerrainPatches() {
         resources.grid = manager.load<world::TerrainGridFile>("patch.dtf");
         resources.blocks = {manager.load<world::TerrainGridBlock>("patch#0.dtb"),
                             manager.load<world::TerrainGridBlock>("patch#1.dtb")};
-        resources.materials.list.materialsPerDetail = 1;
-        resources.materials.list.details = 1;
-        resources.materials.list.materials.resize(1);
-        resources.materials.list.materials[0].flags = 0x103;
-        resources.materials.textures = {manager.load<gfx::Bitmap>("patch.bmp")};
+        world::TsMaterialResources::Data materialData;
+        materialData.list.materialsPerDetail = 1;
+        materialData.list.details = 1;
+        materialData.list.materials.resize(1);
+        materialData.list.materials[0].flags = 0x103;
+        materialData.textures = {manager.load<gfx::Bitmap>("patch.bmp")};
+        resources.materials = world::TsMaterialResources(std::move(materialData));
         world::TerrainTextureCache cache(resources);
         std::shared_ptr<const world::WorldSurfaceMesh> snapshot;
         for (const auto camera : {Point3F{14, 4, 8}, Point3F{48, 12, 20}, Point3F{80, 24, 5}}) {
@@ -160,3 +281,6 @@ int retainedTerrainPatches() {
 
 OPENT1_REGISTER_TEST("world", "retained_interior_lighting", retainedInteriorLighting);
 OPENT1_REGISTER_TEST("world", "retained_terrain_patches", retainedTerrainPatches);
+OPENT1_REGISTER_TEST("world", "shared_render_inputs", sharedRenderInputs);
+OPENT1_REGISTER_TEST("world", "render_scratch_lifetimes", renderScratchLifetimes);
+OPENT1_REGISTER_TEST("world", "environment_scratch_ownership", environmentScratchOwnership);

@@ -264,9 +264,11 @@ void largeInteriorMeshes() {
         world::InteriorShapeResources resources;
         resources.shape = manager.load<world::InteriorShape>("ring.dis");
         resources.geometry.push_back(manager.load<world::InteriorGeometry>("ring.dig"));
-        resources.materials.list.materials.resize(1);
-        resources.materials.list.materials[0].flags = 1;
-        resources.materials.textures.resize(1);
+        world::TsMaterialResources::Data materialData;
+        materialData.list.materials.resize(1);
+        materialData.list.materials[0].flags = 1;
+        materialData.textures.resize(1);
+        resources.materials = world::TsMaterialResources(std::move(materialData));
         const auto mesh = world::WorldSurfaceMesh::interior(resources, 0, 0, false);
         CHECK(mesh && mesh->triangleCount() == std::size_t(count - 2) && mesh->interiorMesh &&
               mesh->interiorMesh->surfaceIds.size() == mesh->triangleCount());
@@ -484,7 +486,7 @@ int opent1_test_installed_rpg_compatibility() {
         cg.playerPSC->setFirstPerson(false);
         world::WorldShapeQuery playerImage;
         CHECK(cg.playerPSC->getControlObject()->processQuery(playerImage) && playerImage.image);
-        CHECK(playerImage.image->resources.materials.list.materials.front().mapFile ==
+        CHECK(playerImage.image->resources.materials.list().materials.front().mapFile ==
               "rpgbase.larmor.BMP");
         cg.playerPSC->setFirstPerson(true);
         CHECK(app.console().evaluate("return SaveCharacter(2049);").value == "true");

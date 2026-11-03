@@ -183,7 +183,7 @@ TerrainResourceStream::stage(const std::vector<bool>& needed,
             block->materials.size() != UInt64(n) * n ||
             block->heights.size() > 4'194'304 - heights ||
             (!grid.materialList.empty() && !std::ranges::all_of(block->materials, [&](auto m) {
-                return m.hole() || Int32(m.index) < next.materials.list.materialsPerDetail;
+                return m.hole() || Int32(m.index) < next.materials.list().materialsPerDetail;
             }))) {
             return {};
         }

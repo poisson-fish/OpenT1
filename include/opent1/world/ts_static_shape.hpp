@@ -141,6 +141,11 @@ public:
     // Returned spans and texture pointers expire with this frame.
     [[nodiscard]] std::optional<std::vector<gfx::HardwarePolygon>>
     hardwarePolygons(const gfx::Palette* = nullptr, Flt32 paletteGamma = 1) const;
+    // Append into caller-owned scratch without allocating a temporary per shape.
+    // Failure restores the output's original size.
+    bool appendHardwarePolygons(std::vector<gfx::HardwarePolygon>&,
+                                const gfx::Palette* = nullptr,
+                                Flt32 paletteGamma = 1) const;
     // A supplied cache must have beginFrame() called with this palette first.
     [[nodiscard]] std::optional<std::vector<gfx::SortedPolygon>>
     softwarePolygons(const gfx::Palette* = nullptr, NativeSoftwareTextureCache* = nullptr) const;

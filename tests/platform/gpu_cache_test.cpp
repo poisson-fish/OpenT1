@@ -164,9 +164,11 @@ void interiorReadbacks(platform::SdlWindow& window) {
     resources.shape = manager.load<world::InteriorShape>("gpu.dis");
     resources.geometry.push_back(manager.load<world::InteriorGeometry>("gpu.dig"));
     resources.lighting.push_back(manager.load<world::InteriorLighting>("gpu.dil"));
-    resources.materials.list.materials.resize(1);
-    resources.materials.list.materials[0].flags = 3;
-    resources.materials.textures.push_back(manager.load<gfx::Bitmap>("gpu.bmp"));
+    world::TsMaterialResources::Data materialData;
+    materialData.list.materials.resize(1);
+    materialData.list.materials[0].flags = 3;
+    materialData.textures.push_back(manager.load<gfx::Bitmap>("gpu.bmp"));
+    resources.materials = world::TsMaterialResources(std::move(materialData));
     auto surface = gfx::SdlGpuSurface::create(window, 64, 64);
     CHECK(surface);
     gfx::Palette palette;
@@ -175,7 +177,9 @@ void interiorReadbacks(platform::SdlWindow& window) {
     palette.palettes[0].colors[2] = {0, 255, 0, 0};
     palette.palettes[0].colors[3] = {0, 0, 255, 0};
     for (bool cutout : {false, true}) {
-        resources.materials.list.materials[0].flags = 3 | (cutout ? 0x1000U : 0);
+        auto replacementMaterials = resources.materials.data();
+        replacementMaterials.list.materials[0].flags = 3 | (cutout ? 0x1000U : 0);
+        resources.materials = world::TsMaterialResources(std::move(replacementMaterials));
         const auto mesh = world::WorldSurfaceMesh::interior(resources);
         CHECK(mesh);
         for (Flt32 gamma : {1.f, 1.7f}) {
@@ -395,10 +399,12 @@ void terrainReadbacks(platform::SdlWindow& window) {
             vertices[i].texture = {ring[i].x, 1 - ring[i].y};
         }
         world::WorldSurfaceMesh mesh;
-        mesh.materials.list.materials.resize(1);
-        mesh.materials.list.materials[0].flags = 0x103;
-        mesh.materials.list.materialsPerDetail = 1;
-        mesh.materials.textures = {manager.load<gfx::Bitmap>("terrain.bmp")};
+        world::TsMaterialResources::Data materialData;
+        materialData.list.materials.resize(1);
+        materialData.list.materials[0].flags = 0x103;
+        materialData.list.materialsPerDetail = 1;
+        materialData.textures = {manager.load<gfx::Bitmap>("terrain.bmp")};
+        mesh.materials = world::TsMaterialResources(std::move(materialData));
         auto patches = std::make_shared<world::WorldSurfaceMesh::TerrainPatches>();
         patches->farDistance = 8;
         patches->hazeDistance = 3;
@@ -487,7 +493,9 @@ void shapeReadbacks(platform::SdlWindow& window) {
                             std::pair{world::TsLight::Type::Point, 2},
                             std::pair{world::TsLight::Type::Point, 3}})
                 for (Flt32 depth : {.08f, 1.f, 5.f, 19.8f, 21.f}) {
-                    resources->materials.list.materials[0].flags = shading | alpha | 3;
+                    auto replacementMaterials = resources->materials.data();
+                    replacementMaterials.list.materials[0].flags = shading | alpha | 3;
+                    resources->materials = world::TsMaterialResources(std::move(replacementMaterials));
                     world::TsStaticView view;
                     view.width = view.height = 64;
                     view.focal = {32, 32};

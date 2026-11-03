@@ -85,12 +85,14 @@ inline bool appendProjectileBeam(world::WorldSurfaceMesh& mesh,
 inline std::shared_ptr<world::WorldSurfaceMesh>
 projectileBeamMesh(const Resource<gfx::Bitmap>& bitmap) {
     auto mesh = std::make_shared<world::WorldSurfaceMesh>();
-    mesh->materials.list.details = 1;
-    mesh->materials.list.materialsPerDetail = 1;
+    world::TsMaterialResources::Data materials;
+    materials.list.details = 1;
+    materials.list.materialsPerDetail = 1;
     world::TsMaterial material;
     material.flags = 0x2003; // unlit, translucent texture; blend comes from the bitmap
-    mesh->materials.list.materials.push_back(material);
-    mesh->materials.textures.push_back(bitmap);
+    materials.list.materials.push_back(material);
+    materials.textures.push_back(bitmap);
+    mesh->materials = world::TsMaterialResources(std::move(materials));
     return mesh;
 }
 

@@ -164,8 +164,33 @@ classifyTsUtilityDetails(TsShape&, std::span<const std::string_view> prefixes);
 bool registerTsLoaders(ResourceManager&);
 
 struct TsMaterialResources {
-    TsMaterialList list;
-    std::vector<Resource<gfx::Bitmap>> textures; // parallel to list.materials
+    struct Data {
+        TsMaterialList list;
+        std::vector<Resource<gfx::Bitmap>> textures; // parallel to list.materials
+    };
+
+    TsMaterialResources() = default;
+
+    TsMaterialResources(TsMaterialList list, std::vector<Resource<gfx::Bitmap>> textures)
+        : TsMaterialResources(Data{std::move(list), std::move(textures)}) {}
+
+    TsMaterialResources(Data data) : data_(std::make_shared<const Data>(std::move(data))) {}
+
+    // Copies retain one immutable table, including its texture dependencies.
+    // Build replacement tables separately; published snapshots never change.
+    [[nodiscard]] const TsMaterialList& list() const {
+        return data().list;
+    }
+
+    [[nodiscard]] const std::vector<Resource<gfx::Bitmap>>& textures() const {
+        return data().textures;
+    }
+
+    [[nodiscard]] const Data& data() const {
+        static const Data empty;
+        return data_ ? *data_ : empty;
+    }
+
     [[nodiscard]] static std::optional<TsMaterialResources> load(ResourceManager&,
                                                                  const TsMaterialList&);
     // Skin bitmaps share the authored material slots, flags and animation remaps.
@@ -180,6 +205,9 @@ struct TsMaterialResources {
                    TsMaterialResources,
                    Int32 damageLevel,
                    std::span<const std::string> bitmapNames);
+
+private:
+    std::shared_ptr<const Data> data_;
 };
 
 struct TsShapeResources {

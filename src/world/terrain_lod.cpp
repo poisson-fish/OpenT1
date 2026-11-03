@@ -468,7 +468,7 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                     if (material.hole() && !view.nativeTraversal) {
                         return true;
                     }
-                    if (material.index >= resources.materials.list.materialsPerDetail ||
+                    if (material.index >= resources.materials.list().materialsPerDetail ||
                         tiles.size() == 524288) {
                         return false;
                     }
@@ -562,6 +562,7 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
         vertical.prepare();
         WorldSurfaceMesh result;
         result.materials = resources.materials;
+        std::optional<TsMaterialResources::Data> materialData;
         std::shared_ptr<TerrainPatches> patches;
         if (view.retainedPatches && view.nativeTraversal && view.nativeGeometry &&
             view.nativeGeometry->perspective && view.compositeTextures &&
@@ -695,7 +696,7 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                 return {};
             }
             if (composite) {
-                const auto& bitmap = *resources.materials.textures[drawMaterial];
+                const auto& bitmap = *resources.materials.textures()[drawMaterial];
                 auto pixels = std::min(view.texturePixels, UInt32(bitmap.width) * t.size);
                 if (view.nativeTextures) {
                     const auto distance = [&](UInt32 x, UInt32 y) {
@@ -799,11 +800,13 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                     if (textureBytes > 64U * 1024U * 1024U || textures.size() == 4096) {
                         return {};
                     }
-                    const auto index = UInt32(result.materials.list.materials.size());
+                    if (!materialData)
+                        materialData = resources.materials.data();
+                    const auto index = UInt32(materialData->list.materials.size());
                     TsMaterial material;
                     material.flags = 0x103;
-                    result.materials.list.materials.push_back(material);
-                    result.materials.textures.push_back(tile->texture);
+                    materialData->list.materials.push_back(material);
+                    materialData->textures.push_back(tile->texture);
                     at = textures.emplace(key, DrawTexture{index, std::move(*tile)}).first;
                 }
                 drawMaterial = at->second.material;
@@ -984,10 +987,10 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
         } else if (patches) {
             result.terrainPatches = std::move(patches);
         }
-        if (!textures.empty()) {
-            result.materials.list.details = 1;
-            result.materials.list.materialsPerDetail =
-                Int32(result.materials.list.materials.size());
+        if (materialData) {
+            materialData->list.details = 1;
+            materialData->list.materialsPerDetail = Int32(materialData->list.materials.size());
+            result.materials = TsMaterialResources(std::move(*materialData));
         }
         if (state) {
             state->split_.swap(nextSplit);

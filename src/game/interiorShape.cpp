@@ -124,7 +124,7 @@ void InteriorShape::setShapeResources(std::shared_ptr<world::InteriorShapeResour
             }
             if (collPtr) {
                 std::vector<sim::SimCollisionMaterial> materials;
-                for (const auto& material : shapeResources_->materials.list.materials) {
+                for (const auto& material : shapeResources_->materials.list().materials) {
                     materials.push_back(
                         {material.friction, material.elasticity, material.surfaceType});
                 }

@@ -659,7 +659,7 @@ std::optional<InteriorShapeResources> InteriorShapeResources::load(ResourceManag
         auto g = manager.load<InteriorGeometry>(lod.geometry);
         if (!g || g->surfaces.size() > 1'048'576 - work ||
             std::ranges::any_of(g->surfaces, [&](auto s) {
-                return s.material != 255 && s.material >= result.materials.list.materialsPerDetail;
+                return s.material != 255 && s.material >= result.materials.list().materialsPerDetail;
             })) {
             return {};
         }

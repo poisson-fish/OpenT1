@@ -1,14 +1,27 @@
 #include <opent1/gfx/render_limits.hpp>
 #include <opent1/gfx/hardware_batch.hpp>
+#include <opent1/core/reusable_scratch.hpp>
 #include <atomic>
 #include <algorithm>
 #include <cmath>
 #include <list>
+#include <memory_resource>
 #include <ranges>
 #include <unordered_map>
 
 namespace opent1::gfx {
 namespace {
+struct BatchScratch {
+    // Common scene lookups fit here. Larger batches use ordinary scoped heap
+    // allocations, released on return rather than retained without a bound.
+    std::array<std::byte, 256 * 1024> storage;
+    std::pmr::monotonic_buffer_resource memory{storage.data(), storage.size()};
+
+    void clear() {
+        memory.release();
+    }
+};
+
 bool unit(Flt32 v) {
     return std::isfinite(v) && v >= 0 && v <= 1;
 }
@@ -525,10 +538,12 @@ std::optional<HardwareBatch> HardwareBatch::prepare(std::span<const HardwarePoly
     const std::size_t maximumTextures = renderLimits().textures;
     HardwareBatch result;
     result.textures_.push_back(whiteTexture);
-    std::unordered_map<ConversionKey, UInt32, ConversionHash> textures;
-    std::vector<const Palette*> validatedPalettes;
-    std::unordered_map<ConversionKey, UInt32, ConversionHash> lightMaps;
-    std::unordered_multimap<UInt64, UInt32> meshInstances;
+    detail::ScratchLease<BatchScratch> workspace;
+    auto* memory = &workspace.get().memory;
+    std::pmr::unordered_map<ConversionKey, UInt32, ConversionHash> textures{memory};
+    std::pmr::vector<const Palette*> validatedPalettes{memory};
+    std::pmr::unordered_map<ConversionKey, UInt32, ConversionHash> lightMaps{memory};
+    std::pmr::unordered_multimap<UInt64, UInt32> meshInstances{memory};
     std::size_t inputVertices{}, textureBytes{4};
     if (!std::ranges::all_of(polygons, [&](const auto& p) {
             const auto& m = p.material;

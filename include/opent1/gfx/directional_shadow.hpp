@@ -3,11 +3,12 @@
 #include <bit>
 #include <cmath>
 #include <optional>
+#include <memory>
 #include <vector>
 
 namespace opent1::gfx {
-// Native TS directional shadow bytes, repeated in world XY. Value ownership
-// prevents a light provider from changing an already captured frame.
+// Native TS directional shadow bytes, repeated in world XY. Publish maps through
+// shared_ptr<const DirectionalShadowMap>; replace them when lighting changes.
 struct DirectionalShadowMap {
     UInt32 side{};
     Point2F offset{};

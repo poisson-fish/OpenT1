@@ -60,8 +60,8 @@ struct NativeFile {
     }
 
     unsigned materialCount() const {
-        return resources.materials.list.materialsPerDetail > 0
-                   ? unsigned(resources.materials.list.materialsPerDetail)
+        return resources.materials.list().materialsPerDetail > 0
+                   ? unsigned(resources.materials.list().materialsPerDetail)
                    : 256U;
     }
 

@@ -91,7 +91,7 @@ struct SimLight {
     Flt32 range{1};
     Point3F attenuation{1, 0, 0};
     Flt32 shadowAttenuation{1};
-    std::optional<gfx::DirectionalShadowMap> shadowMap{};
+    std::shared_ptr<const gfx::DirectionalShadowMap> shadowMap{};
 };
 
 struct SimLightQuery : SimQuery {

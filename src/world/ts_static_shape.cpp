@@ -1,6 +1,7 @@
 #include <opent1/gfx/render_limits.hpp>
 #include <opent1/gfx/render_stats.hpp>
 #include <opent1/world/ts_static_shape.hpp>
+#include <opent1/core/reusable_scratch.hpp>
 #include "ts_retained_mesh.hpp"
 #include <map>
 #include <algorithm>
@@ -53,6 +54,17 @@ struct Vertex {
     Point2F lightMap{};
     Flt32 farSphereDistance{}, haze{};
     UInt8 screenBoundary{};
+};
+
+struct ShapeScratch {
+    std::vector<bool> selected;
+    std::vector<Vertex> vertices, clipping;
+
+    void clear() {
+        detail::clearScratch(selected);
+        detail::clearScratch(vertices);
+        detail::clearScratch(clipping);
+    }
 };
 
 Flt64 distance(const Vertex& a, Int32 plane, const TsStaticView& v) {
@@ -260,7 +272,7 @@ TsStaticShapeFrame::prepareSurfaces(TsMaterialResources materials,
                                     std::span<const StaticSurfaceTriangle> triangles,
                                     const TsStaticView& view) {
     if (!validView(view) || triangles.size() > 1'048'576 ||
-        materials.list.materials.size() != materials.textures.size()) {
+        materials.list().materials.size() != materials.textures().size()) {
         return {};
     }
     TsStaticShapeFrame result;
@@ -274,13 +286,13 @@ TsStaticShapeFrame::prepareSurfaces(TsMaterialResources materials,
     scratch.reserve(10);
     std::optional<TMat3F> cameraToShape;
     if (!std::ranges::all_of(triangles, [&](const auto& triangle) {
-            if (triangle.material >= result.resources_.materials.list.materials.size()) {
+            if (triangle.material >= result.resources_.materials.list().materials.size()) {
                 return false;
             }
             if (triangle.lightMap && !triangle.lightMap->valid()) {
                 return false;
             }
-            if (!result.resources_.materials.list.materials[triangle.material].type()) {
+            if (!result.resources_.materials.list().materials[triangle.material].type()) {
                 return true;
             }
             vertices.clear();
@@ -301,7 +313,7 @@ TsStaticShapeFrame::prepareSurfaces(TsMaterialResources materials,
                     return false;
                 }
                 const auto texture =
-                    result.resources_.materials.list.materials[triangle.material].type() == 3
+                    result.resources_.materials.list().materials[triangle.material].type() == 3
                         ? vertex.texture
                         : Point2F{};
                 vertices.push_back({p,
@@ -353,7 +365,7 @@ TsStaticShapeFrame::prepareSurfaces(TsMaterialResources materials,
                                 1);
                         p.softwareVertices = p.vertices;
                         const auto* bitmap =
-                            result.resources_.materials.textures[triangle.material].get();
+                            result.resources_.materials.textures()[triangle.material].get();
                         if (!bitmap) {
                             return false;
                         }
@@ -401,7 +413,7 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
                                                               const TsShapePose& pose,
                                                               bool retainedHardware) {
     if (!validView(view) || !resources.shape ||
-        resources.materials.list.materials.size() != resources.materials.textures.size()) {
+        resources.materials.list().materials.size() != resources.materials.textures().size()) {
         return {};
     }
     const auto& shape = *resources.shape;
@@ -453,7 +465,9 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
         return {};
     }
     const auto transforms = pose.nodeTransforms();
-    std::vector<bool> selected(shape.nodes.size());
+    detail::ScratchLease<ShapeScratch> workspace;
+    auto& selected = workspace.get().selected;
+    selected.resize(shape.nodes.size());
     if (!std::ranges::all_of(std::views::iota(std::size_t{0}, shape.nodes.size()), [&](auto i) {
             const auto& node = shape.nodes[i];
             if (!at(node.defaultTransform, shape.transforms.size()) ||
@@ -482,7 +496,8 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
         projection.farDistance = view.farDistance;
         projection.perspective = view.perspective;
     }
-    std::vector<Vertex> vertices, scratch;
+    auto& vertices = workspace.get().vertices;
+    auto& scratch = workspace.get().clipping;
     vertices.reserve(10);
     scratch.reserve(10);
     const auto ok = std::ranges::all_of(
@@ -629,12 +644,12 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
                     }
                     materialIndex = pose.materialRemap()[std::size_t(face.material)];
                 }
-                if (!at(materialIndex, resources.materials.list.materials.size()) ||
-                    materialIndex >= resources.materials.list.materialsPerDetail) {
+                if (!at(materialIndex, resources.materials.list().materials.size()) ||
+                    materialIndex >= resources.materials.list().materialsPerDetail) {
                     return false;
                 }
                 const auto& material =
-                    resources.materials.list.materials[std::size_t(materialIndex)];
+                    resources.materials.list().materials[std::size_t(materialIndex)];
                 if (!material.type()) {
                     return true;
                 }
@@ -759,7 +774,7 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
     // to the scene; triangle sorting here would split a native render image.
     std::ranges::stable_sort(result.polygons_, [&](const auto& a, const auto& b) {
         const auto translucent = [&](const auto& p) {
-            return (result.resources_.materials.list.materials[p.material].flags & 0x2000U) != 0;
+            return (result.resources_.materials.list().materials[p.material].flags & 0x2000U) != 0;
         };
         if (translucent(a) != translucent(b)) {
             return !translucent(a);
@@ -771,14 +786,22 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
 
 std::optional<std::vector<gfx::HardwarePolygon>>
 TsStaticShapeFrame::hardwarePolygons(const gfx::Palette* palette, Flt32 paletteGamma) const {
+    std::vector<gfx::HardwarePolygon> inputs;
+    return appendHardwarePolygons(inputs, palette, paletteGamma) ? std::optional(std::move(inputs))
+                                                                 : std::nullopt;
+}
+
+bool TsStaticShapeFrame::appendHardwarePolygons(std::vector<gfx::HardwarePolygon>& inputs,
+                                                const gfx::Palette* palette,
+                                                Flt32 paletteGamma) const {
     if ((palette && !palette->valid()) || !std::isfinite(paletteGamma) || paletteGamma < .05f ||
         paletteGamma > 20) {
-        return {};
+        return false;
     }
-    std::vector<gfx::HardwarePolygon> inputs;
-    inputs.reserve(polygons_.size());
+    const auto first = inputs.size();
+    inputs.reserve(first + polygons_.size());
     if (!std::ranges::all_of(polygons_, [&](const auto& p) {
-            const auto& source = resources_.materials.list.materials[p.material];
+            const auto& source = resources_.materials.list().materials[p.material];
             gfx::HardwareMaterial material;
             material.perspective = perspective_;
             if (source.type() == 1 && (!palette || source.index < 0 || source.index > 255)) {
@@ -809,7 +832,7 @@ TsStaticShapeFrame::hardwarePolygons(const gfx::Palette* palette, Flt32 paletteG
             material.lightMap = p.lightMap.get();
             if (source.type() == 3) {
                 material.wrap = p.repeatTexture;
-                material.texture = resources_.materials.textures[p.material].get();
+                material.texture = resources_.materials.textures()[p.material].get();
                 material.useSurfacePalette = true;
                 if (!material.texture) {
                     return false;
@@ -870,9 +893,10 @@ TsStaticShapeFrame::hardwarePolygons(const gfx::Palette* palette, Flt32 paletteG
             }
             return true;
         })) {
-        return {};
+        inputs.resize(first);
+        return false;
     }
-    return inputs;
+    return true;
 }
 
 std::optional<gfx::HardwareBatch> TsStaticShapeFrame::hardware(const gfx::Palette* palette,
@@ -1003,7 +1027,7 @@ TsStaticShapeFrame::softwarePolygons(const gfx::Palette* palette,
         cached;
     std::size_t preparedBytes{};
     if (!std::ranges::all_of(polygons_, [&](const auto& p) {
-            const auto& source = resources_.materials.list.materials[p.material];
+            const auto& source = resources_.materials.list().materials[p.material];
             gfx::PolygonMaterial material;
             material.shadeSource = p.shadeSource;
             material.shade = p.shade;
@@ -1020,7 +1044,7 @@ TsStaticShapeFrame::softwarePolygons(const gfx::Palette* palette,
             material.lightMap = p.lightMap.get();
             material.perspective = bool(p.lightMap);
             if (source.type() == 3) {
-                material.texture = resources_.materials.textures[p.material].get();
+                material.texture = resources_.materials.textures()[p.material].get();
                 if (!material.texture) {
                     return false;
                 }
@@ -1061,7 +1085,7 @@ TsStaticShapeFrame::softwarePolygons(const gfx::Palette* palette,
                 if (!bitmap) {
                     auto settings = p.nativeSoftware->settings;
                     settings.mipLevel = p.nativeMip;
-                    bitmap = cache ? cache->prepare(resources_.materials.textures[p.material],
+                    bitmap = cache ? cache->prepare(resources_.materials.textures()[p.material],
                                                     p.lightMap,
                                                     p.nativeSoftware,
                                                     p.nativeMip)

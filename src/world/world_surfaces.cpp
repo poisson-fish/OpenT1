@@ -274,7 +274,7 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrain(const TerrainGridResou
                 if (material.hole()) {
                     continue;
                 }
-                if (material.index >= result.materials.list.materialsPerDetail) {
+                if (material.index >= result.materials.list().materialsPerDetail) {
                     return {};
                 }
                 std::array<StaticSurfaceVertex, 4> v;
@@ -413,14 +413,14 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::interior(const InteriorShapeRe
         if (!s.renderable()) {
             continue;
         }
-        if (s.material >= result.materials.textures.size() ||
-            s.material >= result.materials.list.materials.size() ||
+        if (s.material >= result.materials.textures().size() ||
+            s.material >= result.materials.list().materials.size() ||
             s.firstVertex > g.vertices.size() || s.vertexCount < 3 ||
             s.vertexCount > g.vertices.size() - s.firstVertex) {
             return {};
         }
-        const auto* texture = result.materials.textures[s.material].get();
-        if (result.materials.list.materials[s.material].type() == 3 &&
+        const auto* texture = result.materials.textures()[s.material].get();
+        if (result.materials.list().materials[s.material].type() == 3 &&
             (!texture || texture->width <= 0 || texture->height <= 0)) {
             return {};
         }
@@ -597,13 +597,13 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::interior(const InteriorShapeRe
             const auto entry = weak.lock();
             if (entry->source.get() == geometry->source.get() &&
                 entry->lighting.get() == geometry->lighting.get() &&
-                std::ranges::equal(entry->materials.textures,
-                                   resources.materials.textures,
+                std::ranges::equal(entry->materials.textures(),
+                                   resources.materials.textures(),
                                    [](const auto& a, const auto& b) {
                                        return a.get() == b.get();
                                    }) &&
-                std::ranges::equal(entry->materials.list.materials,
-                                   resources.materials.list.materials,
+                std::ranges::equal(entry->materials.list().materials,
+                                   resources.materials.list().materials,
                                    [](const auto& a, const auto& b) {
                                        return a.flags == b.flags;
                                    })) {
@@ -638,16 +638,31 @@ std::optional<TsStaticShapeFrame> WorldSurfaceMesh::prepare(const TsStaticView& 
 
 bool WorldSurfaceMesh::retainedHardwareCompatible() const {
     return terrainPatches || (interiorMesh && interiorMesh->hardware &&
-                              std::ranges::none_of(materials.list.materials, [](const auto& m) {
+                              std::ranges::none_of(materials.list().materials, [](const auto& m) {
                                   return (m.flags & 0x2000U) != 0;
                               }));
 }
 
 std::optional<std::vector<gfx::HardwarePolygon>> WorldSurfaceMesh::hardwareInterior(
     const TsStaticView& view, const gfx::Palette& palette, Flt32 gamma) const {
+    std::vector<gfx::HardwarePolygon> polygons;
+    return appendHardwareInterior(polygons, view, palette, gamma)
+               ? std::optional(std::move(polygons))
+               : std::nullopt;
+}
+
+bool WorldSurfaceMesh::appendHardwareInterior(std::vector<gfx::HardwarePolygon>& polygons,
+                                              const TsStaticView& view,
+                                              const gfx::Palette& palette,
+                                              Flt32 gamma) const {
+    const auto first = polygons.size();
+    const auto fail = [&] {
+        polygons.resize(first);
+        return false;
+    };
     if (!retainedHardwareCompatible() || !view.perspective || !palette.valid() ||
         !std::isfinite(gamma) || gamma < .05f || gamma > 20)
-        return {};
+        return fail();
     // Ordinary preparation validates all material/texture encodings. Placeholder coverage
     // carries material state only; the hardware batch uses immutable indexed local vertices.
     static const std::array<gfx::PolygonVertex, 3> placeholder{{{{0, 0}}, {{1, 0}}, {{0, 1}}}};
@@ -661,7 +676,6 @@ std::optional<std::vector<gfx::HardwarePolygon>> WorldSurfaceMesh::hardwareInter
     }
     transform.optics = {view.focal.x, view.focal.y, view.center.x, view.center.y};
     transform.clip = {view.nearDistance, view.farDistance, 1, 0};
-    std::vector<gfx::HardwarePolygon> polygons;
     if (terrainPatches) {
         static const auto sharedPatch = [] {
             std::vector<gfx::HardwareVertex> vertices(18);
@@ -672,7 +686,7 @@ std::optional<std::vector<gfx::HardwarePolygon>> WorldSurfaceMesh::hardwareInter
             }
             return gfx::HardwareMesh::create(std::move(vertices), std::move(indices));
         }();
-        polygons.reserve(terrainPatches->patches.size());
+        polygons.reserve(first + terrainPatches->patches.size());
         for (const auto& patch : terrainPatches->patches) {
             auto local = view.shapeToCamera;
             local.preTranslate(patch.origin);
@@ -724,7 +738,7 @@ std::optional<std::vector<gfx::HardwarePolygon>> WorldSurfaceMesh::hardwareInter
             instance.mapping = {
                 patch.mapOrigin.x, patch.mapOrigin.y, patch.mapScale.x, patch.mapScale.y};
             gfx::HardwareMaterial material;
-            material.texture = materials.textures[patch.material].get();
+            material.texture = materials.textures()[patch.material].get();
             material.lightMap = patch.lightMap.get();
             material.linear = true;
             material.magnificationLinear =
@@ -747,7 +761,7 @@ std::optional<std::vector<gfx::HardwarePolygon>> WorldSurfaceMesh::hardwareInter
             polygon.indexCount = 18;
             polygons.push_back(std::move(polygon));
         }
-        return polygons;
+        return true;
     }
     for (std::size_t i = 0; i < interiorMesh->ranges.size(); ++i) {
         const auto range = interiorMesh->ranges[i];
@@ -755,12 +769,12 @@ std::optional<std::vector<gfx::HardwarePolygon>> WorldSurfaceMesh::hardwareInter
             (interiorSelection && !std::ranges::binary_search(*interiorSelection, UInt32(i))))
             continue;
         const auto id = interiorMesh->source->surfaces[i].material;
-        const auto& source = materials.list.materials[id];
+        const auto& source = materials.list().materials[id];
         gfx::HardwareMaterial material;
         material.color = {1, 1, 1};
         if (source.type() == 1) {
             if (source.index < 0 || source.index > 255)
-                return {};
+                return fail();
             const auto c = palette.find().colors[std::size_t(source.index)];
             material.color = {Flt32(c.red) / 255, Flt32(c.green) / 255, Flt32(c.blue) / 255};
             for (std::size_t cidx = 0; cidx < 3; ++cidx)
@@ -769,9 +783,9 @@ std::optional<std::vector<gfx::HardwarePolygon>> WorldSurfaceMesh::hardwareInter
             material.color = {
                 Flt32(source.rgb[0]) / 255, Flt32(source.rgb[1]) / 255, Flt32(source.rgb[2]) / 255};
         } else if (source.type() == 3) {
-            material.texture = materials.textures[id].get();
+            material.texture = materials.textures()[id].get();
             if (!material.texture)
-                return {};
+                return fail();
             material.wrap = true;
             material.linear = true;
             material.useSurfacePalette = true;
@@ -789,7 +803,7 @@ std::optional<std::vector<gfx::HardwarePolygon>> WorldSurfaceMesh::hardwareInter
                 material.paletteGamma = gamma;
             }
         } else
-            return {};
+            return fail();
         material.lightMap = interiorMaps ? (*interiorMaps)[i].get() : nullptr;
         gfx::HardwarePolygon polygon{placeholder,
                                      material,
@@ -801,7 +815,7 @@ std::optional<std::vector<gfx::HardwarePolygon>> WorldSurfaceMesh::hardwareInter
         polygon.indexCount = range[1];
         polygons.push_back(std::move(polygon));
     }
-    return polygons;
+    return true;
 }
 
 std::optional<WorldSurfaceMesh>
@@ -875,10 +889,10 @@ collectShadowReceivers(const sim::ShadowSourceWindow& w,
             }
             for (const auto& t : instance.mesh->surfaceTriangles(true)) {
                 spend(work);
-                if (t.material >= instance.mesh->materials.list.materials.size()) {
+                if (t.material >= instance.mesh->materials.list().materials.size()) {
                     return {};
                 }
-                const auto& material = instance.mesh->materials.list.materials[t.material];
+                const auto& material = instance.mesh->materials.list().materials[t.material];
                 if (!material.type() || (material.flags & 0x2000U)) {
                     continue;
                 }
@@ -1022,11 +1036,11 @@ worldShadowGeometry(const sim::ShadowSourceWindow& window,
                 }
                 for (const auto& triangle : instance.mesh->surfaceTriangles(true)) {
                     collision_detail::spend(work);
-                    if (triangle.material >= instance.mesh->materials.list.materials.size()) {
+                    if (triangle.material >= instance.mesh->materials.list().materials.size()) {
                         return {};
                     }
                     const auto& material =
-                        instance.mesh->materials.list.materials[triangle.material];
+                        instance.mesh->materials.list().materials[triangle.material];
                     if (!material.type() || (material.flags & 0x2000U)) {
                         continue;
                     }

@@ -311,8 +311,8 @@ bool renderSkyPass(const Sky& sky,
             0});
     }
     const auto* skyMaterials = sky.materials();
-    if (skyMaterials && pal && !skyMaterials->textures.empty() && skyMaterials->textures.front()) {
-        const auto& texture = *skyMaterials->textures.front();
+    if (skyMaterials && pal && !skyMaterials->textures().empty() && skyMaterials->textures().front()) {
+        const auto& texture = *skyMaterials->textures().front();
         if (texture.bitDepth == 8 && !texture.level().empty()) {
             const auto& sub = pal->find(texture.paletteIndex);
             const auto remap = [&](std::byte pixel) {
@@ -393,7 +393,7 @@ bool renderSkyPass(const Sky& sky,
             surface.fill(RectI{0, horizonY, w - 1, h - 1}, horizonIdx);
         }
     }
-    if (skyMaterials && !skyMaterials->textures.empty()) {
+    if (skyMaterials && !skyMaterials->textures().empty()) {
         std::vector<world::StaticSurfaceTriangle> triangles;
         // Original Sky::calcPoints/renderSkyBand: sixteen 22.5 degree panels,
         // camera-centered, from -size/8 to 3*size/4 above the horizon.
@@ -412,7 +412,7 @@ bool renderSkyPass(const Sky& sky,
             constexpr std::array<Point2F, 4> uv{{{0, 1}, {0, 0}, {1, 0}, {1, 1}}};
             for (const auto ids : {std::array{0, 1, 2}, std::array{0, 2, 3}}) {
                 world::StaticSurfaceTriangle triangle;
-                triangle.material = std::size_t(sky.textures()[i]) % skyMaterials->textures.size();
+                triangle.material = std::size_t(sky.textures()[i]) % skyMaterials->textures().size();
                 for (std::size_t j = 0; j < 3; ++j) {
                     triangle.vertices[j].position = points[ids[j]];
                     triangle.vertices[j].texture = uv[ids[j]];

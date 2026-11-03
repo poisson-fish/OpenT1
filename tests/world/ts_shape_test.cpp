@@ -31,23 +31,23 @@ void skins() {
     const auto source = TsMaterialResources::load(manager, original);
     CHECK(source);
     const auto skinned = TsMaterialResources::loadSkin(manager, original, "storm", "model.dts");
-    CHECK(skinned && skinned->list.details == 2 && skinned->list.materialsPerDetail == 4);
+    CHECK(skinned && skinned->list().details == 2 && skinned->list().materialsPerDetail == 4);
     for (std::size_t offset : {0U, 4U}) {
-        CHECK(skinned->list.materials[offset].mapFile == "storm.body.bmp");
-        CHECK(skinned->textures[offset].get() == manager.load<gfx::Bitmap>("storm.body.bmp").get());
+        CHECK(skinned->list().materials[offset].mapFile == "storm.body.bmp");
+        CHECK(skinned->textures()[offset].get() == manager.load<gfx::Bitmap>("storm.body.bmp").get());
         // Each base.* slot keeps its own suffix and falls back independently.
-        CHECK(skinned->list.materials[offset + 2].mapFile == "base.trim.bmp");
+        CHECK(skinned->list().materials[offset + 2].mapFile == "base.trim.bmp");
         for (std::size_t slot = offset + 1; slot < offset + 4; ++slot) {
-            CHECK(skinned->list.materials[slot].mapFile == original.materials[slot].mapFile);
-            CHECK(skinned->textures[slot].get() == source->textures[slot].get());
+            CHECK(skinned->list().materials[slot].mapFile == original.materials[slot].mapFile);
+            CHECK(skinned->textures()[slot].get() == source->textures()[slot].get());
         }
     }
-    CHECK(skinned->list.materials[0].alpha == .5f && skinned->list.materials[0].surfaceType == 7 &&
-          skinned->list.materials[0].friction == .25f);
-    CHECK(hash(original) == hash(source->list)); // the shared shape list stays unchanged
+    CHECK(skinned->list().materials[0].alpha == .5f && skinned->list().materials[0].surfaceType == 7 &&
+          skinned->list().materials[0].friction == .25f);
+    CHECK(hash(original) == hash(source->list())); // the shared shape list stays unchanged
     for (const auto skin : {"missing", "base", ""}) {
         const auto fallback = TsMaterialResources::loadSkin(manager, original, skin, "model.dts");
-        CHECK(fallback && hash(fallback->list) == hash(original));
+        CHECK(fallback && hash(fallback->list()) == hash(original));
     }
     // An explicit DML may intentionally replace every slot, including custom materials.
     auto replacement = std::make_unique<TsMaterialList>(original);
@@ -59,13 +59,13 @@ void skins() {
     const auto replacementHash = hash(*replacement);
     CHECK(manager.add("listed.model.dml", std::move(replacement)));
     const auto listed = TsMaterialResources::loadSkin(manager, original, "listed", "model.dts");
-    CHECK(listed && hash(listed->list) == replacementHash);
+    CHECK(listed && hash(listed->list()) == replacementHash);
     // An unusable DML falls back to the individual original slots.
     auto invalid = std::make_unique<TsMaterialList>(original);
     invalid->materials[0].mapFile = "absent.bmp";
     CHECK(manager.add("broken.model.dml", std::move(invalid)));
     const auto fallback = TsMaterialResources::loadSkin(manager, original, "broken", "model");
-    CHECK(fallback && hash(fallback->list) == hash(original));
+    CHECK(fallback && hash(fallback->list()) == hash(original));
     auto missing = original;
     missing.materials[1].mapFile = "absent.bmp";
     CHECK(!TsMaterialResources::loadSkin(manager, missing, "storm", "model"));
@@ -124,7 +124,7 @@ void damageSkins() {
     for (Int32 level = 1; level <= 3; ++level) {
         const auto damaged = TsMaterialResources::withDamageSkin(manager, *source, level, names);
         CHECK(damaged);
-        const auto& bitmap = *damaged->textures[0];
+        const auto& bitmap = *damaged->textures()[0];
         CHECK(bitmap.valid() && bitmap.paletteIndex == 7 && bitmap.detailLevels == 2);
         for (Int32 y = 0; y < 8; ++y) {
             for (Int32 x = 0; x < 8; ++x) {
@@ -134,30 +134,30 @@ void damageSkins() {
         CHECK(std::ranges::all_of(bitmap.level(1), [](auto pixel) {
             return pixel == std::byte{1};
         }));
-        CHECK(damaged->textures[1].get() == source->textures[1].get());
-        CHECK(damaged->textures[2].get() == source->textures[2].get());
+        CHECK(damaged->textures()[1].get() == source->textures()[1].get());
+        CHECK(damaged->textures()[2].get() == source->textures()[2].get());
         const auto cached = TsMaterialResources::withDamageSkin(manager, *source, level, names);
-        CHECK(cached && cached->textures[0].get() == damaged->textures[0].get());
+        CHECK(cached && cached->textures()[0].get() == damaged->textures()[0].get());
     }
-    CHECK(std::ranges::all_of(source->textures[0]->pixels, [](auto pixel) {
+    CHECK(std::ranges::all_of(source->textures()[0]->pixels, [](auto pixel) {
         return pixel == std::byte{1};
     }));
     const auto clean = TsMaterialResources::withDamageSkin(manager, *source, 0, names);
-    CHECK(clean && clean->textures[0].get() == source->textures[0].get());
+    CHECK(clean && clean->textures()[0].get() == source->textures()[0].get());
     CHECK(!TsMaterialResources::withDamageSkin(manager, *source, 4, names));
     // An unavailable first bitmap ends the legacy usable prefix.
     const std::array missing{std::string("missing"), std::string("scar")};
     const auto absent = TsMaterialResources::withDamageSkin(manager, *source, 1, missing);
-    CHECK(absent && absent->textures[0].get() == source->textures[0].get());
+    CHECK(absent && absent->textures()[0].get() == source->textures()[0].get());
     ResourceManager oversizeManager;
-    CHECK(oversizeManager.add("armor.bmp", std::make_unique<gfx::Bitmap>(*source->textures[0])));
+    CHECK(oversizeManager.add("armor.bmp", std::make_unique<gfx::Bitmap>(*source->textures()[0])));
     CHECK(oversizeManager.add("oversized.bmp", gfx::Bitmap::create(8, 8)));
     const auto oversizedSource = TsMaterialResources::load(oversizeManager, list);
     CHECK(oversizedSource);
     const std::array oversized{std::string("oversized")};
     const auto skipped =
         TsMaterialResources::withDamageSkin(oversizeManager, *oversizedSource, 3, oversized);
-    CHECK(skipped && skipped->textures[0]->pixels == source->textures[0]->pixels);
+    CHECK(skipped && skipped->textures()[0]->pixels == source->textures()[0]->pixels);
 }
 
 void unit() {
@@ -346,7 +346,7 @@ void unit() {
     CHECK(manager.add<gfx::Bitmap>("test.bmp", gfx::Bitmap::create(4, 4)));
     auto retained = TsShapeResources::load(manager, "MODEL.DTS");
     CHECK(retained);
-    CHECK(retained->materials.textures[0] && retained->shape->nodes.size() == 2);
+    CHECK(retained->materials.textures()[0] && retained->shape->nodes.size() == 2);
 }
 
 void assets(const std::filesystem::path& directory) {

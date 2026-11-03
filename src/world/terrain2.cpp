@@ -360,7 +360,7 @@ bool location(Point2I p) {
 std::optional<Terrain2> Terrain2::convert(const TerrainGridResources& resources) {
     if (!resources.grid || resources.grid->blockMap.empty() ||
         resources.blocks.size() != resources.grid->blocks.size() ||
-        resources.materials.textures.size() < 2 || !resources.materials.textures[1]) {
+        resources.materials.textures().size() < 2 || !resources.materials.textures()[1]) {
         return {};
     }
     const auto id = resources.grid->blockMap[0];
@@ -386,11 +386,11 @@ std::optional<Terrain2> Terrain2::convert(const TerrainGridResources& resources)
     }
     b->baseTexture = std::move(*base);
     b->lightMap = std::move(*light);
-    const auto palette = resources.materials.textures[1]->paletteIndex;
+    const auto palette = resources.materials.textures()[1]->paletteIndex;
     b->baseTexture.paletteIndex = palette;
-    std::vector<UInt8> texels(resources.materials.textures.size());
+    std::vector<UInt8> texels(resources.materials.textures().size());
     for (std::size_t i = 0; i < texels.size(); ++i) {
-        const auto& t = resources.materials.textures[i];
+        const auto& t = resources.materials.textures()[i];
         if (t) {
             if (!t->valid() || t->bitDepth != 8) {
                 return {};
@@ -469,7 +469,7 @@ bool Terrain2::setHeight(Point2I p, Flt32 h) {
 }
 
 bool Terrain2::setMaterial(Point2I p, TerrainGridMaterial m) {
-    if (!block_ || !location(p) || m.index >= materials_.textures.size()) {
+    if (!block_ || !location(p) || m.index >= materials_.textures().size()) {
         return false;
     }
     auto b = std::make_shared<Terrain2Block>(*block_);
@@ -608,8 +608,9 @@ std::optional<Terrain2Frame> Terrain2::render(const Terrain2View& view) const {
         }
         const auto baseHandle = owner.load<gfx::Bitmap>("terrain2-base.bmp");
         std::map<std::tuple<UInt32, UInt32, UInt32, UInt32>, UInt32> materialIds;
-        result.materials.list.details = 1;
-        result.materials.list.version = 4;
+        TsMaterialResources::Data materialData;
+        materialData.list.details = 1;
+        materialData.list.version = 4;
         for (Int32 square = 0; square < s.squareCount; ++square) {
             const auto& q = s.squares[std::size_t(square)];
             const auto indices = fan(s, q);
@@ -639,10 +640,10 @@ std::optional<Terrain2Frame> Terrain2::render(const Terrain2View& view) const {
                 material.flags = 3; // native terrain is opaque texture shaded
                 if (!q.level) {
                     const auto m = block_->materials[std::size_t(y) * 256 + x];
-                    if (m.index >= materials_.textures.size() || !materials_.textures[m.index]) {
+                    if (m.index >= materials_.textures().size() || !materials_.textures()[m.index]) {
                         return {};
                     }
-                    texture = materials_.textures[m.index];
+                    texture = materials_.textures()[m.index];
                 } else if (q.mipLevel == 255) {
                     texture = baseHandle;
                 } else {
@@ -674,17 +675,17 @@ std::optional<Terrain2Frame> Terrain2::render(const Terrain2View& view) const {
                     }
                     texture = owner.load<gfx::Bitmap>(name);
                 }
-                slot = UInt32(result.materials.textures.size());
+                slot = UInt32(materialData.textures.size());
                 if (slot >= 4096) {
                     return {};
                 }
-                result.materials.textures.push_back(texture);
-                result.materials.list.materials.push_back(material);
+                materialData.textures.push_back(texture);
+                materialData.list.materials.push_back(material);
                 materialIds.emplace(key, slot);
             } else {
                 slot = id->second;
             }
-            draw.texture = result.materials.textures[slot];
+            draw.texture = materialData.textures[slot];
             Point2F lightOffset{Flt32(x) + .5f, Flt32(y) + .5f};
             Flt32 lightScale = 1.f / 256;
             if (q.lightMask) {
@@ -737,7 +738,8 @@ std::optional<Terrain2Frame> Terrain2::render(const Terrain2View& view) const {
             }
             result.draws.push_back(std::move(draw));
         }
-        result.materials.list.materialsPerDetail = Int32(result.materials.textures.size());
+        materialData.list.materialsPerDetail = Int32(materialData.textures.size());
+        result.materials = TsMaterialResources(std::move(materialData));
         return result;
     } catch (const AssertException&) {
         return {};
@@ -852,7 +854,7 @@ std::optional<gfx::HardwareBatch> Terrain2WaterFrame::hardware(const TsStaticVie
         return {};
     }
     ResourceManager owner;
-    TsMaterialResources materials;
+    TsMaterialResources::Data materials;
     materials.list.details = 1;
     materials.list.version = 4;
     materials.list.materialsPerDetail = 1;

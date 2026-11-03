@@ -40,20 +40,22 @@ void modelRendering() {
     const auto software = retained->softwarePolygons(&palette);
     CHECK(software && software->size() == rendered->polygonCount());
     auto litResources = *loaded;
-    litResources.materials.list.materials[0].flags = 0x403;
+    auto litMaterials = litResources.materials.data();
+    litMaterials.list.materials[0].flags = 0x403;
+    litResources.materials = world::TsMaterialResources(std::move(litMaterials));
     auto litView = view;
     litView.lighting.emplace();
     litView.lighting->ambient = {.1f, .1f, .1f};
     world::TsLight sun;
     sun.type = world::TsLight::Type::DirectionalWrap;
-    sun.shadowMap.emplace();
-    sun.shadowMap->side = 4;
-    sun.shadowMap->samples.resize(16, 96);
+    sun.shadowMap = std::make_shared<const gfx::DirectionalShadowMap>(
+        gfx::DirectionalShadowMap{4, {}, 1, std::vector<UInt8>(16, 96)});
     litView.lighting->lights = {sun};
     const auto litReference = world::TsStaticShapeFrame::prepare(litResources, litView, *pose);
     const auto litSnapshot = world::TsStaticShapeFrame::prepare(litResources, litView, *pose, true);
     CHECK(litReference && litSnapshot);
-    std::ranges::fill(litView.lighting->lights[0].shadowMap->samples, UInt8{255});
+    litView.lighting->lights[0].shadowMap = std::make_shared<const gfx::DirectionalShadowMap>(
+        gfx::DirectionalShadowMap{4, {}, 1, std::vector<UInt8>(16, 255)});
     const auto expectedLighting = litReference->softwarePolygons(&palette);
     const auto frozenLighting = litSnapshot->softwarePolygons(&palette);
     CHECK(expectedLighting && frozenLighting && expectedLighting->size() == frozenLighting->size());
@@ -217,7 +219,7 @@ void liveDatablockReplacement() {
     // Force a new material preparation after the original registry owner leaves.
     world::WorldShapeQuery query;
     CHECK(shape.processQuery(query) && query.image);
-    CHECK(query.image->resources.materials.textures.size() == 1);
+    CHECK(query.image->resources.materials.textures().size() == 1);
     CHECK(source->fileName == "test.dts");
     CHECK(shape.initResources(nullptr));
     CHECK(owner.expired());

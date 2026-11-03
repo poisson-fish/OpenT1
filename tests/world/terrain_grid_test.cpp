@@ -618,10 +618,10 @@ void assets(const std::filesystem::path& directory) {
                                   a.vertices[j].lightMap == b.vertices[j].lightMap);
                         }
                     }
-                    CHECK(streamed->materials.textures.size() == window->materials.textures.size());
-                    for (std::size_t i = 0; i < window->materials.textures.size(); ++i) {
-                        const auto& a = window->materials.textures[i];
-                        const auto& b = streamed->materials.textures[i];
+                    CHECK(streamed->materials.textures().size() == window->materials.textures().size());
+                    for (std::size_t i = 0; i < window->materials.textures().size(); ++i) {
+                        const auto& a = window->materials.textures()[i];
+                        const auto& b = streamed->materials.textures()[i];
                         CHECK(bool(a) == bool(b));
                         if (a) {
                             CHECK(a->width == b->width && a->height == b->height &&

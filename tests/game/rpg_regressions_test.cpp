@@ -283,7 +283,7 @@ void installedRpgRegressions() {
         CHECK(ghost->processQuery(query) && query.image);
         CHECK(ghost->currentSkin() == bot->getSkinBase());
         const auto& authored = ghost->getTSShape()->materials->materials;
-        const auto& rendered = query.image->resources.materials.list.materials;
+        const auto& rendered = query.image->resources.materials.list().materials;
         CHECK(authored.size() == rendered.size());
         for (std::size_t i = 0; i < authored.size(); ++i) {
             if (authored[i].mapFile.starts_with("base.")) {

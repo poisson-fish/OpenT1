@@ -955,7 +955,7 @@ std::shared_ptr<const WorldSurfaceMesh> boxSurface(const Box3F& box) {
     }
     auto mesh = std::make_shared<WorldSurfaceMesh>();
     mesh->bounds = box;
-    auto& materials = mesh->materials;
+    TsMaterialResources::Data materials;
     materials.list.details = 1;
     materials.list.materialsPerDetail = 3;
     materials.textures.resize(3);
@@ -965,6 +965,7 @@ std::shared_ptr<const WorldSurfaceMesh> boxSurface(const Box3F& box) {
         m.index = 253 - i;
         materials.list.materials.push_back(m);
     }
+    mesh->materials = TsMaterialResources(std::move(materials));
     const auto faces = boxFaces(box);
     for (const auto& face : faces) {
         for (const auto& indices :

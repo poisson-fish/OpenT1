@@ -185,8 +185,8 @@ struct WorldSurfaceQuery : sim::SimQuery {
 
     std::optional<WorldSurfaceInstance> image;
     std::optional<sim::EnvironmentCamera> camera; // input for view-dependent providers
-    std::optional<sim::SimSceneLighting>
-        lighting; // owned world-space input; absent disables scene merging
+    std::shared_ptr<const sim::SimSceneLighting>
+        lighting; // shared immutable world-space input; absent disables scene merging
     // Override terrain lighting/cache policy for this capture. RetainedLru uses
     // current-size hardware tiles with OpenGL lightmaps. Absence
     // preserves the provider's explicit policy (including comparison viewers).
@@ -408,7 +408,8 @@ public:
     }
 
     [[nodiscard]] const sim::SimSceneLighting& lighting() const {
-        return lighting_;
+        static const sim::SimSceneLighting empty;
+        return lighting_ ? *lighting_ : empty;
     }
 
     [[nodiscard]] std::optional<sim::ShadowGeometry>
@@ -450,7 +451,7 @@ private:
     std::vector<sim::SimVolumetricRenderImage> volumes_;
     WorldVolumeMaterials materials_;
     std::optional<bool> outsideVisible_;
-    sim::SimSceneLighting lighting_;
+    std::shared_ptr<const sim::SimSceneLighting> lighting_;
     bool lightingEnabled_{};
     bool retainedHardware_{};
 };

@@ -1096,7 +1096,7 @@ classifyTsUtilityDetails(TsShape& shape, std::span<const std::string_view> prefi
 
 std::optional<TsMaterialResources> TsMaterialResources::load(ResourceManager& manager,
                                                              const TsMaterialList& list) {
-    TsMaterialResources result{list, {}};
+    Data result{list, {}};
     result.textures.resize(list.materials.size());
     const auto ok =
         std::ranges::all_of(std::views::iota(std::size_t{0}, list.materials.size()), [&](auto i) {
@@ -1106,7 +1106,7 @@ std::optional<TsMaterialResources> TsMaterialResources::load(ResourceManager& ma
             result.textures[i] = manager.load<gfx::Bitmap>(list.materials[i].mapFile);
             return bool(result.textures[i]);
         });
-    return ok ? std::optional(std::move(result)) : std::nullopt;
+    return ok ? std::optional(TsMaterialResources(std::move(result))) : std::nullopt;
 }
 
 std::optional<TsShapeResources> TsShapeResources::load(ResourceManager& manager,
@@ -1138,7 +1138,7 @@ std::optional<TsMaterialResources> TsMaterialResources::loadSkin(ResourceManager
             }
         }
     }
-    TsMaterialResources result{original, {}};
+    Data result{original, {}};
     result.textures.resize(original.materials.size());
     for (std::size_t i = 0; i < original.materials.size(); ++i) {
         auto& material = result.list.materials[i];
@@ -1161,20 +1161,20 @@ std::optional<TsMaterialResources> TsMaterialResources::loadSkin(ResourceManager
             return {};
         }
     }
-    return result;
+    return TsMaterialResources(std::move(result));
 }
 
 std::optional<TsMaterialResources>
 TsMaterialResources::withDamageSkin(ResourceManager& manager,
-                                    TsMaterialResources result,
+                                    TsMaterialResources sourceMaterials,
                                     Int32 damageLevel,
                                     std::span<const std::string> bitmapNames) {
     if (damageLevel < 0 || damageLevel > 3 ||
-        result.textures.size() != result.list.materials.size()) {
+        sourceMaterials.textures().size() != sourceMaterials.list().materials.size()) {
         return {};
     }
     if (damageLevel == 0) {
-        return result;
+        return sourceMaterials;
     }
     std::vector<Resource<gfx::Bitmap>> decals;
     for (const auto& baseName : bitmapNames) {
@@ -1193,8 +1193,9 @@ TsMaterialResources::withDamageSkin(ResourceManager& manager,
         decals.push_back(std::move(bitmap));
     }
     if (decals.empty()) {
-        return result;
+        return sourceMaterials;
     }
+    auto result = sourceMaterials.data();
     for (std::size_t slot = 0; slot < result.textures.size(); ++slot) {
         auto& material = result.list.materials[slot];
         if (material.type() != 3 || (material.flags & 0xf000U) != 0) {
@@ -1253,6 +1254,6 @@ TsMaterialResources::withDamageSkin(ResourceManager& manager,
         material.mapFile = name;
         result.textures[slot] = std::move(damaged);
     }
-    return result;
+    return TsMaterialResources(std::move(result));
 }
 } // namespace opent1::world

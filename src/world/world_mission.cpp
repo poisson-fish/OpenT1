@@ -434,7 +434,7 @@ bool SimMissionInterior::apply(const InteriorMissionState& input, ResourceManage
         return false;
     }
     std::vector<sim::SimCollisionMaterial> collisionMaterials;
-    for (const auto& material : r->materials.list.materials) {
+    for (const auto& material : r->materials.list().materials) {
         collisionMaterials.push_back(
             {material.friction, material.elasticity, material.surfaceType});
     }
@@ -674,7 +674,7 @@ bool SimMissionTerrain::apply(const TerrainMissionState& input,
     policy.lightMapDensity = TerrainLightMapDensity::Native;
     policy.sceneLighting = true;
     std::vector<sim::SimCollisionMaterial> collisionMaterials;
-    for (const auto& material : resources->materials.list.materials) {
+    for (const auto& material : resources->materials.list().materials) {
         collisionMaterials.push_back(
             {material.friction, material.elasticity, material.surfaceType});
     }

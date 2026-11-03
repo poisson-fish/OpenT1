@@ -20,6 +20,7 @@
 #include <opent1/game/flying_camera.hpp>
 #include <opent1/game/game_app.hpp>
 #include <opent1/sim/sim_native_media.hpp>
+#include <opent1/sim/sim_resource_volume.hpp>
 #include <opent1/game/game_base.hpp>
 #include <opent1/game/hud_controls.hpp>
 #include <opent1/game/interior_shape.hpp>
@@ -2232,13 +2233,45 @@ void FearPlugin::init(Console& console, sim::SimManager* manager) {
 
     console.addCommand(
         0, "disconnect", [this](Console&, Int32, std::span<const std::string>) -> std::string {
+            if ((cg_.manager && cg_.manager->isDispatching()) ||
+                (sg_.manager && sg_.manager->isDispatching())) {
+                return "False";
+            }
+            // Startup mounts and canvases belong to the shell. Keep their
+            // script identities when resetting the client; EndGame still needs
+            // the shell archives to load the next menu after disconnect().
+            std::vector<sim::SimObject*> retained;
+            if (cg_.manager) {
+                for (auto* object : cg_.manager->objects()) {
+                    const auto* volume = dynamic_cast<sim::SimVolume*>(object);
+                    if ((volume && !volume->isGhost()) || dynamic_cast<sim::SimCanvas*>(object)) {
+                        retained.push_back(object);
+                    }
+                }
+            }
+            std::vector<std::unique_ptr<sim::SimObject>> shell;
+            for (auto* object : retained) {
+                auto owned = cg_.manager->unregisterObject(*object);
+                if (!owned) {
+                    return "False";
+                }
+                shell.push_back(std::move(owned));
+            }
             const bool local = connectAddress_ == "LOOPBACK:28001";
             connectAddress_.clear();
             destroyClientWorld();
             if (local) {
                 destroyServerWorld();
             }
-            return createClientWorld() ? "True" : "False";
+            if (!createClientWorld()) {
+                return "False";
+            }
+            for (auto& object : shell) {
+                if (!cg_.manager->addObject(std::move(object))) {
+                    return "False";
+                }
+            }
+            return "True";
         });
 
     console.addCommand(

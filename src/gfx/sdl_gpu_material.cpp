@@ -1,4 +1,5 @@
 #include "sdl_gpu_material.hpp"
+#include "gpu_transfer_layout.hpp"
 #include "gpu_shaders.hpp"
 #include <algorithm>
 #include <chrono>
@@ -645,6 +646,7 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
         return nullptr;
     }
     const auto vertexBytes = UInt32((batch.vertices().size() + 6) * sizeof(HardwareVertex));
+    const auto rowAlignment = textureRowAlignment(device_);
     UInt64 transferBytes = vertexBytes;
     for (auto i : std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t i) {
                       return i < textures.size();
@@ -652,7 +654,7 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
         const auto& t = textures[i];
         const auto add = [&](Int32 tw, Int32 th, UInt32 level, const auto& rgba) {
             const auto offset = align(transferBytes, 512),
-                       pitch = align(UInt64(UInt32(tw)) * 4, 256);
+                       pitch = rgbaTransferPitch(UInt32(tw), rowAlignment);
             transferBytes = offset + pitch * UInt32(th);
             if (transferBytes > maxTransfer) {
                 return false;
@@ -836,7 +838,7 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
         if (bindings[t.texture]->slot) {
             t.width += 2;
             t.height += 2;
-            t.pitch = UInt32(align(UInt64(t.width) * 4, 256));
+            t.pitch = UInt32(rgbaTransferPitch(t.width, rowAlignment));
         }
         t.offset = UInt32(align(transferBytes, 512));
         transferBytes = t.offset + UInt64(t.pitch) * t.height;

@@ -145,6 +145,8 @@ ctest --test-dir build/headless --output-on-failure --no-tests=error
 | `OPENT1_BUILD_AUDIO` | `ON` | Build OpenAL audio and simulation adapters |
 | `OPENT1_BUILD_EXAMPLES` | `OFF` | Build native demonstration applications |
 | `OPENT1_BUILD_TERRAIN2` | `ON` | Include the additional Terrain2 authoring/render branch |
+| `OPENT1_TEST_GPU` | `OFF` | Register the optional real-device GPU test |
+| `OPENT1_TEST_GPU_DRIVER` | empty | Select its SDL GPU backend; empty selects automatically |
 
 Warnings are errors in project C++ code. Public headers use the
 `<opent1/...>` include prefix. The main targets are `opent1`,
@@ -195,6 +197,25 @@ loading, GUI routing/editing, player/weapons behavior, game integration, and
 media decoding/playback. The [fixture inventory](../tests/data/README.md)
 describes the checked-in test records, embedded test streams, and metadata,
 with sizes and SHA-256 hashes.
+
+Default CTest runs use SDL's dummy video driver and skip GPU rendering. To
+exercise actual texture uploads, lightmap pages, arrays, terrain and shapes on
+a Mac, enable the optional GPU check and select Metal:
+
+```sh
+cmake --preset macos-release -DOPENT1_TEST_GPU=ON -DOPENT1_TEST_GPU_DRIVER=metal
+cmake --build --preset macos-release
+ctest --preset macos-release -R '^gpu$'
+```
+
+The `gpu` check requires a native video driver and fails if
+`SDL_VIDEODRIVER=dummy` is inherited. It runs serially to avoid native window
+tests interfering with each other. The same check supports `direct3d12` and
+`vulkan` on hosts providing those backends. Without reconfiguring CMake, run
+`opent1_tests --suite gpu` directly with `SDL_GPU_DRIVER=metal` in the environment.
+Patterned readbacks verify row widths around 256-byte alignment boundaries,
+framebuffer/bitmap uploads, dynamic textures, array layers and authored mipmaps
+against known pixel colors.
 
 Add regression cases to the relevant subsystem directory. Register the case
 with `OPENT1_REGISTER_TEST` from `test_registry.hpp`, add its source to

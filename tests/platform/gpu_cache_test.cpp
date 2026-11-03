@@ -10,6 +10,81 @@
 using namespace opent1;
 
 namespace {
+void patternedTransfers(platform::SdlWindow& window) {
+    gfx::Palette palette;
+    for (auto i : std::views::iota(0U, 256U))
+        palette.palettes[0].colors[i] = {UInt8(i), UInt8(255 - i), UInt8((i * 37) & 255), 0};
+    auto surface = gfx::SdlGpuSurface::create(window, 1, 8);
+    CHECK(surface);
+    const auto verify = [&](const auto& expected) {
+        std::vector<std::byte> actual(expected.size());
+        CHECK(surface->readback(actual));
+        CHECK(actual == expected);
+    };
+    const auto pattern = [&](gfx::Bitmap& bitmap, Int32 level) {
+        const auto width = std::max(1, bitmap.width >> level);
+        const auto height = std::max(1, bitmap.height >> level);
+        std::vector<std::byte> expected(std::size_t(width) * height * 4);
+        for (auto y : std::views::iota(0, height)) {
+            auto row = bitmap.row(y, level);
+            for (auto x : std::views::iota(0, width)) {
+                const auto index = UInt8((x * 3 + y * 19 + level * 43) & 255);
+                row[x] = std::byte(index);
+                const auto& color = palette.palettes[0].colors[index];
+                const auto offset = (std::size_t(y) * width + x) * 4;
+                expected[offset] = std::byte(color.red);
+                expected[offset + 1] = std::byte(color.green);
+                expected[offset + 2] = std::byte(color.blue);
+                expected[offset + 3] = std::byte{255};
+            }
+        }
+        return expected;
+    };
+    const auto render = [&](const gfx::Bitmap& bitmap, Int32 width, Int32 height, bool dynamic) {
+        const Flt32 w = Flt32(width), h = Flt32(height);
+        const std::array<gfx::PolygonVertex, 4> quad{
+            {{{0, 0}, {0, 0}}, {{w, 0}, {1, 0}}, {{w, h}, {1, 1}}, {{0, h}, {0, 1}}}};
+        gfx::HardwareMaterial material;
+        material.texture = &bitmap;
+        material.depth = gfx::HardwareDepth::Disabled;
+        material.perspective = false;
+        material.dynamicTexture = dynamic;
+        material.mipFilter = gfx::HardwareMipFilter::Nearest;
+        const gfx::HardwarePolygon polygon{quad, material};
+        const auto batch = gfx::HardwareBatch::prepare(std::span(&polygon, 1), &palette);
+        CHECK(batch && surface->render(*batch));
+    };
+    // Narrow, odd and aligned widths catch padding read as texels. Compare
+    // against known colors, rather than another potentially corrupt GPU path.
+    for (const auto width : {1, 4, 17, 63, 64, 65, 127, 128, 129}) {
+        auto bitmap = gfx::Bitmap::create(width, 8);
+        CHECK(bitmap && surface->resize(width, 8));
+        bitmap->palette = palette;
+        const auto expected = pattern(*bitmap, 0);
+        CHECK(surface->software().setPalette(palette));
+        CHECK(surface->software().blit(*bitmap, {0, 0}) && surface->upload());
+        verify(expected);
+        CHECK(surface->uploadBitmap(*bitmap));
+        verify(expected);
+        render(*bitmap, width, 8, false); // texture-array layer
+        verify(expected);
+        render(*bitmap, width, 8, true); // standalone UI/dynamic texture
+        verify(expected);
+    }
+    auto mipmapped = gfx::Bitmap::create(128, 32);
+    CHECK(mipmapped);
+    mipmapped->detailLevels = 3;
+    mipmapped->pixels.resize(128 * 32 + 64 * 16 + 32 * 8);
+    (void)pattern(*mipmapped, 0);
+    (void)pattern(*mipmapped, 1);
+    const auto expected = pattern(*mipmapped, 2);
+    CHECK(surface->resize(32, 8));
+    render(*mipmapped, 32, 8, false);
+    verify(expected);
+    render(*mipmapped, 32, 8, true);
+    verify(expected);
+}
+
 gfx::HardwareBatch content(unsigned first) {
     const std::array<gfx::PolygonVertex, 4> vertices{
         {{{0, 0}, {0, 0}}, {{16, 0}, {1, 0}}, {{16, 16}, {1, 1}}, {{0, 16}, {0, 1}}}};
@@ -770,12 +845,13 @@ void shapeReadbacks(platform::SdlWindow& window) {
                                             conversionBudget.budgetEntries);
 }
 
-int gpuCache() {
-    return test::run([] {
+int runGpuCache(bool requireGpu) {
+    return test::run([&] {
         platform::SdlApplication app;
         CHECK(app.initialize({}) == SDL_APP_CONTINUE);
         const auto* driver = SDL_GetCurrentVideoDriver();
         if (driver && std::string_view(driver) == "dummy") {
+            CHECK(!requireGpu);
             std::puts("GPU cache test skipped: SDL dummy driver has no GPU device");
             return;
         }
@@ -783,6 +859,7 @@ int gpuCache() {
         config.hidden = true;
         config.width = config.height = 16;
         auto& window = app.createWindow(config);
+        patternedTransfers(window);
         retainedWorkingSet(window);
         retainedMesh(window);
         retainedInstanceSubmission(window);
@@ -794,7 +871,16 @@ int gpuCache() {
         shapeReadbacks(window);
     });
 }
+
+int gpuCache() {
+    return runGpuCache(false);
+}
+
+int requiredGpuCache() {
+    return runGpuCache(true);
+}
 }
 
 #include "test_registry.hpp"
 OPENT1_REGISTER_TEST("platform", "gpu_cache", gpuCache);
+OPENT1_REGISTER_TEST("gpu", "gpu_cache", requiredGpuCache);

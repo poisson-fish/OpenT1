@@ -1,6 +1,7 @@
 #include <opent1/gfx/sdl_gpu_surface.hpp>
 #include <ranges>
 #include "sdl_gpu_material.hpp"
+#include "gpu_transfer_layout.hpp"
 #include <SDL3/SDL_gpu.h>
 #include <algorithm>
 #include <cmath>
@@ -9,12 +10,12 @@
 
 namespace opent1::gfx {
 namespace {
-UInt32 framebufferPitch(Int32 width, Int32 height) {
+UInt32 framebufferPitch(Int32 width, Int32 height, SDL_GPUDevice* device = nullptr) {
     if (width <= 0 || height <= 0 || width > Bitmap::MaxDimension ||
         height > Bitmap::MaxDimension) {
         return 0;
     }
-    const auto pitch = (UInt64(UInt32(width)) * 4 + 255) & ~UInt64{255};
+    const auto pitch = detail::rgbaTransferPitch(UInt32(width), detail::textureRowAlignment(device));
     return pitch * UInt32(height) <= Bitmap::MaxFileBytes ? UInt32(pitch) : 0;
 }
 
@@ -91,7 +92,7 @@ struct SdlGpuSurface::Impl {
     }
 
     bool resize(Int32 width, Int32 height) {
-        const auto newPitch = framebufferPitch(width, height);
+        const auto newPitch = framebufferPitch(width, height, device);
         if (!newPitch) {
             return SDL_SetError("Invalid GPU framebuffer dimensions");
         }
@@ -302,7 +303,7 @@ bool SdlGpuSurface::upload() {
 
 bool SdlGpuSurface::uploadBitmap(const Bitmap& bitmap) {
     auto& s = *impl_;
-    const auto pitch = framebufferPitch(bitmap.width, bitmap.height);
+    const auto pitch = framebufferPitch(bitmap.width, bitmap.height, s.device);
     if (!ready() || !pitch || !bitmap.valid() || bitmap.bitDepth != 8 || !bitmap.palette) {
         return SDL_SetError("Invalid GPU bitmap upload");
     }

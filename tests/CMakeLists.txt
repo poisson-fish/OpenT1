@@ -75,6 +75,10 @@ if(OPENT1_BUILD_AUDIO)
     list(APPEND suites audio)
 endif()
 if(OPENT1_BUILD_PLATFORM)
+    option(OPENT1_TEST_GPU "Register real-device GPU tests (requires a native video driver)" OFF)
+    set(OPENT1_TEST_GPU_DRIVER
+        "" CACHE STRING "SDL GPU backend for real-device tests (empty selects automatically)"
+    )
     target_sources(opent1_tests PRIVATE platform/window_test.cpp platform/gpu_cache_test.cpp)
     if(WIN32 AND TARGET SDL3::SDL3-shared)
         add_custom_command(
@@ -103,6 +107,27 @@ foreach(suite IN LISTS suites)
                    "SDL_VIDEODRIVER=dummy;ALSOFT_DRIVERS=null"
     )
 endforeach()
+
+if(OPENT1_BUILD_PLATFORM AND OPENT1_TEST_GPU)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/gpu")
+    add_test(NAME gpu COMMAND opent1_tests --suite gpu)
+    set_tests_properties(
+        gpu
+        PROPERTIES TIMEOUT
+                   120
+                   LABELS
+                   "gpu"
+                   RUN_SERIAL
+                   TRUE
+                   WORKING_DIRECTORY
+                   "${CMAKE_CURRENT_BINARY_DIR}/gpu"
+                   ENVIRONMENT
+                   "ALSOFT_DRIVERS=null"
+    )
+    if(OPENT1_TEST_GPU_DRIVER)
+        set_property(TEST gpu APPEND PROPERTY ENVIRONMENT "SDL_GPU_DRIVER=${OPENT1_TEST_GPU_DRIVER}")
+    endif()
+endif()
 
 add_test(NAME runtime COMMAND opent1 --smoke --headless --no-audio --no-assets --spawn-demo
                               --frames 4

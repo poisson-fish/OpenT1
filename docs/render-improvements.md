@@ -652,6 +652,56 @@ Raw per-run mean/p95/p99, work counters, executable/capture/readback hashes and
 the validation history are in
 [`render-terrain-selection.json`](data/render-terrain-selection.json).
 
+## Draw submission follow-up (2026-11-03)
+
+Native terrain patch instances now carry their lightmap-page rectangles and
+texture-array layers. Flat shader outputs retain those values per primitive,
+including source-UV clamping before the page transform. Adjacent compatible
+patches can share an instanced draw even when their logical textures or maps
+differ. Physical texture, sampler, material, blend and depth changes still split
+runs; base/haze passes and composed layer boundaries retain their original order.
+
+All retained mesh transforms now come from the existing instance storage buffer.
+This also permits compatible adjacent instances of ordinary retained meshes to
+batch. Vertex uniforms shrink from 272 to 32 bytes. Each mesh instance grows from
+256 to 288 bytes for sampling metadata; staging limits and resource accounting
+include that increase. Projected and other retained materials keep their existing
+per-material sampling controls.
+
+A fresh serial Windows Release D3D12 pair measured 240 frames after 120 warm-up
+frames at 800x600, using matching diagnostics in both executables:
+
+| RPG case | Mean draws, before -> after | Mean submission ms, before -> after |
+| --- | ---: | ---: |
+| Map 1 stationary | 1,931 -> 1,495 | 1.221 -> 1.005 |
+| Map 1 rotate | 1,029 -> 873 | 1.501 -> 1.298 |
+| Map 1 travel | 1,008 -> 906 | 3.333 -> 3.208 |
+| Map 5 stationary | 2,038 -> 1,578 | 1.205 -> 1.049 |
+| Map 5 rotate | 1,442 -> 1,320 | 2.049 -> 1.895 |
+| Map 5 travel | 1,394 -> 1,309 | 3.267 -> 3.078 |
+
+Map 5 stationary vertex-uniform pushes fall from 799 to 339 per frame;
+fragment-uniform pushes fall from 1,858 to 1,180. Vertex-uniform payload falls
+about 95% when accounting for the smaller block. Input draws, polygons, sampler
+and pipeline binds, and vertex/mesh/texture upload bytes match. Submission means
+improve in all twelve base/RPG cases, but full-frame results are mixed, including
+a stationary Broadside regression. These single-pair CPU measurements include
+the preceding fence wait and do not establish a universal full-frame speedup.
+
+All twelve final mission/camera readbacks match byte for byte. All 13 Release
+CTest checks and both real-device platform cases pass on D3D12 and Vulkan.
+Six new submission scenarios cover array/page batching, overlapping alpha,
+cutout depth writes, alternating depth policies, composed haze layers, and
+ordinary retained mesh instances with adjacent index ranges and a later reused
+transform. They compare against separately submitted or standalone-texture
+references and check actual draw/uniform counts; patch cases also exercise cache
+recreation. Updated DXIL/SPIR-V artifacts are generated from HLSL, and matching
+MSL sources are maintained. Metal device validation remains outstanding.
+
+Per-case mean/p95/p99 timings, counters, executable provenance and readback hashes
+are recorded in [`render-submission.json`](data/render-submission.json). The
+benchmark now reports input draws, pipeline binds and both uniform-push counts.
+
 ## Reproduction
 
 ```powershell

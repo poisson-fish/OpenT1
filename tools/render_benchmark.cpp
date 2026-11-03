@@ -94,6 +94,7 @@ int main(int argc, char** argv) {
         UInt64 polygons{}, draws{}, binds{}, vertexBytes{}, meshBytes{}, textureBytes{},
             geometryBuilds{}, mapBuilds{}, terrainCacheHits{};
         UInt64 instanceBytes{};
+        UInt64 inputDraws{}, pipelineBinds{}, vertexUniformPushes{}, fragmentUniformPushes{};
         gfx::HardwareBatch::MemoryStats batchMemory;
         // Warm the rotating working set as well as pipeline creation.
         constexpr unsigned warm = 120;
@@ -145,6 +146,10 @@ int main(int argc, char** argv) {
                 polygons += game.lastScenePolygonCount();
                 draws += surface->submissionStats().draws;
                 binds += surface->submissionStats().samplerBinds;
+                inputDraws += surface->submissionStats().inputDraws;
+                pipelineBinds += surface->submissionStats().pipelineBinds;
+                vertexUniformPushes += surface->submissionStats().vertexUniformPushes;
+                fragmentUniformPushes += surface->submissionStats().fragmentUniformPushes;
                 vertexBytes += surface->submissionStats().vertexUploadBytes;
                 meshBytes += surface->submissionStats().meshUploadBytes;
                 textureBytes += surface->submissionStats().textureUploadBytes;
@@ -209,6 +214,10 @@ int main(int argc, char** argv) {
         distribution(out, "light_samples_ms", lighting);
         out << ",\"mean_polygons\":" << double(polygons) / count
             << ",\"mean_draws\":" << double(draws) / count
+            << ",\"mean_input_draws\":" << double(inputDraws) / count
+            << ",\"mean_pipeline_binds\":" << double(pipelineBinds) / count
+            << ",\"mean_vertex_uniform_pushes\":" << double(vertexUniformPushes) / count
+            << ",\"mean_fragment_uniform_pushes\":" << double(fragmentUniformPushes) / count
             << ",\"mean_binds\":" << double(binds) / count << ",\"textures\":" << textures.textures
             << ",\"texture_bytes\":" << textures.bytes
             << ",\"physical_textures\":" << textures.physicalTextures

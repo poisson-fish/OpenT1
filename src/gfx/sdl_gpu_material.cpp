@@ -118,34 +118,40 @@ struct FragmentUniform {
 
 static_assert(sizeof(FragmentUniform) == 112 && sizeof(HardwareVertex) == 48);
 
+// Terrain patches each own an instance, so their sampling coordinates can vary
+// inside an instanced draw. Other mesh encodings retain per-material uniforms.
+struct InstanceData {
+    HardwareTransform transform;
+    std::array<Flt32, 4> lightRect{1, 1, 0, 0};
+    std::array<Flt32, 4> imageArray{};
+};
+
+static_assert(sizeof(InstanceData) == 288);
+
+std::array<Flt32, 4> lightRect(const std::shared_ptr<LightMapSlot>& slot) {
+    if (!slot)
+        return {1, 1, 0, 0};
+    constexpr Flt32 side = Flt32(LightMapPage::Side);
+    return {Flt32(slot->rect.width - 2) / side,
+            Flt32(slot->rect.height - 2) / side,
+            Flt32(slot->rect.x + 1) / side,
+            Flt32(slot->rect.y + 1) / side};
+}
+
 struct VertexUniform {
     std::array<Flt32, 4> frame;
-    std::array<std::array<Flt32, 4>, 3> camera{};
-    std::array<Flt32, 4> optics{}, clip{};
-    std::array<std::array<Flt32, 4>, 8> parameters{};
-    std::array<Flt32, 4> ambient{}, geometry{}, mapping{};
+    std::array<Flt32, 4> clip{};
     bool operator==(const VertexUniform&) const = default;
 };
 
-static_assert(sizeof(VertexUniform) == 272);
+static_assert(sizeof(VertexUniform) == 32);
 
 VertexUniform
 vertexUniform(Flt32 w, Flt32 h, const HardwareDraw& draw, const HardwareBatch& batch) {
-    VertexUniform result{{w, h, draw.perspective ? 1.f : 0.f, draw.mesh ? 1.f : 0.f}};
+    VertexUniform result{{w, h, draw.perspective ? 1.f : 0.f, draw.mesh ? 2.f : 0.f}};
     if (draw.mesh) {
         const auto& t = batch.meshes()[draw.mesh - 1].transform;
-        if (t.geometry[2] != 0) {
-            result.frame[3] = 2;
-            result.clip = t.clip;
-            return result;
-        }
-        result.camera = t.camera;
-        result.optics = t.optics;
         result.clip = t.clip;
-        result.parameters = t.parameters;
-        result.ambient = t.ambient;
-        result.geometry = t.geometry;
-        result.mapping = t.mapping;
     }
     return result;
 }
@@ -857,7 +863,7 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
     }
     const auto instanceOffset = align(transferBytes, 16);
     const auto instanceBytes =
-        std::max<std::size_t>(1, batch.meshes().size()) * sizeof(HardwareTransform);
+        std::max<std::size_t>(1, batch.meshes().size()) * sizeof(InstanceData);
     transferBytes = instanceOffset + instanceBytes;
     if (transferBytes > stagingBytes_)
         return SDL_SetError("Hardware instance staging budget exceeded"), nullptr;
@@ -906,10 +912,27 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
         return nullptr;
     }
     std::memset(mapped, 0, std::size_t(transferBytes));
-    for (std::size_t i = 0; i < batch.meshes().size(); ++i)
-        std::memcpy(mapped + instanceOffset + i * sizeof(HardwareTransform),
-                    &batch.meshes()[i].transform,
-                    sizeof(HardwareTransform));
+    for (std::size_t i = 0; i < batch.meshes().size(); ++i) {
+        if (batch.meshes()[i].transform.geometry[2] == 1)
+            continue; // Filled with the patch's sampling data below.
+        const InstanceData instance{batch.meshes()[i].transform};
+        std::memcpy(
+            mapped + instanceOffset + i * sizeof(InstanceData), &instance, sizeof(instance));
+    }
+    for (const auto& draw : batch.draws()) {
+        if (!draw.mesh || batch.meshes()[draw.mesh - 1].transform.geometry[2] != 1)
+            continue;
+        // HardwareBatch publishes one instance per native patch, including
+        // composed layers; no other material can overwrite this patch's data.
+        const auto* image = bindings[draw.texture];
+        InstanceData instance{batch.meshes()[draw.mesh - 1].transform,
+                              lightRect(bindings[draw.lightMap]->slot)};
+        if (image->array)
+            instance.imageArray = {Flt32(image->array->layer), 1, 0, 0};
+        std::memcpy(mapped + instanceOffset + (draw.mesh - 1) * sizeof(InstanceData),
+                    &instance,
+                    sizeof(instance));
+    }
     if (!batch.vertices().empty()) {
         std::memcpy(mapped, batch.vertices().data(), batch.vertices().size_bytes());
     }
@@ -1055,14 +1078,10 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
                      0}};
                 if (draw.mesh)
                     material.clip = frame.clip;
-                if (image->array)
-                    material.imageArray = {Flt32(image->array->layer), 1, 0, 0};
-                if (const auto& slot = bindings[draw.lightMap]->slot) {
-                    constexpr Flt32 side = Flt32(LightMapPage::Side);
-                    material.lightRect = {Flt32(slot->rect.width - 2) / side,
-                                          Flt32(slot->rect.height - 2) / side,
-                                          Flt32(slot->rect.x + 1) / side,
-                                          Flt32(slot->rect.y + 1) / side};
+                if (!draw.mesh || batch.meshes()[draw.mesh - 1].transform.geometry[2] != 1) {
+                    if (image->array)
+                        material.imageArray = {Flt32(image->array->layer), 1, 0, 0};
+                    material.lightRect = lightRect(bindings[draw.lightMap]->slot);
                 }
                 auto* mesh = draw.mesh ? meshBindings[draw.mesh - 1] : nullptr;
                 encoder.draw({pipelines_[(draw.mesh ? 20U : 0U) + std::size_t(draw.blend) * 4 +

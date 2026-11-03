@@ -1,12 +1,6 @@
 cbuffer Frame : register(b0, space1) {
     float4 frame;
-    float4 camera[3];
-    float4 optics;
     float4 geometryClip;
-    float4 parameters[8];
-    float4 ambient;
-    float4 geometry;
-    float4 mapping;
 } // width, height, perspective, unused
 
 struct Input {
@@ -28,10 +22,13 @@ struct Output {
     float opacity : TEXCOORD4;
     float cameraDepth : TEXCOORD5;
     float sphereDistance : TEXCOORD6;
+    nointerpolation float4 lightRect : TEXCOORD7;
+    nointerpolation float3 imageArray : TEXCOORD8; // layer, enabled, per-instance sampling
 };
 
 struct Instance {
     float4 camera[3], optics, geometryClip, parameters[8], ambient, geometry, mapping;
+    float4 lightRect, imageArray;
 };
 
 StructuredBuffer<Instance> instances : register(t0, space0);
@@ -142,33 +139,31 @@ Output main(Input v, uint instanceId : SV_InstanceID) {
     o.opacity = v.opacity;
     o.cameraDepth = 0;
     o.sphereDistance = 0;
+    o.lightRect = float4(1, 1, 0, 0);
+    o.imageArray = float3(0, 0, 0);
     if (frame.w != 0) {
         float4 local = float4(v.position, v.inverseDepth, 1);
-        float4 c0 = camera[0], c1 = camera[1], c2 = camera[2], lens = optics;
-        if (frame.w == 2) {
-            Instance t = instances[(uint)geometryClip.w + instanceId];
-            if (t.geometry.z == 1) {
-                uint ring = nativeIndices[(uint)t.geometry.w * 18 + (uint)v.inverseDepth];
-                float2 xy = nativeRing[ring];
-                float2 uv = float2(xy.x, 1 - xy.y);
-                float4 h = t.parameters[ring];
-                local = float4(xy * t.geometry.x, h.z >= 1 ? h.y : h.x + (h.y - h.x) * h.z, 1);
-                o.uv = uv;
-                o.lightMap = t.mapping.xy + uv * t.mapping.zw;
-                o.sphereDistance = h.w / t.geometry.y;
-                o.haze = t.ambient.w < t.ambient.x
-                             ? saturate((h.w - t.ambient.w) / (t.ambient.x - t.ambient.w))
-                             : 0;
-            } else {
-                o.color = shapeLight(t, local.xyz, v.color, v.opacity);
-                o.opacity = 1;
-                o.haze = t.geometry.x;
-            }
-            c0 = t.camera[0];
-            c1 = t.camera[1];
-            c2 = t.camera[2];
-            lens = t.optics;
+        Instance t = instances[(uint)geometryClip.w + instanceId];
+        if (t.geometry.z == 1) {
+            o.lightRect = t.lightRect;
+            o.imageArray = float3(t.imageArray.xy, 1);
+            uint ring = nativeIndices[(uint)t.geometry.w * 18 + (uint)v.inverseDepth];
+            float2 xy = nativeRing[ring];
+            float2 uv = float2(xy.x, 1 - xy.y);
+            float4 h = t.parameters[ring];
+            local = float4(xy * t.geometry.x, h.z >= 1 ? h.y : h.x + (h.y - h.x) * h.z, 1);
+            o.uv = uv;
+            o.lightMap = t.mapping.xy + uv * t.mapping.zw;
+            o.sphereDistance = h.w / t.geometry.y;
+            o.haze = t.ambient.w < t.ambient.x
+                         ? saturate((h.w - t.ambient.w) / (t.ambient.x - t.ambient.w))
+                         : 0;
+        } else if (t.geometry.z == 2) {
+            o.color = shapeLight(t, local.xyz, v.color, v.opacity);
+            o.opacity = 1;
+            o.haze = t.geometry.x;
         }
+        float4 c0 = t.camera[0], c1 = t.camera[1], c2 = t.camera[2], lens = t.optics;
         float3 p = float3(dot(local, c0), dot(local, c1), dot(local, c2));
         o.position = float4((p.x * lens.x + p.y * lens.z) * 2 / frame.x - p.y,
                             p.y - (p.y * lens.w - p.z * lens.y) * 2 / frame.y,

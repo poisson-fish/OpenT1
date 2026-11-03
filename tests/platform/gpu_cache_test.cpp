@@ -138,6 +138,57 @@ void retainedMesh(platform::SdlWindow& window) {
     CHECK(surface->readback(pixels) && pixels == preserved);
 }
 
+void retainedInstanceSubmission(platform::SdlWindow& window) {
+    std::vector<gfx::HardwareVertex> vertices(4);
+    vertices[0].position = vertices[3].position = {-1, 4};
+    vertices[1].position = vertices[2].position = {1, 4};
+    vertices[0].inverseDepth = vertices[1].inverseDepth = -1;
+    vertices[2].inverseDepth = vertices[3].inverseDepth = 1;
+    vertices[0].color = {1, 0, 0};
+    vertices[1].color = {0, 1, 0};
+    vertices[2].color = {0, 0, 1};
+    const auto mesh = gfx::HardwareMesh::create(std::move(vertices), {0, 1, 2, 0, 2, 3});
+    CHECK(mesh);
+    const std::array<gfx::PolygonVertex, 3> placeholder{{{{0, 0}}, {{1, 0}}, {{0, 1}}}};
+    std::array<gfx::HardwarePolygon, 5> polygons;
+    for (std::size_t i = 0; i < polygons.size(); ++i) {
+        auto& p = polygons[i];
+        p.vertices = placeholder;
+        p.mesh = mesh;
+        p.indexCount = 6;
+        p.material.blend = gfx::HardwareBlend::Alpha;
+        p.material.depth = gfx::HardwareDepth::TestOnly;
+        p.material.opacity = .4f;
+        const Flt32 shift = i == 2 ? .5f : i == 3 ? -.5f : 0;
+        p.transform.camera = {{{1, 0, 0, shift}, {0, 1, 0, 0}, {0, 0, 1, 0}}};
+        p.transform.optics = {16, 16, 8, 8};
+        p.transform.clip = {.1f, 100, 1, 0};
+    }
+    polygons[0].indexCount = polygons[1].indexCount = 3;
+    polygons[1].firstIndex = 3;
+    auto batch = gfx::HardwareBatch::prepare(polygons);
+    CHECK(batch && batch->meshes().size() == 3);
+    std::array<gfx::HardwareBatch, 5> layers;
+    std::array<const gfx::HardwareBatch*, 5> layerRefs;
+    for (std::size_t i = 0; i < layers.size(); ++i) {
+        auto layer = gfx::HardwareBatch::prepare(std::span(&polygons[i], 1));
+        CHECK(layer);
+        layers[i] = std::move(*layer);
+        layerRefs[i] = &layers[i];
+    }
+    auto reference = gfx::HardwareBatch::compose(layerRefs);
+    auto surface = gfx::SdlGpuSurface::create(window, 16, 16);
+    CHECK(reference && surface);
+    std::vector<std::byte> a(16 * 16 * 4), b(a.size());
+    CHECK(surface->render(*reference) && surface->readback(a));
+    CHECK(surface->submissionStats().draws == 5);
+    CHECK(surface->render(*batch) && surface->readback(b) && a == b);
+    // Adjacent index ranges coalesce before instancing; a later reuse of the
+    // first transform must start another run instead of selecting instance 3.
+    CHECK(surface->submissionStats().inputDraws == 5 && surface->submissionStats().draws == 2);
+    CHECK(surface->submissionStats().vertexUniformPushes == 1);
+}
+
 void interiorReadbacks(platform::SdlWindow& window) {
     ResourceManager manager;
     auto shape = std::make_unique<world::InteriorShape>();
@@ -460,6 +511,125 @@ void terrainReadbacks(platform::SdlWindow& window) {
     }
 }
 
+void terrainSubmission(platform::SdlWindow& window) {
+    std::vector<gfx::HardwareVertex> vertices(18);
+    std::vector<UInt32> indices;
+    for (UInt32 i = 0; i < vertices.size(); ++i) {
+        vertices[i].inverseDepth = Flt32(i);
+        indices.push_back(i);
+    }
+    const auto mesh = gfx::HardwareMesh::create(std::move(vertices), std::move(indices));
+    CHECK(mesh);
+    std::array<std::unique_ptr<gfx::Bitmap>, 16> images;
+    std::array<gfx::LightMap, 16> maps;
+    std::array<gfx::HardwarePolygon, 16> polygons;
+    const std::array<gfx::PolygonVertex, 3> placeholder{{{{0, 0}}, {{1, 0}}, {{0, 1}}}};
+    const std::array<Point2F, 3> lightUV{};
+    gfx::Palette palette;
+    for (unsigned i = 0; i < 256; ++i)
+        palette.palettes[0].colors[i] = {UInt8(i), UInt8(i * 17), UInt8(i * 31), 255};
+    for (std::size_t i = 0; i < polygons.size(); ++i) {
+        images[i] = gfx::Bitmap::create(4, 4);
+        CHECK(images[i]);
+        for (std::size_t p = 0; p < images[i]->pixels.size(); ++p)
+            images[i]->pixels[p] = std::byte((i * 17 + p * 7) & 255);
+        maps[i].size = {2, 2};
+        maps[i].samples = {UInt16(0xf000U | (i * 53)), 0xff8f, 0xf8ff, 0xfff8};
+        auto& polygon = polygons[i];
+        polygon.vertices = placeholder;
+        polygon.lightMapCoordinates = lightUV;
+        polygon.mesh = mesh;
+        polygon.indexCount = 18;
+        polygon.material.texture = images[i].get();
+        polygon.material.lightMap = &maps[i];
+        polygon.material.deferredHaze = true;
+        auto& t = polygon.transform;
+        t.camera = {
+            {{1, 0, 0, Flt32(i % 4) * 2 - 4}, {0, 0, 0, 8}, {0, 1, 0, Flt32(i / 4) * 2 - 4}}};
+        t.optics = {32, 32, 32, 32};
+        t.clip = {.1f, 20, 1, 0};
+        t.geometry = {2, 20, 1, Flt32(i)};
+        t.ambient = {20, 0, 0, 5};
+        t.mapping = {-.5f, -.5f, 2, 2}; // clamp before applying the page rectangle
+        for (auto& h : t.parameters)
+            h = {0, 0, 0, Flt32(i) * .5f + 6};
+    }
+    gfx::GpuFrameConfig frame;
+    frame.hazeColor = {.2f, .3f, .4f};
+    gfx::GpuSurfaceConfig standalone;
+    standalone.textureArrayBytes = standalone.lightMapPageBytes = 0;
+    platform::WindowConfig referenceConfig;
+    referenceConfig.hidden = true;
+    referenceConfig.width = referenceConfig.height = 64;
+    platform::SdlWindow referenceWindow(referenceConfig);
+    auto reference = gfx::SdlGpuSurface::create(referenceWindow, 64, 64, standalone);
+    auto batched = gfx::SdlGpuSurface::create(window, 64, 64);
+    CHECK(reference && batched);
+    for (unsigned mode = 0; mode < 5; ++mode) {
+        if (mode == 1) {
+            // Same-state alpha patches overlap: instance order must retain the
+            // original texture/blend order, including at equal depth.
+            for (auto& p : polygons) {
+                p.transform.camera[0][3] = -1;
+                p.transform.camera[2][3] = -1;
+                p.material.blend = gfx::HardwareBlend::Alpha;
+                p.material.depth = gfx::HardwareDepth::TestOnly;
+                p.material.opacity = .4f;
+                p.material.deferredHaze = false;
+            }
+        }
+        if (mode == 3) {
+            // Cutouts with overlapping, interleaved near/far patches exercise
+            // color/depth writes and the independent uncut haze overlay.
+            for (std::size_t i = 0; i < polygons.size(); ++i) {
+                auto& p = polygons[i];
+                p.transform.camera[1][3] = 5 + Flt32((i * 7) % 16) * .25f;
+                p.material.blend = gfx::HardwareBlend::Opaque;
+                p.material.depth = gfx::HardwareDepth::TestAndWrite;
+                p.material.opacity = 1;
+                p.material.transparent = true;
+                for (std::size_t j = 0; j < images[i]->pixels.size(); j += 2)
+                    images[i]->pixels[j] = std::byte{0};
+            }
+        }
+        if (mode == 4) {
+            for (std::size_t i = 0; i < polygons.size(); ++i)
+                polygons[i].material.depth =
+                    i % 2 ? gfx::HardwareDepth::Disabled : gfx::HardwareDepth::TestAndWrite;
+        }
+        auto batch = gfx::HardwareBatch::prepare(polygons, &palette);
+        CHECK(batch);
+        if (mode == 2) {
+            // Composed layers retain separate base/haze passes even when their
+            // bindings and ranges would otherwise be compatible.
+            for (auto& p : polygons)
+                p.material.deferredHaze = true;
+            batch = gfx::HardwareBatch::prepare(polygons, &palette);
+            CHECK(batch);
+            const std::array<const gfx::HardwareBatch*, 2> layers{&*batch, &*batch};
+            batch = gfx::HardwareBatch::compose(layers);
+            CHECK(batch);
+        }
+        std::vector<std::byte> a(64 * 64 * 4), b(a.size());
+        CHECK(reference->render(*batch, frame) && reference->readback(a));
+        CHECK(batched->render(*batch, frame) && batched->readback(b));
+        for (std::size_t i = 0; i < a.size(); ++i)
+            CHECK(std::abs(int(a[i]) - int(b[i])) <= 2);
+        const auto stats = batched->submissionStats();
+        CHECK(stats.inputDraws == (mode == 1 ? 16U : mode == 2 ? 64U : 32U));
+        const std::array expectedDraws{2U, 1U, 4U, 2U, 32U};
+        const std::array expectedVertexPushes{1U, 1U, 2U, 1U, 32U};
+        const std::array expectedFragmentPushes{2U, 1U, 4U, 2U, 2U};
+        CHECK(stats.draws == expectedDraws[mode]);
+        CHECK(stats.fragmentUniformPushes == expectedFragmentPushes[mode]);
+        CHECK(stats.vertexUniformPushes == expectedVertexPushes[mode]);
+        CHECK(reference->submissionStats().draws >= stats.draws);
+        // Immutable snapshots and per-patch sampling survive cache recreation.
+        CHECK(batched->trimCaches() && batched->render(*batch, frame) && batched->readback(a));
+        CHECK(a == b);
+    }
+}
+
 void shapeReadbacks(platform::SdlWindow& window) {
     ResourceManager manager;
     CHECK(manager.add("retained.dts", test::ts::load(test::ts::shape())));
@@ -597,10 +767,12 @@ int gpuCache() {
         auto& window = app.createWindow(config);
         retainedWorkingSet(window);
         retainedMesh(window);
+        retainedInstanceSubmission(window);
         interiorReadbacks(window);
         pageReadbacks(window);
         arrayReadbacks(window);
         terrainReadbacks(window);
+        terrainSubmission(window);
         shapeReadbacks(window);
     });
 }

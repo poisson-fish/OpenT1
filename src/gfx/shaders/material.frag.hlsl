@@ -40,7 +40,9 @@ float4 main(float4 position : SV_Position,
             float2 lightUV : TEXCOORD3,
             float opacity : TEXCOORD4,
             float cameraDepth : TEXCOORD5,
-            float sphereDistance : TEXCOORD6)
+            float sphereDistance : TEXCOORD6,
+            nointerpolation float4 instanceLightRect : TEXCOORD7,
+            nointerpolation float3 instanceImageArray : TEXCOORD8)
     : SV_Target0 {
     if (geometryClip.z != 0 && (cameraDepth < geometryClip.x || cameraDepth > geometryClip.y))
         discard;
@@ -48,10 +50,12 @@ float4 main(float4 position : SV_Position,
         discard;
     if (alphaControls.z == 2)
         return float4(hazeColor.rgb, saturate(haze));
-    float4 texel = arrayControls.y != 0
-        ? imageArray.SampleBias(imageArraySampler, float3(uv,arrayControls.x), options.z)
+    float4 rect = instanceImageArray.z != 0 ? instanceLightRect : lightRect;
+    float2 array = instanceImageArray.z != 0 ? instanceImageArray.xy : arrayControls.xy;
+    float4 texel = array.y != 0
+        ? imageArray.SampleBias(imageArraySampler, float3(uv, array.x), options.z)
         : image.SampleBias(imageSampler, uv, options.z);
-    float3 light = lightMap.Sample(lightMapSampler, saturate(lightUV) * lightRect.xy + lightRect.zw).rgb;
+    float3 light = lightMap.Sample(lightMapSampler, saturate(lightUV) * rect.xy + rect.zw).rgb;
     float alpha = options.w == 0   ? texel.a * tint.a
                   : options.w == 1 ? tint.a
                   : options.w == 2 ? saturate(opacity) * tint.a

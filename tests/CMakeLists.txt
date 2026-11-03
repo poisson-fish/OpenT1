@@ -38,6 +38,7 @@ add_executable(
     game/e2e_integration_test.cpp
     game/gameplay_fix_pack_test.cpp
     game/trpg_behavior_test.cpp
+    game/ai_behavior_test.cpp
     game/rpg_paths_test.cpp
     game/rpg_regressions_test.cpp
     game/compatibility_test.cpp

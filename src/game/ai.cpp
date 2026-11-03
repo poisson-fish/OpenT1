@@ -467,7 +467,7 @@ bool AIObj::setVar(std::string_view varName, std::string_view value) {
         return true;
     }
     if (equalIgnoreCase(varName, "automaticTargets")) {
-        automaticTargets_ = (parseIntSv(value) != 0 || equalIgnoreCase(value, "true"));
+        setAutomaticTargets(parseIntSv(value) != 0 || equalIgnoreCase(value, "true"));
         return true;
     }
     return false;

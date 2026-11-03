@@ -295,9 +295,7 @@ public:
         return automaticTargets_;
     }
 
-    void setAutomaticTargets(bool autoTarg) noexcept {
-        automaticTargets_ = autoTarg;
-    }
+    void setAutomaticTargets(bool autoTarg) noexcept;
 
     [[nodiscard]] const IQVariables& iqVars() const noexcept {
         return iqVars_;

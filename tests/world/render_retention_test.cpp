@@ -3,6 +3,7 @@
 #include <opent1/world/world_surfaces.hpp>
 #include <opent1/world/world_scene.hpp>
 #include <opent1/core/reusable_scratch.hpp>
+#include <bit>
 
 using namespace opent1;
 
@@ -234,7 +235,17 @@ int retainedTerrainPatches() {
         resources.materials = world::TsMaterialResources(std::move(materialData));
         world::TerrainTextureCache cache(resources);
         std::shared_ptr<const world::WorldSurfaceMesh> snapshot;
-        for (const auto camera : {Point3F{14, 4, 8}, Point3F{48, 12, 20}, Point3F{80, 24, 5}}) {
+        UInt64 selectionHash = 14695981039346656037ULL;
+        const auto hash = [&](UInt32 value) {
+            selectionHash = (selectionHash ^ value) * 1099511628211ULL;
+        };
+        for (UInt32 frame = 0; frame < 27; ++frame) {
+            const auto camera =
+                frame < 3
+                    ? std::array{Point3F{14, 4, 8}, Point3F{48, 12, 20}, Point3F{80, 24, 5}}[frame]
+                    : Point3F{Flt32(frame * 7 % 100) - 4,
+                              Flt32(frame * 11 % 40) - 4,
+                              Flt32(frame % 3 * 8 + 5)};
             world::TerrainLodView view;
             view.camera = camera;
             view.compositeTextures = true;
@@ -243,15 +254,47 @@ int retainedTerrainPatches() {
             view.nativeGeometry = world::TerrainGeometryView{32, 20, 1, .1f, 96, true};
             view.hazeDistance = 40.f;
             view.lightMapDensity = world::TerrainLightMapDensity::NativeOpenGL;
-            auto reference = world::WorldSurfaceMesh::terrainLod(resources, view, true, {}, &cache);
+            std::optional<Box2F> region;
+            if (frame >= 3) {
+                view.nativeVisibility.emplace();
+                view.nativeVisibility->visibleDistance = 96;
+                view.nativeVisibility->cameraToGrid.set(
+                    EulerF{Flt32(Int32(frame % 5) - 2) * .15f, 0, Flt32(frame) * .25f});
+                if (frame % 4 == 0) {
+                    view.nativeVisibility->perspective = false;
+                    view.nativeVisibility->viewportCenter = {12, 0};
+                    view.nativeVisibility->halfExtent = {30, 18};
+                }
+                if (frame % 3 == 0)
+                    region = Box2F{7, 3, 87, 29};
+                view.maximumLevel = frame % 5;
+            }
+            auto reference =
+                world::WorldSurfaceMesh::terrainLod(resources, view, true, region, &cache);
             view.retainedPatches = true;
-            auto compact = world::WorldSurfaceMesh::terrainLod(resources, view, true, {}, &cache);
+            auto compact =
+                world::WorldSurfaceMesh::terrainLod(resources, view, true, region, &cache);
             CHECK(reference);
             CHECK(compact);
             CHECK(compact->terrainPatches && compact->triangles.empty());
             CHECK(compact->terrainSquareIds == reference->terrainSquareIds);
-            CHECK(compact->triangleCount() == reference->triangleCount() &&
-                  compact->triangleCount() > 0);
+            CHECK(compact->triangleCount() == reference->triangleCount());
+            if (frame < 3)
+                CHECK(compact->triangleCount() > 0);
+            // Baseline selection/stitch fingerprint across moving, rotated,
+            // orthographic and clipped views. Authored/target heights are exact
+            // binary fractions, including unequal seams and pin ownership.
+            hash(UInt32(compact->terrainSquareIds.size()));
+            for (const auto& id : compact->terrainSquareIds)
+                for (const auto value : id)
+                    hash(value);
+            for (const auto& patch : compact->terrainPatches->patches) {
+                hash(patch.topologyKey);
+                for (const auto& inputs : patch.heights) {
+                    hash(std::bit_cast<UInt32>(inputs[0]));
+                    hash(std::bit_cast<UInt32>(inputs[1]));
+                }
+            }
             std::size_t i{};
             for (const auto triangle : compact->surfaceTriangles()) {
                 const auto& expected = reference->triangles[i++];
@@ -267,9 +310,48 @@ int retainedTerrainPatches() {
             }
             snapshot = std::make_shared<const world::WorldSurfaceMesh>(std::move(*compact));
             view.textureTiming = world::TerrainTextureTiming::NativeSoftware;
-            auto software = world::WorldSurfaceMesh::terrainLod(resources, view, true, {}, &cache);
-            CHECK(software && !software->terrainPatches && !software->triangles.empty());
+            auto software =
+                world::WorldSurfaceMesh::terrainLod(resources, view, true, region, &cache);
+            CHECK(software && !software->terrainPatches);
+            CHECK(software->terrainSquareIds == reference->terrainSquareIds);
+            CHECK(software->triangles.size() == reference->triangles.size());
+            for (std::size_t j = 0; j < software->triangles.size(); ++j)
+                for (std::size_t k = 0; k < 3; ++k) {
+                    const auto& a = software->triangles[j].vertices[k];
+                    const auto& b = reference->triangles[j].vertices[k];
+                    CHECK(a.position == b.position && a.farSphereDistance == b.farSphereDistance &&
+                          a.haze == b.haze);
+                }
+            if (frame == 0) {
+                // Fail after populating the arena, then reuse it on the next
+                // view while the preceding published snapshot remains alive.
+                auto invalid = resources;
+                invalid.materials = {};
+                view.compositeTextures = false;
+                CHECK(!world::WorldSurfaceMesh::terrainLod(invalid, view, false));
+            }
         }
+        CHECK(selectionHash == 18022897737113234614ULL);
+        // Unsupported composites recurse into projected output while the outer
+        // arena is live. Exercise the independent nested scratch lease.
+        auto custom = resources;
+        auto customMaterials = resources.materials.data();
+        customMaterials.list.materials[0].flags |= 0x1000U;
+        custom.materials = world::TsMaterialResources(std::move(customMaterials));
+        world::TerrainLodView fallback;
+        fallback.camera = {14, 4, 8};
+        fallback.nativeTraversal = fallback.compositeTextures = true;
+        fallback.nativeGeometry = world::TerrainGeometryView{32, 20, 1, .1f, 96, true};
+        const auto projected = world::WorldSurfaceMesh::terrainLod(custom, fallback, false);
+        fallback.retainedPatches = true;
+        const auto nested = world::WorldSurfaceMesh::terrainLod(custom, fallback, false);
+        CHECK(projected && nested && !nested->terrainPatches && !nested->triangles.empty());
+        CHECK(projected->terrainSquareIds == nested->terrainSquareIds);
+        CHECK(projected->triangles.size() == nested->triangles.size());
+        for (std::size_t j = 0; j < projected->triangles.size(); ++j)
+            for (std::size_t k = 0; k < 3; ++k)
+                CHECK(projected->triangles[j].vertices[k].position ==
+                      nested->triangles[j].vertices[k].position);
         cache.clear();
         CHECK(snapshot && snapshot->retainedHardwareCompatible());
         world::TsStaticView view;

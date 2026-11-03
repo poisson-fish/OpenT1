@@ -580,6 +580,78 @@ regression coverage. These audits measure allocation churn, not a timing benefit
 Capture hashes, executable hashes and counters are in
 [`render-allocation-followup.json`](data/render-allocation-followup.json).
 
+## Moving-camera terrain selection
+
+The November 3 follow-up profiles window/visibility construction, traversal and
+validation, edge preparation, and patch/texture emission separately. The ordinary
+benchmark also reports node/material/height work, first-writer point requests,
+unique reached points, collected edge entries, and temporary arena allocations.
+The visibility measurement includes window selection; traversal includes source
+validation. These phases are within `terrain_lod_ms`, not additional frame costs.
+
+Native stitching previously collected every introduced point in two edge lists,
+added selected corners again, sorted/deduplicated both lists, and searched them
+for each selected tile. The native boundary filter ultimately admitted only
+corners and reached edge midpoints. Selection now queries those four midpoints
+directly in the existing first-writer point table. Scan-row order, transformCross
+introduction order, child visitation, corner-distance accumulation, geomorph
+inputs, and topology index order are preserved. Points introduced before a child
+fails visibility still contribute to neighboring stitches. General non-native
+stitch fans keep their sorted edge path.
+
+Traversal uses a directly recursive lambda instead of `std::function`. Selected
+tiles use the frame arena, and published patch/ID vectors reserve from the known
+selection size. A nested-call-safe scratch lease supplies a fixed 384 KiB buffer
+per render thread. Arena objects are destroyed before releasing the lease;
+published meshes own their data. Larger preparations spill into frame-local heap
+blocks, which are released at return. The buffer retains capacity without
+retaining resource handles, and recursive projected fallbacks use an independent
+lease.
+
+Two serial 120-warm-up/240-measured-frame D3D12 runs per binary at 800x600 give
+the following mean CPU terrain LOD times. Both binaries include matching phase
+diagnostics and no global allocation overrides. These local baselines are higher
+than the historical 1.3-1.5 ms RPG travel captures; use the paired comparisons.
+
+| Travel mission | Before, ms | After, ms | Reduction |
+| --- | ---: | ---: | ---: |
+| Raindance | 0.683 | 0.470 | 31.3% |
+| Broadside | 1.194 | 0.755 | 36.7% |
+| RPG map 1 | 1.996 | 1.297 | 35.0% |
+| RPG map 5 | 2.323 | 1.499 | 35.5% |
+
+Rotating cases improve 36.6-39.4%. RPG travel visibility/window work stays near
+0.011 ms, so its rasterization was left unchanged. Traversal/validation falls
+from 0.320/0.432 to 0.269/0.367 ms; native edge preparation falls from
+0.317/0.345 ms to under 0.001 ms. Patch/texture emission falls from 1.327/1.511
+to 0.999/1.102 ms, including the avoided per-tile edge searches.
+
+RPG travel previously collected 9,804/10,699 edge entries and allocated about
+662/664 KiB in six upstream arena blocks per frame. All measured candidate cases
+have zero upstream arena allocations, with 384 KiB retained per thread. These
+counters describe terrain arena traffic, not all renderer allocations; the old
+selected-tile vector was outside that arena, while the new vector is included.
+Node visits, validated heights, material checks, first-writer requests/reached
+points, polygon/draw counts and upload bytes match across all four runs of each
+case. All 12 final mission/camera readbacks match byte for byte.
+
+The 27-view regression corpus fingerprints selected square order, topology keys,
+and exact authored/target first-writer heights across repeated blocks with unequal
+seams, holes, pins, moving/rotated cameras, orthographic footprints, and clipped
+regions. It also compares reconstructed compact and projected geometry, checks
+native software geometry, and exercises failure cleanup and nested fallbacks.
+All 13 Release and 11 headless CTest checks pass, as do the real-device D3D12 and
+Vulkan platform cases and installed RPG acceptance suites. The initial Debug
+run exposed a preexisting Windows archive replacement bug, reproduced in a
+core-only executable: the rename fallback lacked an explicit filename terminator
+and could create a garbage-suffixed sibling instead of replacing the archive.
+A subsequent fix reserves the terminator and tests four filename lengths;
+all 13 Debug CTest checks now pass, along with Release and headless rechecks.
+The timing captures predate that independent archive fix.
+Raw per-run mean/p95/p99, work counters, executable/capture/readback hashes and
+the validation history are in
+[`render-terrain-selection.json`](data/render-terrain-selection.json).
+
 ## Reproduction
 
 ```powershell

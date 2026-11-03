@@ -522,7 +522,11 @@ bool VolumeRWStream::save(const std::filesystem::path& destination) const {
             std::error_code ec;
             const auto target = std::filesystem::absolute(destination, ec).native();
             const auto nameBytes = target.size() * sizeof(wchar_t);
-            const auto bytesNeeded = offsetof(FILE_RENAME_INFO, FileName) + nameBytes;
+            // The Win32 rename path can inspect a trailing NUL even with an
+            // explicit FileNameLength. Include it rather than relying on the
+            // alignment padding of the allocation to terminate the filename.
+            const auto bytesNeeded =
+                offsetof(FILE_RENAME_INFO, FileName) + nameBytes + sizeof(wchar_t);
             if (!ec && bytesNeeded <= std::numeric_limits<DWORD>::max() && FlushFileBuffers(file)) {
                 std::vector<UInt64> storage((bytesNeeded + sizeof(UInt64) - 1) / sizeof(UInt64));
                 auto* rename = reinterpret_cast<FILE_RENAME_INFO*>(storage.data());

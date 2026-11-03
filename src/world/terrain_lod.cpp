@@ -1,10 +1,10 @@
 #include <opent1/world/world_surfaces.hpp>
 #include <opent1/gfx/render_stats.hpp>
+#include <opent1/core/reusable_scratch.hpp>
 #include "collision_geometry.hpp"
 #include "terrain_window.hpp"
 #include "terrain_scene_lighting.hpp"
 #include <bit>
-#include <functional>
 #include <map>
 #include <memory_resource>
 #include <set>
@@ -13,6 +13,39 @@
 
 namespace opent1::world {
 namespace {
+struct TerrainScratch {
+    // Bounded per-thread storage; nested/fallback calls lease an independent
+    // buffer. All arena objects die before the lease, and results own their data.
+    std::array<std::byte, 384 * 1024> memory;
+
+    void clear() {}
+};
+
+class ScratchMemory final : public std::pmr::memory_resource {
+    gfx::RenderWorkStats* stats_;
+    std::pmr::memory_resource* upstream_ = std::pmr::get_default_resource();
+
+    void* do_allocate(std::size_t bytes, std::size_t alignment) override {
+        auto* result = upstream_->allocate(bytes, alignment);
+        if (stats_) {
+            ++stats_->terrainScratchAllocations;
+            stats_->terrainScratchBytes += bytes;
+        }
+        return result;
+    }
+
+    void do_deallocate(void* memory, std::size_t bytes, std::size_t alignment) override {
+        upstream_->deallocate(memory, bytes, alignment);
+    }
+
+    bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override {
+        return this == &other;
+    }
+
+public:
+    explicit ScratchMemory(gfx::RenderWorkStats* stats) : stats_(stats) {}
+};
+
 struct Tile {
     const TerrainGridBlock* block;
     UInt32 index, bx, by, x, y, size;
@@ -87,15 +120,17 @@ class Edges {
     std::pmr::vector<Point> points_;
 
 public:
-    explicit Edges(std::pmr::memory_resource* memory) : points_(memory) {
-        points_.reserve(1024);
-    }
+    explicit Edges(std::pmr::memory_resource* memory) : points_(memory) {}
 
     void insert(UInt32 fixed, UInt32 along) {
+        if (points_.empty())
+            points_.reserve(1024);
         points_.emplace_back(fixed, along);
     }
 
     void prepare() {
+        if (auto* stats = gfx::currentRenderWorkStats)
+            stats->terrainEdgePoints += points_.size();
         std::ranges::sort(points_);
         const auto duplicates = std::ranges::unique(points_);
         points_.erase(duplicates.begin(), duplicates.end());
@@ -174,8 +209,11 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
     if (!n || n > 1024 || !std::has_single_bit(n)) {
         return {};
     }
-    const auto selection =
-        terrain_detail::selectWindow(grid, n, view, region, state ? state->window_ : std::nullopt);
+    const auto selection = [&] {
+        gfx::ScopedRenderWorkTimer phase(&gfx::RenderWorkStats::terrainVisibilityMs);
+        return terrain_detail::selectWindow(
+            grid, n, view, region, state ? state->window_ : std::nullopt);
+    }();
     if (!selection) {
         return {};
     }
@@ -229,9 +267,15 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                  cache ? cache->evictions() : 0};
 
     try {
-        std::pmr::monotonic_buffer_resource frameMemory(32 * 1024);
+        detail::ScratchLease<TerrainScratch> scratch;
+        auto& memory = scratch.get().memory;
+        if (stats)
+            stats->terrainScratchBufferBytes += memory.size();
+        ScratchMemory upstream(stats);
+        std::pmr::monotonic_buffer_resource frameMemory(memory.data(), memory.size(), &upstream);
         std::size_t work = MaxWork;
-        std::vector<Tile> tiles;
+        std::pmr::vector<Tile> tiles(&frameMemory);
+        tiles.reserve(1024);
         Edges horizontal(&frameMemory), vertical(&frameMemory);
 
         struct NativePoint {
@@ -245,6 +289,8 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
             nativePoints.reserve(1024);
         }
         const auto introduce = [&](const Tile& t, UInt32 x, UInt32 y, UInt32 level, bool row) {
+            if (stats)
+                ++stats->terrainPointRequests;
             spend(work);
             const auto key = std::pair{t.bx + x, t.by + y};
             if (nativePoints.contains(key)) {
@@ -269,12 +315,13 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
             const auto& v = *inputs;
             const auto h = v[2] >= 1.f ? v[1] : v[0] + (v[1] - v[0]) * v[2];
             nativePoints.emplace(key, NativePoint{h, distance, v});
-            horizontal.insert(key.second, key.first);
-            vertical.insert(key.first, key.second);
+            if (stats)
+                ++stats->terrainPoints;
             return true;
         };
         std::set<std::array<UInt32, 4>> nextSplit;
         const auto& clip = selection->clip;
+        gfx::ScopedRenderWorkTimer selectPhase(&gfx::RenderWorkStats::terrainSelectMs);
         std::pmr::map<Int32, UInt32> blockIndices(&frameMemory);
         for (UInt32 i = 0; i < grid.blocks.size(); ++i) {
             spend(work);
@@ -339,9 +386,7 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                     return v != std::byte{};
                 });
             });
-            const std::function<bool(UInt32, UInt32, UInt32)> select = [&](UInt32 x,
-                                                                           UInt32 y,
-                                                                           UInt32 size) {
+            const auto select = [&](auto&& self, UInt32 x, UInt32 y, UInt32 size) -> bool {
                 if (stats) {
                     ++stats->terrainNodes;
                 }
@@ -473,10 +518,12 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                         return false;
                     }
                     tiles.push_back(tile);
-                    for (const auto xx : {bx + x, bx + x + size}) {
-                        for (const auto yy : {by + y, by + y + size}) {
-                            horizontal.insert(yy, xx);
-                            vertical.insert(xx, yy);
+                    if (!view.nativeTraversal) {
+                        for (const auto xx : {bx + x, bx + x + size}) {
+                            for (const auto yy : {by + y, by + y + size}) {
+                                horizontal.insert(yy, xx);
+                                vertical.insert(xx, yy);
+                            }
                         }
                     }
                     return true;
@@ -500,8 +547,8 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                             return false;
                         }
                     }
-                    return select(x, y, half) && select(x + half, y, half) &&
-                           select(x + half, y + half, half) && select(x, y + half, half);
+                    return self(self, x, y, half) && self(self, x + half, y, half) &&
+                           self(self, x + half, y + half, half) && self(self, x, y + half, half);
                 }
                 if (geometry && selection->visibility && level <= scanLevel) {
                     // transformCross reaches all five introduced points before
@@ -517,8 +564,8 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                         vertical.insert(UInt32(p.x), UInt32(p.y));
                     }
                 }
-                return select(x, y, half) && select(x + half, y, half) &&
-                       select(x, y + half, half) && select(x + half, y + half, half);
+                return self(self, x, y, half) && self(self, x + half, y, half) &&
+                       self(self, x, y + half, half) && self(self, x + half, y + half, half);
             };
             if (view.nativeTraversal) {
                 const auto step = 1U << scanLevel;
@@ -549,18 +596,24 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                         }
                     }
                     for (auto x = begin; x < end; x += step) {
-                        if (!select(x, y, step)) {
+                        if (!select(select, x, y, step)) {
                             return {};
                         }
                     }
                 }
-            } else if (!select(0, 0, n)) {
+            } else if (!select(select, 0, 0, n)) {
                 return {};
             }
         }
-        horizontal.prepare();
-        vertical.prepare();
+        selectPhase.stop();
+        {
+            gfx::ScopedRenderWorkTimer phase(&gfx::RenderWorkStats::terrainEdgesMs);
+            horizontal.prepare();
+            vertical.prepare();
+        }
+        gfx::ScopedRenderWorkTimer emitPhase(&gfx::RenderWorkStats::terrainEmitMs);
         WorldSurfaceMesh result;
+        result.terrainSquareIds.reserve(tiles.size());
         result.materials = resources.materials;
         std::optional<TsMaterialResources::Data> materialData;
         std::shared_ptr<TerrainPatches> patches;
@@ -568,6 +621,7 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
             view.nativeGeometry->perspective && view.compositeTextures &&
             view.textureTiming == TerrainTextureTiming::RetainedLru) {
             patches = std::make_shared<TerrainPatches>();
+            patches->patches.reserve(tiles.size());
             patches->camera = view.camera;
             patches->farDistance = view.nativeGeometry->farDistance;
             patches->hazeDistance = view.hazeDistance.value_or(patches->farDistance);
@@ -850,20 +904,14 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                 std::optional<UInt32> previous;
                 const auto visit = [&](UInt32 coordinate) {
                     spend(work);
-                    if (!view.nativeTraversal ||
-                        ((coordinate == lo || coordinate == hi || coordinate == (lo + hi) / 2) &&
-                         nativePoints.contains(verticalEdge ? std::pair{fixed, coordinate}
-                                                            : std::pair{coordinate, fixed}))) {
-                        // Delay one point so the last corner remains the next
-                        // edge's first corner, in either traversal direction.
-                        if (previous) {
-                            boundary.push_back(
-                                verticalEdge
-                                    ? Point2I{Int32(fixed - t.bx), Int32(*previous - t.by)}
-                                    : Point2I{Int32(*previous - t.bx), Int32(fixed - t.by)});
-                        }
-                        previous = coordinate;
+                    // Delay one point so the last corner remains the next
+                    // edge's first corner, in either traversal direction.
+                    if (previous) {
+                        boundary.push_back(
+                            verticalEdge ? Point2I{Int32(fixed - t.bx), Int32(*previous - t.by)}
+                                         : Point2I{Int32(*previous - t.bx), Int32(fixed - t.by)});
                     }
+                    previous = coordinate;
                 };
                 if (reverse) {
                     for (auto at = values.rbegin(); at != values.rend(); ++at) {
@@ -875,10 +923,12 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                     }
                 }
             };
-            edge(vertical, x, y, y + s, false, true);
-            edge(horizontal, y + s, x, x + s, false, false);
-            edge(vertical, x + s, y, y + s, true, true);
-            edge(horizontal, y, x, x + s, true, false);
+            if (!view.nativeTraversal) {
+                edge(vertical, x, y, y + s, false, true);
+                edge(horizontal, y + s, x, x + s, false, false);
+                edge(vertical, x + s, y, y + s, true, true);
+                edge(horizontal, y, x, x + s, true, false);
+            }
             const auto point = [&](UInt32 xx, UInt32 yy) {
                 return Point2I{Int32(t.x + xx), Int32(t.y + yy)};
             };
@@ -891,16 +941,27 @@ std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrainLod(const TerrainGridRe
                                   point(s, 0),
                                   point(s / 2, 0)};
             UInt32 midpointMask{};
+            // Native transformCross already records every reached edge point,
+            // including points introduced before a clipped child is rejected.
+            // Corners are always reached; only four midpoint memberships affect
+            // the stitch template. No sorted edge lists are needed on this path.
+            if (view.nativeTraversal && s > 1) {
+                for (UInt32 j = 1; j < ring.size(); j += 2) {
+                    if (nativePoints.contains({t.bx + UInt32(ring[j].x), t.by + UInt32(ring[j].y)}))
+                        midpointMask |= 1U << (j / 2);
+                }
+            }
             const bool nativeBoundary =
-                geometry && std::ranges::all_of(boundary, [&](const auto& p) {
-                    const auto found = std::ranges::find(ring, p);
-                    if (found == ring.end())
-                        return false;
-                    const auto index = UInt32(found - ring.begin());
-                    if (s > 1 && (index & 1U))
-                        midpointMask |= 1U << (index / 2);
-                    return true;
-                });
+                view.nativeTraversal ||
+                (geometry && std::ranges::all_of(boundary, [&](const auto& p) {
+                     const auto found = std::ranges::find(ring, p);
+                     if (found == ring.end())
+                         return false;
+                     const auto index = UInt32(found - ring.begin());
+                     if (s > 1 && (index & 1U))
+                         midpointMask |= 1U << (index / 2);
+                     return true;
+                 }));
             if (nativeBoundary) {
                 // Original PolyList/FaceList triangulate the two authored
                 // half-squares using only corners and reached edge midpoints.

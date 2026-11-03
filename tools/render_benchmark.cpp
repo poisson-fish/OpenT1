@@ -89,6 +89,8 @@ int main(int argc, char** argv) {
         auto surface = gfx::SdlGpuSurface::create(window, 800, 600, gc);
         require(bool(surface), SDL_GetError());
         std::vector<double> frames, prepares, captures, submissions, simulations, terrain, lighting;
+        std::vector<double> terrainVisibility, terrainSelect, terrainEdges, terrainEmit;
+        gfx::RenderWorkStats terrainWork;
         UInt64 polygons{}, draws{}, binds{}, vertexBytes{}, meshBytes{}, textureBytes{},
             geometryBuilds{}, mapBuilds{}, terrainCacheHits{};
         UInt64 instanceBytes{};
@@ -125,6 +127,20 @@ int main(int argc, char** argv) {
                 submissions.push_back(submitMs);
                 simulations.push_back(simMs);
                 terrain.push_back(game.renderStats().work.terrainLodMs);
+                const auto& work = game.renderStats().work;
+                terrainVisibility.push_back(work.terrainVisibilityMs);
+                terrainSelect.push_back(work.terrainSelectMs);
+                terrainEdges.push_back(work.terrainEdgesMs);
+                terrainEmit.push_back(work.terrainEmitMs);
+                terrainWork.terrainNodes += work.terrainNodes;
+                terrainWork.terrainValidatedHeights += work.terrainValidatedHeights;
+                terrainWork.terrainMaterialChecks += work.terrainMaterialChecks;
+                terrainWork.terrainPointRequests += work.terrainPointRequests;
+                terrainWork.terrainPoints += work.terrainPoints;
+                terrainWork.terrainEdgePoints += work.terrainEdgePoints;
+                terrainWork.terrainScratchAllocations += work.terrainScratchAllocations;
+                terrainWork.terrainScratchBytes += work.terrainScratchBytes;
+                terrainWork.terrainScratchBufferBytes += work.terrainScratchBufferBytes;
                 lighting.push_back(game.renderStats().work.lightSamplesMs);
                 polygons += game.lastScenePolygonCount();
                 draws += surface->submissionStats().draws;
@@ -167,6 +183,28 @@ int main(int argc, char** argv) {
         distribution(out, "simulation_ms", simulations);
         out << ',';
         distribution(out, "terrain_lod_ms", terrain);
+        out << ',';
+        distribution(out, "terrain_visibility_ms", terrainVisibility);
+        out << ',';
+        distribution(out, "terrain_select_ms", terrainSelect);
+        out << ',';
+        distribution(out, "terrain_edges_ms", terrainEdges);
+        out << ',';
+        distribution(out, "terrain_emit_ms", terrainEmit);
+        out << ",\"mean_terrain_nodes\":" << double(terrainWork.terrainNodes) / count
+            << ",\"mean_terrain_validated_heights\":"
+            << double(terrainWork.terrainValidatedHeights) / count
+            << ",\"mean_terrain_material_checks\":"
+            << double(terrainWork.terrainMaterialChecks) / count
+            << ",\"mean_terrain_point_requests\":"
+            << double(terrainWork.terrainPointRequests) / count
+            << ",\"mean_terrain_points\":" << double(terrainWork.terrainPoints) / count
+            << ",\"mean_terrain_edge_points\":" << double(terrainWork.terrainEdgePoints) / count
+            << ",\"mean_terrain_scratch_allocations\":"
+            << double(terrainWork.terrainScratchAllocations) / count
+            << ",\"mean_terrain_scratch_bytes\":" << double(terrainWork.terrainScratchBytes) / count
+            << ",\"mean_terrain_scratch_buffer_bytes\":"
+            << double(terrainWork.terrainScratchBufferBytes) / count;
         out << ',';
         distribution(out, "light_samples_ms", lighting);
         out << ",\"mean_polygons\":" << double(polygons) / count

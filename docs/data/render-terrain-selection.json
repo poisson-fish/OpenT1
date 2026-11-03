@@ -1,0 +1,3161 @@
+{
+  "date": "2026-11-03",
+  "baseline_revision": "24220f58f561e5f74f38152cc1b466c319d924b1",
+  "baseline": "Baseline revision plus matching phase/counter diagnostics",
+  "candidate": "Working tree: direct native stitches, recursive lambda, reusable arena",
+  "candidate_source_diff_sha256": "805c39b06036e1d497df636da2f62ca6c60ac3a74a20d0541bd752dd256e93fa",
+  "configuration": {
+    "build": "Windows x64 Release",
+    "backend": "direct3d12",
+    "frames": 240,
+    "warmup_frames": 120,
+    "resolution": [
+      800,
+      600
+    ],
+    "runs_per_variant": 2,
+    "serial": true,
+    "instrumented_global_allocations": false
+  },
+  "scratch_buffer_bytes_per_thread": 393216,
+  "notes": [
+    "Timings include phase/counter diagnostics in both binaries. No global new overrides.",
+    "Means in the summary are averages of the two run means. Raw p95/p99 are per run.",
+    "Visibility includes window selection; selection includes validation and traversal.",
+    "Arena allocation counters cover upstream spill blocks, not all process allocations.",
+    "The baseline has no reusable arena buffer; its arena bytes exclude its std::vector<Tile>.",
+    "The candidate also places selected tiles in the arena. Published mesh/texture allocations are separate.",
+    "Final readbacks and recorded workload counts match across all four runs of each case.",
+    "Local absolute baseline times differ from historical captures; use the paired comparisons.",
+    "Initial Debug core/mapped_archive_backing failure reproduced in a core-only executable. The rename fallback lacked explicit NUL storage and could create a garbage-suffixed sibling. A post-capture fix reserves the terminator and tests four filename lengths; final Debug, Release and headless suites all pass. Timing captures predate this independent archive fix."
+  ],
+  "validation": {
+    "release_ctest_passed": 13,
+    "debug_ctest_passed": 13,
+    "debug_ctest_failed": [],
+    "initial_debug_ctest_failed": [
+      "core/mapped_archive_backing"
+    ],
+    "archive_replacement_filename_lengths": 4,
+    "headless_ctest_passed": 11,
+    "d3d12_platform_cases": 2,
+    "vulkan_platform_cases": 2,
+    "installed_fixpack_cases": 4,
+    "installed_trpg_cases": 3,
+    "synthetic_camera_views": 27,
+    "exact_readback_cases": 12
+  },
+  "provenance": {
+    "terrain-selection-before": {
+      "captured_utc": "2026-11-03T16:28:40.749329+00:00",
+      "executable_sha256": "e066902d602c4486e76f3d9426efd9baa634fbe4360b6c0a0ef3cb118168f5c3",
+      "git_revision": "24220f58f561e5f74f38152cc1b466c319d924b1",
+      "git_status": [
+        " M include/opent1/gfx/render_stats.hpp",
+        " M src/world/terrain_lod.cpp",
+        " M tools/render_benchmark.cpp"
+      ],
+      "frames": 240,
+      "warmup_frames": 120,
+      "driver": "direct3d12",
+      "projected_interiors": false,
+      "projected_terrain": false,
+      "projected_shapes": false,
+      "instrumented_allocations": false
+    },
+    "terrain-selection-before-repeat": {
+      "captured_utc": "2026-11-03T16:33:54.706460+00:00",
+      "executable_sha256": "e066902d602c4486e76f3d9426efd9baa634fbe4360b6c0a0ef3cb118168f5c3",
+      "git_revision": "24220f58f561e5f74f38152cc1b466c319d924b1",
+      "git_status": [
+        " M include/opent1/gfx/render_stats.hpp",
+        " M src/world/terrain_lod.cpp",
+        " M tests/world/render_retention_test.cpp",
+        " M tools/render_benchmark.cpp"
+      ],
+      "frames": 240,
+      "warmup_frames": 120,
+      "driver": "direct3d12",
+      "projected_interiors": false,
+      "projected_terrain": false,
+      "projected_shapes": false,
+      "instrumented_allocations": false
+    },
+    "terrain-selection-verified": {
+      "captured_utc": "2026-11-03T16:41:42.873579+00:00",
+      "executable_sha256": "0520c392b3410e21b2190db4c4b53513670cfd73632450a1d14328cf0da0e717",
+      "git_revision": "24220f58f561e5f74f38152cc1b466c319d924b1",
+      "git_status": [
+        " M docs/render-improvements.md",
+        " M include/opent1/gfx/render_stats.hpp",
+        " M src/world/terrain_lod.cpp",
+        " M tests/world/render_retention_test.cpp",
+        " M tools/render_benchmark.cpp"
+      ],
+      "frames": 240,
+      "warmup_frames": 120,
+      "driver": "direct3d12",
+      "projected_interiors": false,
+      "projected_terrain": false,
+      "projected_shapes": false,
+      "instrumented_allocations": false
+    },
+    "terrain-selection-verified-repeat": {
+      "captured_utc": "2026-11-03T16:42:33.052166+00:00",
+      "executable_sha256": "0520c392b3410e21b2190db4c4b53513670cfd73632450a1d14328cf0da0e717",
+      "git_revision": "24220f58f561e5f74f38152cc1b466c319d924b1",
+      "git_status": [
+        " M docs/render-improvements.md",
+        " M include/opent1/gfx/render_stats.hpp",
+        " M src/world/terrain_lod.cpp",
+        " M tests/world/render_retention_test.cpp",
+        " M tools/render_benchmark.cpp"
+      ],
+      "frames": 240,
+      "warmup_frames": 120,
+      "driver": "direct3d12",
+      "projected_interiors": false,
+      "projected_terrain": false,
+      "projected_shapes": false,
+      "instrumented_allocations": false
+    }
+  },
+  "cases": {
+    "base-Broadside-rotate": {
+      "before": [
+        {
+          "terrain_lod_ms": {
+            "mean": 0.973701,
+            "p95": 1.2332,
+            "p99": 1.3463
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.00992917,
+            "p95": 0.0131,
+            "p99": 0.0168
+          },
+          "terrain_select_ms": {
+            "mean": 0.224115,
+            "p95": 0.287,
+            "p99": 0.3739
+          },
+          "terrain_edges_ms": {
+            "mean": 0.181749,
+            "p95": 0.2044,
+            "p99": 0.2191
+          },
+          "terrain_emit_ms": {
+            "mean": 0.5467,
+            "p95": 0.7272,
+            "p99": 0.8064
+          },
+          "frame_ms": {
+            "mean": 4.34671,
+            "p95": 6.1242,
+            "p99": 6.4287
+          },
+          "prepare_ms": {
+            "mean": 3.07506,
+            "p95": 4.3952,
+            "p99": 4.572
+          },
+          "capture_ms": {
+            "mean": 1.64655,
+            "p95": 2.3901,
+            "p99": 2.5585
+          },
+          "mean_terrain_nodes": 781.45,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 7605.87,
+          "mean_terrain_point_requests": 1099.77,
+          "mean_terrain_points": 697.608,
+          "mean_polygons": 1854.47,
+          "mean_draws": 532.804,
+          "mean_binds": 216.129,
+          "mean_vertex_upload_bytes": 4656,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 72345.6,
+          "mean_texture_upload_bytes": 244324,
+          "mean_terrain_edge_points": 5867.02,
+          "mean_terrain_scratch_allocations": 5,
+          "mean_terrain_scratch_bytes": 432128,
+          "capture_path": "build/profiles/terrain-selection-before/base-Broadside-rotate.json",
+          "capture_sha256": "ccb3a2e4a29aa0b602e8b93459e9b82043b7e149d1cdf5154e503570849efc90",
+          "readback_sha256": "4a640f3c53d5806d3d2ada468b1057be58933bdbeebd5e8770d97fcb8784c8b8"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 1.01385,
+            "p95": 1.2419,
+            "p99": 1.4259
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0095025,
+            "p95": 0.0125,
+            "p99": 0.0148
+          },
+          "terrain_select_ms": {
+            "mean": 0.231665,
+            "p95": 0.3001,
+            "p99": 0.3808
+          },
+          "terrain_edges_ms": {
+            "mean": 0.186898,
+            "p95": 0.2214,
+            "p99": 0.2431
+          },
+          "terrain_emit_ms": {
+            "mean": 0.573084,
+            "p95": 0.7478,
+            "p99": 0.874
+          },
+          "frame_ms": {
+            "mean": 4.50499,
+            "p95": 5.9985,
+            "p99": 6.4713
+          },
+          "prepare_ms": {
+            "mean": 3.18687,
+            "p95": 4.3527,
+            "p99": 4.6532
+          },
+          "capture_ms": {
+            "mean": 1.70943,
+            "p95": 2.4383,
+            "p99": 2.6511
+          },
+          "mean_terrain_nodes": 781.45,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 7605.87,
+          "mean_terrain_point_requests": 1099.77,
+          "mean_terrain_points": 697.608,
+          "mean_polygons": 1854.47,
+          "mean_draws": 532.804,
+          "mean_binds": 216.129,
+          "mean_vertex_upload_bytes": 4656,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 72345.6,
+          "mean_texture_upload_bytes": 244324,
+          "mean_terrain_edge_points": 5867.02,
+          "mean_terrain_scratch_allocations": 5,
+          "mean_terrain_scratch_bytes": 432128,
+          "capture_path": "build/profiles/terrain-selection-before-repeat/base-Broadside-rotate.json",
+          "capture_sha256": "9b7c4c249d87ef363f03b6e8b43d34be24a9eb3aa7d88201656cca285aea0752",
+          "readback_sha256": "4a640f3c53d5806d3d2ada468b1057be58933bdbeebd5e8770d97fcb8784c8b8"
+        }
+      ],
+      "after": [
+        {
+          "terrain_lod_ms": {
+            "mean": 0.63483,
+            "p95": 0.8377,
+            "p99": 0.9077
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0102371,
+            "p95": 0.0131,
+            "p99": 0.0287
+          },
+          "terrain_select_ms": {
+            "mean": 0.20681,
+            "p95": 0.2759,
+            "p99": 0.3006
+          },
+          "terrain_edges_ms": {
+            "mean": 0.00024875,
+            "p95": 0.0004,
+            "p99": 0.0005
+          },
+          "terrain_emit_ms": {
+            "mean": 0.40564,
+            "p95": 0.5605,
+            "p99": 0.6531
+          },
+          "frame_ms": {
+            "mean": 4.21593,
+            "p95": 5.7761,
+            "p99": 6.5164
+          },
+          "prepare_ms": {
+            "mean": 2.86882,
+            "p95": 4.1593,
+            "p99": 4.502
+          },
+          "capture_ms": {
+            "mean": 1.3375,
+            "p95": 2.0987,
+            "p99": 2.3539
+          },
+          "mean_terrain_nodes": 781.45,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 7605.87,
+          "mean_terrain_point_requests": 1099.77,
+          "mean_terrain_points": 697.608,
+          "mean_polygons": 1854.47,
+          "mean_draws": 532.804,
+          "mean_binds": 216.129,
+          "mean_vertex_upload_bytes": 4656,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 72345.6,
+          "mean_texture_upload_bytes": 244324,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 393216,
+          "capture_path": "build/profiles/terrain-selection-verified/base-Broadside-rotate.json",
+          "capture_sha256": "2578c88126e17a550fd5a4a32a25f21e4725fc8047a22e7c06aed1d6d0539e22",
+          "readback_sha256": "4a640f3c53d5806d3d2ada468b1057be58933bdbeebd5e8770d97fcb8784c8b8"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 0.620292,
+            "p95": 0.8568,
+            "p99": 0.9834
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0094975,
+            "p95": 0.0132,
+            "p99": 0.0141
+          },
+          "terrain_select_ms": {
+            "mean": 0.200658,
+            "p95": 0.2604,
+            "p99": 0.305
+          },
+          "terrain_edges_ms": {
+            "mean": 0.000231667,
+            "p95": 0.0004,
+            "p99": 0.0005
+          },
+          "terrain_emit_ms": {
+            "mean": 0.398685,
+            "p95": 0.5974,
+            "p99": 0.7066
+          },
+          "frame_ms": {
+            "mean": 4.06442,
+            "p95": 5.9545,
+            "p99": 6.477
+          },
+          "prepare_ms": {
+            "mean": 2.78124,
+            "p95": 4.1946,
+            "p99": 4.4611
+          },
+          "capture_ms": {
+            "mean": 1.30229,
+            "p95": 2.0738,
+            "p99": 2.2347
+          },
+          "mean_terrain_nodes": 781.45,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 7605.87,
+          "mean_terrain_point_requests": 1099.77,
+          "mean_terrain_points": 697.608,
+          "mean_polygons": 1854.47,
+          "mean_draws": 532.804,
+          "mean_binds": 216.129,
+          "mean_vertex_upload_bytes": 4656,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 72345.6,
+          "mean_texture_upload_bytes": 244324,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 393216,
+          "capture_path": "build/profiles/terrain-selection-verified-repeat/base-Broadside-rotate.json",
+          "capture_sha256": "ba27c58c08e2e293e9af804575108f2a5a9b539cbd3207ccdeea4c8332a16ba9",
+          "readback_sha256": "4a640f3c53d5806d3d2ada468b1057be58933bdbeebd5e8770d97fcb8784c8b8"
+        }
+      ],
+      "readbacks_identical": true,
+      "workload_counts_identical": true,
+      "mean_terrain_lod_ms_before": 0.9937754999999999,
+      "mean_terrain_lod_ms_after": 0.627561,
+      "reduction_percent": 36.85082797875374
+    },
+    "base-Broadside-stationary": {
+      "before": [
+        {
+          "terrain_lod_ms": {
+            "mean": 0.936543,
+            "p95": 1.0931,
+            "p99": 1.2272
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.00905625,
+            "p95": 0.0112,
+            "p99": 0.0162
+          },
+          "terrain_select_ms": {
+            "mean": 0.222375,
+            "p95": 0.2849,
+            "p99": 0.3388
+          },
+          "terrain_edges_ms": {
+            "mean": 0.176811,
+            "p95": 0.1999,
+            "p99": 0.2221
+          },
+          "terrain_emit_ms": {
+            "mean": 0.516804,
+            "p95": 0.6451,
+            "p99": 0.7215
+          },
+          "frame_ms": {
+            "mean": 4.66258,
+            "p95": 5.4955,
+            "p99": 5.797
+          },
+          "prepare_ms": {
+            "mean": 3.38653,
+            "p95": 3.9832,
+            "p99": 4.1923
+          },
+          "capture_ms": {
+            "mean": 1.86192,
+            "p95": 2.1737,
+            "p99": 2.3973
+          },
+          "mean_terrain_nodes": 757,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 7716,
+          "mean_terrain_point_requests": 1067,
+          "mean_terrain_points": 677,
+          "mean_polygons": 2335,
+          "mean_draws": 766,
+          "mean_binds": 137,
+          "mean_vertex_upload_bytes": 4608,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 82432,
+          "mean_texture_upload_bytes": 78601.1,
+          "mean_terrain_edge_points": 5754,
+          "mean_terrain_scratch_allocations": 5,
+          "mean_terrain_scratch_bytes": 432128,
+          "capture_path": "build/profiles/terrain-selection-before/base-Broadside-stationary.json",
+          "capture_sha256": "a763c579aae8ab303fb79b6988bf56260d159e550a046982ec96dbf95d4f39f9",
+          "readback_sha256": "6cbf996270e51dbee9688d490aa0697bee2dedf40a4c91d0b24ad6f0cc4569fd"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 0.971007,
+            "p95": 1.1639,
+            "p99": 1.3001
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.00957083,
+            "p95": 0.0122,
+            "p99": 0.0144
+          },
+          "terrain_select_ms": {
+            "mean": 0.222897,
+            "p95": 0.2862,
+            "p99": 0.3428
+          },
+          "terrain_edges_ms": {
+            "mean": 0.178862,
+            "p95": 0.2085,
+            "p99": 0.2291
+          },
+          "terrain_emit_ms": {
+            "mean": 0.547876,
+            "p95": 0.6806,
+            "p99": 0.7541
+          },
+          "frame_ms": {
+            "mean": 4.75408,
+            "p95": 5.6736,
+            "p99": 5.9886
+          },
+          "prepare_ms": {
+            "mean": 3.45236,
+            "p95": 3.9872,
+            "p99": 4.3423
+          },
+          "capture_ms": {
+            "mean": 1.89693,
+            "p95": 2.2404,
+            "p99": 2.4445
+          },
+          "mean_terrain_nodes": 757,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 7716,
+          "mean_terrain_point_requests": 1067,
+          "mean_terrain_points": 677,
+          "mean_polygons": 2335,
+          "mean_draws": 766,
+          "mean_binds": 137,
+          "mean_vertex_upload_bytes": 4608,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 82432,
+          "mean_texture_upload_bytes": 78601.1,
+          "mean_terrain_edge_points": 5754,
+          "mean_terrain_scratch_allocations": 5,
+          "mean_terrain_scratch_bytes": 432128,
+          "capture_path": "build/profiles/terrain-selection-before-repeat/base-Broadside-stationary.json",
+          "capture_sha256": "d8241db7f369fd6751e8bbc1cd9a1f8891fd21d4fc8336208eb770df59332555",
+          "readback_sha256": "6cbf996270e51dbee9688d490aa0697bee2dedf40a4c91d0b24ad6f0cc4569fd"
+        }
+      ],
+      "after": [
+        {
+          "terrain_lod_ms": {
+            "mean": 0.564779,
+            "p95": 0.7007,
+            "p99": 0.7997
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.00905917,
+            "p95": 0.0117,
+            "p99": 0.0126
+          },
+          "terrain_select_ms": {
+            "mean": 0.196434,
+            "p95": 0.2369,
+            "p99": 0.3058
+          },
+          "terrain_edges_ms": {
+            "mean": 0.000258333,
+            "p95": 0.0004,
+            "p99": 0.0007
+          },
+          "terrain_emit_ms": {
+            "mean": 0.348223,
+            "p95": 0.45,
+            "p99": 0.511
+          },
+          "frame_ms": {
+            "mean": 4.15466,
+            "p95": 4.8006,
+            "p99": 5.3052
+          },
+          "prepare_ms": {
+            "mean": 2.93879,
+            "p95": 3.3404,
+            "p99": 3.8418
+          },
+          "capture_ms": {
+            "mean": 1.4597,
+            "p95": 1.6584,
+            "p99": 1.8702
+          },
+          "mean_terrain_nodes": 757,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 7716,
+          "mean_terrain_point_requests": 1067,
+          "mean_terrain_points": 677,
+          "mean_polygons": 2335,
+          "mean_draws": 766,
+          "mean_binds": 137,
+          "mean_vertex_upload_bytes": 4608,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 82432,
+          "mean_texture_upload_bytes": 78601.1,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 393216,
+          "capture_path": "build/profiles/terrain-selection-verified/base-Broadside-stationary.json",
+          "capture_sha256": "18f94a67569ab695db3170009b7ff01c308dfc6965b0e81a9ca07ef6a53ae844",
+          "readback_sha256": "6cbf996270e51dbee9688d490aa0697bee2dedf40a4c91d0b24ad6f0cc4569fd"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 0.56357,
+            "p95": 0.7163,
+            "p99": 0.7948
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.00883458,
+            "p95": 0.0113,
+            "p99": 0.0158
+          },
+          "terrain_select_ms": {
+            "mean": 0.197443,
+            "p95": 0.2474,
+            "p99": 0.2849
+          },
+          "terrain_edges_ms": {
+            "mean": 0.000274583,
+            "p95": 0.0004,
+            "p99": 0.0009
+          },
+          "terrain_emit_ms": {
+            "mean": 0.345263,
+            "p95": 0.4614,
+            "p99": 0.5576
+          },
+          "frame_ms": {
+            "mean": 4.12013,
+            "p95": 4.739,
+            "p99": 5.1815
+          },
+          "prepare_ms": {
+            "mean": 2.93647,
+            "p95": 3.4273,
+            "p99": 3.5746
+          },
+          "capture_ms": {
+            "mean": 1.45494,
+            "p95": 1.7239,
+            "p99": 1.8462
+          },
+          "mean_terrain_nodes": 757,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 7716,
+          "mean_terrain_point_requests": 1067,
+          "mean_terrain_points": 677,
+          "mean_polygons": 2335,
+          "mean_draws": 766,
+          "mean_binds": 137,
+          "mean_vertex_upload_bytes": 4608,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 82432,
+          "mean_texture_upload_bytes": 78601.1,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 393216,
+          "capture_path": "build/profiles/terrain-selection-verified-repeat/base-Broadside-stationary.json",
+          "capture_sha256": "72fa5a499b5aa93a9be705691407d5c4fcce58cf4b106fbb76fb15ca9d5db77c",
+          "readback_sha256": "6cbf996270e51dbee9688d490aa0697bee2dedf40a4c91d0b24ad6f0cc4569fd"
+        }
+      ],
+      "readbacks_identical": true,
+      "workload_counts_identical": true,
+      "mean_terrain_lod_ms_before": 0.953775,
+      "mean_terrain_lod_ms_after": 0.5641745,
+      "reduction_percent": 40.84826085816885
+    },
+    "base-Broadside-travel": {
+      "before": [
+        {
+          "terrain_lod_ms": {
+            "mean": 1.21714,
+            "p95": 1.5315,
+            "p99": 1.5974
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0108092,
+            "p95": 0.0145,
+            "p99": 0.019
+          },
+          "terrain_select_ms": {
+            "mean": 0.229275,
+            "p95": 0.3023,
+            "p99": 0.3513
+          },
+          "terrain_edges_ms": {
+            "mean": 0.196277,
+            "p95": 0.2374,
+            "p99": 0.2501
+          },
+          "terrain_emit_ms": {
+            "mean": 0.767897,
+            "p95": 1.0136,
+            "p99": 1.0866
+          },
+          "frame_ms": {
+            "mean": 5.91282,
+            "p95": 8.0591,
+            "p99": 8.5196
+          },
+          "prepare_ms": {
+            "mean": 3.50232,
+            "p95": 5.3006,
+            "p99": 5.7389
+          },
+          "capture_ms": {
+            "mean": 1.86883,
+            "p95": 2.9422,
+            "p99": 3.2846
+          },
+          "mean_terrain_nodes": 837.163,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 7395,
+          "mean_terrain_point_requests": 1167.64,
+          "mean_terrain_points": 740.971,
+          "mean_polygons": 1885.55,
+          "mean_draws": 537.025,
+          "mean_binds": 268.671,
+          "mean_vertex_upload_bytes": 4656,
+          "mean_mesh_upload_bytes": 1.95,
+          "mean_instance_upload_bytes": 76674.1,
+          "mean_texture_upload_bytes": 265417,
+          "mean_terrain_edge_points": 6223.21,
+          "mean_terrain_scratch_allocations": 5,
+          "mean_terrain_scratch_bytes": 432128,
+          "capture_path": "build/profiles/terrain-selection-before/base-Broadside-travel.json",
+          "capture_sha256": "2f9524532a0200c7f148f213626af66bf44510bd51eeb0dfe83de6833f83c077",
+          "readback_sha256": "3c6f6d27b5594ba4821331e3eb2e8d9304c8798da33a83ae0d8e62df6c91f709"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 1.17104,
+            "p95": 1.457,
+            "p99": 1.505
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.00977833,
+            "p95": 0.0124,
+            "p99": 0.0155
+          },
+          "terrain_select_ms": {
+            "mean": 0.220876,
+            "p95": 0.273,
+            "p99": 0.3284
+          },
+          "terrain_edges_ms": {
+            "mean": 0.195366,
+            "p95": 0.2282,
+            "p99": 0.2444
+          },
+          "terrain_emit_ms": {
+            "mean": 0.732512,
+            "p95": 0.9345,
+            "p99": 1.0509
+          },
+          "frame_ms": {
+            "mean": 5.72365,
+            "p95": 7.9227,
+            "p99": 9.9133
+          },
+          "prepare_ms": {
+            "mean": 3.35121,
+            "p95": 4.748,
+            "p99": 5.0872
+          },
+          "capture_ms": {
+            "mean": 1.80111,
+            "p95": 2.6156,
+            "p99": 2.8381
+          },
+          "mean_terrain_nodes": 837.163,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 7395,
+          "mean_terrain_point_requests": 1167.64,
+          "mean_terrain_points": 740.971,
+          "mean_polygons": 1885.55,
+          "mean_draws": 537.025,
+          "mean_binds": 268.671,
+          "mean_vertex_upload_bytes": 4656,
+          "mean_mesh_upload_bytes": 1.95,
+          "mean_instance_upload_bytes": 76674.1,
+          "mean_texture_upload_bytes": 265417,
+          "mean_terrain_edge_points": 6223.21,
+          "mean_terrain_scratch_allocations": 5,
+          "mean_terrain_scratch_bytes": 432128,
+          "capture_path": "build/profiles/terrain-selection-before-repeat/base-Broadside-travel.json",
+          "capture_sha256": "ac922139df8c65f0838c722d53187f02eb25c2825e0b2e529846d0526d9b3d99",
+          "readback_sha256": "3c6f6d27b5594ba4821331e3eb2e8d9304c8798da33a83ae0d8e62df6c91f709"
+        }
+      ],
+      "after": [
+        {
+          "terrain_lod_ms": {
+            "mean": 0.757395,
+            "p95": 1.0138,
+            "p99": 1.1484
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0093375,
+            "p95": 0.0124,
+            "p99": 0.0164
+          },
+          "terrain_select_ms": {
+            "mean": 0.195167,
+            "p95": 0.2228,
+            "p99": 0.2459
+          },
+          "terrain_edges_ms": {
+            "mean": 0.000279167,
+            "p95": 0.0004,
+            "p99": 0.0006
+          },
+          "terrain_emit_ms": {
+            "mean": 0.542026,
+            "p95": 0.7761,
+            "p99": 0.8918
+          },
+          "frame_ms": {
+            "mean": 5.18874,
+            "p95": 7.4857,
+            "p99": 7.9645
+          },
+          "prepare_ms": {
+            "mean": 2.90856,
+            "p95": 4.1524,
+            "p99": 4.5092
+          },
+          "capture_ms": {
+            "mean": 1.36405,
+            "p95": 2.0985,
+            "p99": 2.3516
+          },
+          "mean_terrain_nodes": 837.163,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 7395,
+          "mean_terrain_point_requests": 1167.64,
+          "mean_terrain_points": 740.971,
+          "mean_polygons": 1885.55,
+          "mean_draws": 537.025,
+          "mean_binds": 268.671,
+          "mean_vertex_upload_bytes": 4656,
+          "mean_mesh_upload_bytes": 1.95,
+          "mean_instance_upload_bytes": 76674.1,
+          "mean_texture_upload_bytes": 265417,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 393216,
+          "capture_path": "build/profiles/terrain-selection-verified/base-Broadside-travel.json",
+          "capture_sha256": "df32923023b5a5dee1aa1381a929ac909e755f8cfe42bb5e19201b59331dbaab",
+          "readback_sha256": "3c6f6d27b5594ba4821331e3eb2e8d9304c8798da33a83ae0d8e62df6c91f709"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 0.753648,
+            "p95": 0.9475,
+            "p99": 1.0694
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.00951583,
+            "p95": 0.0119,
+            "p99": 0.0143
+          },
+          "terrain_select_ms": {
+            "mean": 0.198242,
+            "p95": 0.2284,
+            "p99": 0.2857
+          },
+          "terrain_edges_ms": {
+            "mean": 0.000259583,
+            "p95": 0.0004,
+            "p99": 0.0005
+          },
+          "terrain_emit_ms": {
+            "mean": 0.53517,
+            "p95": 0.7093,
+            "p99": 0.825
+          },
+          "frame_ms": {
+            "mean": 5.12313,
+            "p95": 7.1595,
+            "p99": 7.5843
+          },
+          "prepare_ms": {
+            "mean": 2.88562,
+            "p95": 4.0724,
+            "p99": 4.3073
+          },
+          "capture_ms": {
+            "mean": 1.35488,
+            "p95": 2.0672,
+            "p99": 2.1733
+          },
+          "mean_terrain_nodes": 837.163,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 7395,
+          "mean_terrain_point_requests": 1167.64,
+          "mean_terrain_points": 740.971,
+          "mean_polygons": 1885.55,
+          "mean_draws": 537.025,
+          "mean_binds": 268.671,
+          "mean_vertex_upload_bytes": 4656,
+          "mean_mesh_upload_bytes": 1.95,
+          "mean_instance_upload_bytes": 76674.1,
+          "mean_texture_upload_bytes": 265417,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 393216,
+          "capture_path": "build/profiles/terrain-selection-verified-repeat/base-Broadside-travel.json",
+          "capture_sha256": "83eda30d2469b9ca106bcabb1f905901d0af0fe31b59911ef91ec7a843f16137",
+          "readback_sha256": "3c6f6d27b5594ba4821331e3eb2e8d9304c8798da33a83ae0d8e62df6c91f709"
+        }
+      ],
+      "readbacks_identical": true,
+      "workload_counts_identical": true,
+      "mean_terrain_lod_ms_before": 1.19409,
+      "mean_terrain_lod_ms_after": 0.7555215,
+      "reduction_percent": 36.72826168881743
+    },
+    "base-Raindance-rotate": {
+      "before": [
+        {
+          "terrain_lod_ms": {
+            "mean": 0.591424,
+            "p95": 0.7554,
+            "p99": 0.8189
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.00859667,
+            "p95": 0.0113,
+            "p99": 0.0143
+          },
+          "terrain_select_ms": {
+            "mean": 0.146815,
+            "p95": 0.2019,
+            "p99": 0.2228
+          },
+          "terrain_edges_ms": {
+            "mean": 0.108462,
+            "p95": 0.1267,
+            "p99": 0.1375
+          },
+          "terrain_emit_ms": {
+            "mean": 0.31714,
+            "p95": 0.4142,
+            "p99": 0.4751
+          },
+          "frame_ms": {
+            "mean": 3.40848,
+            "p95": 4.7977,
+            "p99": 5.4336
+          },
+          "prepare_ms": {
+            "mean": 2.33386,
+            "p95": 3.2694,
+            "p99": 3.786
+          },
+          "capture_ms": {
+            "mean": 0.933417,
+            "p95": 1.3009,
+            "p99": 1.5251
+          },
+          "mean_terrain_nodes": 473.117,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 4253.87,
+          "mean_terrain_point_requests": 666.258,
+          "mean_terrain_points": 437.367,
+          "mean_polygons": 1626.77,
+          "mean_draws": 524.596,
+          "mean_binds": 180.95,
+          "mean_vertex_upload_bytes": 37928.4,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 54931.2,
+          "mean_texture_upload_bytes": 244637,
+          "mean_terrain_edge_points": 3426.87,
+          "mean_terrain_scratch_allocations": 3.99167,
+          "mean_terrain_scratch_bytes": 265318,
+          "capture_path": "build/profiles/terrain-selection-before/base-Raindance-rotate.json",
+          "capture_sha256": "2b67c8e4a507c7ecfb2872386642ddcdef632db3f0e6b223e70862867cea3df6",
+          "readback_sha256": "a81b1ad66cf923151ad80b371763d02d8977a9799f0f34a770e35d501fbf21c0"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 0.589195,
+            "p95": 0.7128,
+            "p99": 0.8383
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.008995,
+            "p95": 0.0113,
+            "p99": 0.0155
+          },
+          "terrain_select_ms": {
+            "mean": 0.145587,
+            "p95": 0.1792,
+            "p99": 0.2253
+          },
+          "terrain_edges_ms": {
+            "mean": 0.10824,
+            "p95": 0.1259,
+            "p99": 0.1387
+          },
+          "terrain_emit_ms": {
+            "mean": 0.31608,
+            "p95": 0.3994,
+            "p99": 0.4732
+          },
+          "frame_ms": {
+            "mean": 3.40549,
+            "p95": 4.5398,
+            "p99": 4.8927
+          },
+          "prepare_ms": {
+            "mean": 2.32529,
+            "p95": 3.1138,
+            "p99": 3.4803
+          },
+          "capture_ms": {
+            "mean": 0.927342,
+            "p95": 1.2292,
+            "p99": 1.3829
+          },
+          "mean_terrain_nodes": 473.117,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 4253.87,
+          "mean_terrain_point_requests": 666.258,
+          "mean_terrain_points": 437.367,
+          "mean_polygons": 1626.77,
+          "mean_draws": 524.596,
+          "mean_binds": 180.95,
+          "mean_vertex_upload_bytes": 37928.4,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 54931.2,
+          "mean_texture_upload_bytes": 244637,
+          "mean_terrain_edge_points": 3426.87,
+          "mean_terrain_scratch_allocations": 3.99167,
+          "mean_terrain_scratch_bytes": 265318,
+          "capture_path": "build/profiles/terrain-selection-before-repeat/base-Raindance-rotate.json",
+          "capture_sha256": "6dffd82b20315c6dd62166879de67c7db6a69f358ff14db406cb71289b4d1c27",
+          "readback_sha256": "a81b1ad66cf923151ad80b371763d02d8977a9799f0f34a770e35d501fbf21c0"
+        }
+      ],
+      "after": [
+        {
+          "terrain_lod_ms": {
+            "mean": 0.37122,
+            "p95": 0.4953,
+            "p99": 0.5369
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.00925875,
+            "p95": 0.0122,
+            "p99": 0.0159
+          },
+          "terrain_select_ms": {
+            "mean": 0.1329,
+            "p95": 0.1747,
+            "p99": 0.2099
+          },
+          "terrain_edges_ms": {
+            "mean": 0.000240417,
+            "p95": 0.0004,
+            "p99": 0.0005
+          },
+          "terrain_emit_ms": {
+            "mean": 0.218314,
+            "p95": 0.2934,
+            "p99": 0.352
+          },
+          "frame_ms": {
+            "mean": 3.24255,
+            "p95": 4.5147,
+            "p99": 4.8487
+          },
+          "prepare_ms": {
+            "mean": 2.14561,
+            "p95": 3.0158,
+            "p99": 3.2513
+          },
+          "capture_ms": {
+            "mean": 0.719009,
+            "p95": 1.0614,
+            "p99": 1.1692
+          },
+          "mean_terrain_nodes": 473.117,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 4253.87,
+          "mean_terrain_point_requests": 666.258,
+          "mean_terrain_points": 437.367,
+          "mean_polygons": 1626.77,
+          "mean_draws": 524.596,
+          "mean_binds": 180.95,
+          "mean_vertex_upload_bytes": 37928.4,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 54931.2,
+          "mean_texture_upload_bytes": 244637,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 393216,
+          "capture_path": "build/profiles/terrain-selection-verified/base-Raindance-rotate.json",
+          "capture_sha256": "be5d0150d523f9340e22f7e2770577fb40ee981d8f6bbf63f34245ad60988f41",
+          "readback_sha256": "a81b1ad66cf923151ad80b371763d02d8977a9799f0f34a770e35d501fbf21c0"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 0.376928,
+            "p95": 0.5003,
+            "p99": 0.5745
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.00944958,
+            "p95": 0.0129,
+            "p99": 0.0196
+          },
+          "terrain_select_ms": {
+            "mean": 0.13634,
+            "p95": 0.1847,
+            "p99": 0.2072
+          },
+          "terrain_edges_ms": {
+            "mean": 0.000237083,
+            "p95": 0.0005,
+            "p99": 0.0007
+          },
+          "terrain_emit_ms": {
+            "mean": 0.21986,
+            "p95": 0.2934,
+            "p99": 0.327
+          },
+          "frame_ms": {
+            "mean": 3.26573,
+            "p95": 4.4809,
+            "p99": 4.8672
+          },
+          "prepare_ms": {
+            "mean": 2.15781,
+            "p95": 3.0697,
+            "p99": 3.2872
+          },
+          "capture_ms": {
+            "mean": 0.726464,
+            "p95": 1.0574,
+            "p99": 1.16
+          },
+          "mean_terrain_nodes": 473.117,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 4253.87,
+          "mean_terrain_point_requests": 666.258,
+          "mean_terrain_points": 437.367,
+          "mean_polygons": 1626.77,
+          "mean_draws": 524.596,
+          "mean_binds": 180.95,
+          "mean_vertex_upload_bytes": 37928.4,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 54931.2,
+          "mean_texture_upload_bytes": 244637,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 393216,
+          "capture_path": "build/profiles/terrain-selection-verified-repeat/base-Raindance-rotate.json",
+          "capture_sha256": "22dcb852797a8446cc88021da66f2d1099e44a9090ed018e33f3fe71cc099d39",
+          "readback_sha256": "a81b1ad66cf923151ad80b371763d02d8977a9799f0f34a770e35d501fbf21c0"
+        }
+      ],
+      "readbacks_identical": true,
+      "workload_counts_identical": true,
+      "mean_terrain_lod_ms_before": 0.5903095,
+      "mean_terrain_lod_ms_after": 0.374074,
+      "reduction_percent": 36.630869061060345
+    },
+    "base-Raindance-stationary": {
+      "before": [
+        {
+          "terrain_lod_ms": {
+            "mean": 0.528819,
+            "p95": 0.671,
+            "p99": 0.7387
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.00903333,
+            "p95": 0.0117,
+            "p99": 0.0166
+          },
+          "terrain_select_ms": {
+            "mean": 0.140444,
+            "p95": 0.1866,
+            "p99": 0.209
+          },
+          "terrain_edges_ms": {
+            "mean": 0.105296,
+            "p95": 0.1205,
+            "p99": 0.1275
+          },
+          "terrain_emit_ms": {
+            "mean": 0.264585,
+            "p95": 0.363,
+            "p99": 0.4132
+          },
+          "frame_ms": {
+            "mean": 2.7684,
+            "p95": 3.5778,
+            "p99": 3.7685
+          },
+          "prepare_ms": {
+            "mean": 1.92597,
+            "p95": 2.4891,
+            "p99": 2.6366
+          },
+          "capture_ms": {
+            "mean": 0.816652,
+            "p95": 1.0295,
+            "p99": 1.1383
+          },
+          "mean_terrain_nodes": 486,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 4080,
+          "mean_terrain_point_requests": 685,
+          "mean_terrain_points": 446,
+          "mean_polygons": 1594,
+          "mean_draws": 487,
+          "mean_binds": 85,
+          "mean_vertex_upload_bytes": 8601.6,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 49408,
+          "mean_texture_upload_bytes": 78262.8,
+          "mean_terrain_edge_points": 3308,
+          "mean_terrain_scratch_allocations": 4,
+          "mean_terrain_scratch_bytes": 266240,
+          "capture_path": "build/profiles/terrain-selection-before/base-Raindance-stationary.json",
+          "capture_sha256": "a018cb87d4306e8e0c16963e10db5b1db2e9f0818f787e76c6d7521e17c48f06",
+          "readback_sha256": "c783f76abd0643ec2f985cca6dbafae8dc1a1b83fa49447d75b26d455ed6541a"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 0.581821,
+            "p95": 0.7184,
+            "p99": 0.7516
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.00987458,
+            "p95": 0.0128,
+            "p99": 0.0149
+          },
+          "terrain_select_ms": {
+            "mean": 0.155013,
+            "p95": 0.2154,
+            "p99": 0.2571
+          },
+          "terrain_edges_ms": {
+            "mean": 0.109243,
+            "p95": 0.1283,
+            "p99": 0.1504
+          },
+          "terrain_emit_ms": {
+            "mean": 0.297563,
+            "p95": 0.3802,
+            "p99": 0.4222
+          },
+          "frame_ms": {
+            "mean": 3.07549,
+            "p95": 3.694,
+            "p99": 3.8971
+          },
+          "prepare_ms": {
+            "mean": 2.11858,
+            "p95": 2.5588,
+            "p99": 2.7105
+          },
+          "capture_ms": {
+            "mean": 0.89474,
+            "p95": 1.0813,
+            "p99": 1.1415
+          },
+          "mean_terrain_nodes": 486,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 4080,
+          "mean_terrain_point_requests": 685,
+          "mean_terrain_points": 446,
+          "mean_polygons": 1594,
+          "mean_draws": 487,
+          "mean_binds": 85,
+          "mean_vertex_upload_bytes": 8601.6,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 49408,
+          "mean_texture_upload_bytes": 78262.8,
+          "mean_terrain_edge_points": 3308,
+          "mean_terrain_scratch_allocations": 4,
+          "mean_terrain_scratch_bytes": 266240,
+          "capture_path": "build/profiles/terrain-selection-before-repeat/base-Raindance-stationary.json",
+          "capture_sha256": "8ec69739651f4ca103bb27cdce54cc2cae0fca151c0ea81f6cb9e12650d0c292",
+          "readback_sha256": "c783f76abd0643ec2f985cca6dbafae8dc1a1b83fa49447d75b26d455ed6541a"
+        }
+      ],
+      "after": [
+        {
+          "terrain_lod_ms": {
+            "mean": 0.352864,
+            "p95": 0.4624,
+            "p99": 0.5045
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.00951375,
+            "p95": 0.0126,
+            "p99": 0.0185
+          },
+          "terrain_select_ms": {
+            "mean": 0.133867,
+            "p95": 0.186,
+            "p99": 0.2072
+          },
+          "terrain_edges_ms": {
+            "mean": 0.000220833,
+            "p95": 0.0004,
+            "p99": 0.0004
+          },
+          "terrain_emit_ms": {
+            "mean": 0.199387,
+            "p95": 0.275,
+            "p99": 0.3072
+          },
+          "frame_ms": {
+            "mean": 2.78007,
+            "p95": 3.4846,
+            "p99": 3.7495
+          },
+          "prepare_ms": {
+            "mean": 1.84768,
+            "p95": 2.3091,
+            "p99": 2.4923
+          },
+          "capture_ms": {
+            "mean": 0.6615,
+            "p95": 0.8462,
+            "p99": 0.9221
+          },
+          "mean_terrain_nodes": 486,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 4080,
+          "mean_terrain_point_requests": 685,
+          "mean_terrain_points": 446,
+          "mean_polygons": 1594,
+          "mean_draws": 487,
+          "mean_binds": 85,
+          "mean_vertex_upload_bytes": 8601.6,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 49408,
+          "mean_texture_upload_bytes": 78262.8,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 393216,
+          "capture_path": "build/profiles/terrain-selection-verified/base-Raindance-stationary.json",
+          "capture_sha256": "3ec21daed03362d23b05db83fd13ad954d2d6d509b48d2b7fc53f59b012d1c78",
+          "readback_sha256": "c783f76abd0643ec2f985cca6dbafae8dc1a1b83fa49447d75b26d455ed6541a"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 0.346537,
+            "p95": 0.4602,
+            "p99": 0.5159
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.00936917,
+            "p95": 0.0124,
+            "p99": 0.0153
+          },
+          "terrain_select_ms": {
+            "mean": 0.132778,
+            "p95": 0.1838,
+            "p99": 0.1976
+          },
+          "terrain_edges_ms": {
+            "mean": 0.000258333,
+            "p95": 0.0004,
+            "p99": 0.0007
+          },
+          "terrain_emit_ms": {
+            "mean": 0.194504,
+            "p95": 0.2762,
+            "p99": 0.3046
+          },
+          "frame_ms": {
+            "mean": 2.71495,
+            "p95": 3.3224,
+            "p99": 3.5964
+          },
+          "prepare_ms": {
+            "mean": 1.81692,
+            "p95": 2.2283,
+            "p99": 2.4823
+          },
+          "capture_ms": {
+            "mean": 0.649491,
+            "p95": 0.8308,
+            "p99": 0.9049
+          },
+          "mean_terrain_nodes": 486,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 4080,
+          "mean_terrain_point_requests": 685,
+          "mean_terrain_points": 446,
+          "mean_polygons": 1594,
+          "mean_draws": 487,
+          "mean_binds": 85,
+          "mean_vertex_upload_bytes": 8601.6,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 49408,
+          "mean_texture_upload_bytes": 78262.8,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 393216,
+          "capture_path": "build/profiles/terrain-selection-verified-repeat/base-Raindance-stationary.json",
+          "capture_sha256": "077fbbb948cef2d7541cc91407f0e59fe337c5a3acdbf36dbad819c81e2c7a86",
+          "readback_sha256": "c783f76abd0643ec2f985cca6dbafae8dc1a1b83fa49447d75b26d455ed6541a"
+        }
+      ],
+      "readbacks_identical": true,
+      "workload_counts_identical": true,
+      "mean_terrain_lod_ms_before": 0.55532,
+      "mean_terrain_lod_ms_after": 0.34970049999999997,
+      "reduction_percent": 37.02720953684363
+    },
+    "base-Raindance-travel": {
+      "before": [
+        {
+          "terrain_lod_ms": {
+            "mean": 0.682956,
+            "p95": 0.858,
+            "p99": 0.9666
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.00870917,
+            "p95": 0.0106,
+            "p99": 0.0125
+          },
+          "terrain_select_ms": {
+            "mean": 0.141092,
+            "p95": 0.1673,
+            "p99": 0.1896
+          },
+          "terrain_edges_ms": {
+            "mean": 0.109288,
+            "p95": 0.1241,
+            "p99": 0.1383
+          },
+          "terrain_emit_ms": {
+            "mean": 0.413648,
+            "p95": 0.5562,
+            "p99": 0.6493
+          },
+          "frame_ms": {
+            "mean": 4.71084,
+            "p95": 7.0958,
+            "p99": 8.4786
+          },
+          "prepare_ms": {
+            "mean": 2.62566,
+            "p95": 3.4871,
+            "p99": 3.8164
+          },
+          "capture_ms": {
+            "mean": 1.06368,
+            "p95": 1.4325,
+            "p99": 1.566
+          },
+          "mean_terrain_nodes": 485.812,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 4160.72,
+          "mean_terrain_point_requests": 681.158,
+          "mean_terrain_points": 445.712,
+          "mean_polygons": 1797.5,
+          "mean_draws": 590.417,
+          "mean_binds": 247.887,
+          "mean_vertex_upload_bytes": 44251.2,
+          "mean_mesh_upload_bytes": 159.6,
+          "mean_instance_upload_bytes": 58012.8,
+          "mean_texture_upload_bytes": 268823,
+          "mean_terrain_edge_points": 3497.32,
+          "mean_terrain_scratch_allocations": 3.96667,
+          "mean_terrain_scratch_bytes": 262554,
+          "capture_path": "build/profiles/terrain-selection-before/base-Raindance-travel.json",
+          "capture_sha256": "d06a499a1206b97229947c7bce57b4a52ae6bcca6dd76923d191c3296ea26379",
+          "readback_sha256": "06df52e3453714bf8f3de27a638b22ab0914b4533afb79018f759b02083d22b2"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 0.683025,
+            "p95": 0.8709,
+            "p99": 0.9497
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.00862667,
+            "p95": 0.0106,
+            "p99": 0.012
+          },
+          "terrain_select_ms": {
+            "mean": 0.141075,
+            "p95": 0.1722,
+            "p99": 0.1964
+          },
+          "terrain_edges_ms": {
+            "mean": 0.109595,
+            "p95": 0.1261,
+            "p99": 0.1388
+          },
+          "terrain_emit_ms": {
+            "mean": 0.412993,
+            "p95": 0.5687,
+            "p99": 0.6399
+          },
+          "frame_ms": {
+            "mean": 4.62213,
+            "p95": 6.8756,
+            "p99": 7.9216
+          },
+          "prepare_ms": {
+            "mean": 2.57916,
+            "p95": 3.2902,
+            "p99": 3.5972
+          },
+          "capture_ms": {
+            "mean": 1.05593,
+            "p95": 1.3829,
+            "p99": 1.5119
+          },
+          "mean_terrain_nodes": 485.812,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 4160.72,
+          "mean_terrain_point_requests": 681.158,
+          "mean_terrain_points": 445.712,
+          "mean_polygons": 1797.5,
+          "mean_draws": 590.417,
+          "mean_binds": 247.887,
+          "mean_vertex_upload_bytes": 44251.2,
+          "mean_mesh_upload_bytes": 159.6,
+          "mean_instance_upload_bytes": 58012.8,
+          "mean_texture_upload_bytes": 268823,
+          "mean_terrain_edge_points": 3497.32,
+          "mean_terrain_scratch_allocations": 3.96667,
+          "mean_terrain_scratch_bytes": 262554,
+          "capture_path": "build/profiles/terrain-selection-before-repeat/base-Raindance-travel.json",
+          "capture_sha256": "332229b2ddb6d2dbfce83d23e7e9021de58cc6dd0784bc1524db8cea739c6696",
+          "readback_sha256": "06df52e3453714bf8f3de27a638b22ab0914b4533afb79018f759b02083d22b2"
+        }
+      ],
+      "after": [
+        {
+          "terrain_lod_ms": {
+            "mean": 0.465403,
+            "p95": 0.6177,
+            "p99": 0.6662
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.00892042,
+            "p95": 0.0112,
+            "p99": 0.0139
+          },
+          "terrain_select_ms": {
+            "mean": 0.130035,
+            "p95": 0.1548,
+            "p99": 0.1874
+          },
+          "terrain_edges_ms": {
+            "mean": 0.000224167,
+            "p95": 0.0004,
+            "p99": 0.0004
+          },
+          "terrain_emit_ms": {
+            "mean": 0.315987,
+            "p95": 0.4371,
+            "p99": 0.4857
+          },
+          "frame_ms": {
+            "mean": 4.52109,
+            "p95": 7.0245,
+            "p99": 7.7918
+          },
+          "prepare_ms": {
+            "mean": 2.43642,
+            "p95": 3.3406,
+            "p99": 3.5993
+          },
+          "capture_ms": {
+            "mean": 0.862121,
+            "p95": 1.2217,
+            "p99": 1.4002
+          },
+          "mean_terrain_nodes": 485.812,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 4160.72,
+          "mean_terrain_point_requests": 681.158,
+          "mean_terrain_points": 445.712,
+          "mean_polygons": 1797.5,
+          "mean_draws": 590.417,
+          "mean_binds": 247.887,
+          "mean_vertex_upload_bytes": 44251.2,
+          "mean_mesh_upload_bytes": 159.6,
+          "mean_instance_upload_bytes": 58012.8,
+          "mean_texture_upload_bytes": 268823,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 393216,
+          "capture_path": "build/profiles/terrain-selection-verified/base-Raindance-travel.json",
+          "capture_sha256": "101a8bfa085b8e6b6ae3e848f9cb032ed437dc766b4a1463bb16cbb8baf3f070",
+          "readback_sha256": "06df52e3453714bf8f3de27a638b22ab0914b4533afb79018f759b02083d22b2"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 0.473635,
+            "p95": 0.6478,
+            "p99": 0.7355
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.009215,
+            "p95": 0.012,
+            "p99": 0.0143
+          },
+          "terrain_select_ms": {
+            "mean": 0.13095,
+            "p95": 0.1583,
+            "p99": 0.1913
+          },
+          "terrain_edges_ms": {
+            "mean": 0.000224167,
+            "p95": 0.0004,
+            "p99": 0.0005
+          },
+          "terrain_emit_ms": {
+            "mean": 0.322959,
+            "p95": 0.4841,
+            "p99": 0.5221
+          },
+          "frame_ms": {
+            "mean": 4.56238,
+            "p95": 6.8551,
+            "p99": 7.7676
+          },
+          "prepare_ms": {
+            "mean": 2.43992,
+            "p95": 3.368,
+            "p99": 3.6529
+          },
+          "capture_ms": {
+            "mean": 0.857543,
+            "p95": 1.2402,
+            "p99": 1.4311
+          },
+          "mean_terrain_nodes": 485.812,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 4160.72,
+          "mean_terrain_point_requests": 681.158,
+          "mean_terrain_points": 445.712,
+          "mean_polygons": 1797.5,
+          "mean_draws": 590.417,
+          "mean_binds": 247.887,
+          "mean_vertex_upload_bytes": 44251.2,
+          "mean_mesh_upload_bytes": 159.6,
+          "mean_instance_upload_bytes": 58012.8,
+          "mean_texture_upload_bytes": 268823,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 393216,
+          "capture_path": "build/profiles/terrain-selection-verified-repeat/base-Raindance-travel.json",
+          "capture_sha256": "e89ace83f5844cdd1094ab459cbe0eb01bbb2cd48f59bb2d02e5d4df38141c40",
+          "readback_sha256": "06df52e3453714bf8f3de27a638b22ab0914b4533afb79018f759b02083d22b2"
+        }
+      ],
+      "readbacks_identical": true,
+      "workload_counts_identical": true,
+      "mean_terrain_lod_ms_before": 0.6829905000000001,
+      "mean_terrain_lod_ms_after": 0.469519,
+      "reduction_percent": 31.25541277660524
+    },
+    "rpg-rpgmap1-rotate": {
+      "before": [
+        {
+          "terrain_lod_ms": {
+            "mean": 1.92726,
+            "p95": 2.3466,
+            "p99": 2.4913
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0111567,
+            "p95": 0.0145,
+            "p99": 0.0218
+          },
+          "terrain_select_ms": {
+            "mean": 0.322896,
+            "p95": 0.4325,
+            "p99": 0.5351
+          },
+          "terrain_edges_ms": {
+            "mean": 0.321907,
+            "p95": 0.3817,
+            "p99": 0.4318
+          },
+          "terrain_emit_ms": {
+            "mean": 1.25015,
+            "p95": 1.5642,
+            "p99": 1.6378
+          },
+          "frame_ms": {
+            "mean": 10.8453,
+            "p95": 14.2852,
+            "p99": 16.4267
+          },
+          "prepare_ms": {
+            "mean": 4.91211,
+            "p95": 6.9771,
+            "p99": 7.6602
+          },
+          "capture_ms": {
+            "mean": 2.6098,
+            "p95": 3.3975,
+            "p99": 3.8081
+          },
+          "mean_terrain_nodes": 1371.76,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 8772.5,
+          "mean_terrain_point_requests": 1863.34,
+          "mean_terrain_points": 1173.27,
+          "mean_polygons": 3073.56,
+          "mean_draws": 1029.39,
+          "mean_binds": 562.65,
+          "mean_vertex_upload_bytes": 4320,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 167141,
+          "mean_texture_upload_bytes": 2316.93,
+          "mean_terrain_edge_points": 9892.33,
+          "mean_terrain_scratch_allocations": 6,
+          "mean_terrain_scratch_bytes": 680960,
+          "capture_path": "build/profiles/terrain-selection-before/rpg-rpgmap1-rotate.json",
+          "capture_sha256": "3b058027dcc26088fb4b4fe0767eea2be8684cf09af007d0038acb01f83e0886",
+          "readback_sha256": "c16e6b360da37688179b131b9acd8815fc142edcd37cfe90d366b03757eb5918"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 1.89398,
+            "p95": 2.3245,
+            "p99": 2.41
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0105729,
+            "p95": 0.014,
+            "p99": 0.0164
+          },
+          "terrain_select_ms": {
+            "mean": 0.319093,
+            "p95": 0.4417,
+            "p99": 0.4988
+          },
+          "terrain_edges_ms": {
+            "mean": 0.318781,
+            "p95": 0.3746,
+            "p99": 0.3845
+          },
+          "terrain_emit_ms": {
+            "mean": 1.22513,
+            "p95": 1.5459,
+            "p99": 1.671
+          },
+          "frame_ms": {
+            "mean": 10.7067,
+            "p95": 13.7706,
+            "p99": 15.111
+          },
+          "prepare_ms": {
+            "mean": 4.85968,
+            "p95": 6.8742,
+            "p99": 7.6001
+          },
+          "capture_ms": {
+            "mean": 2.56163,
+            "p95": 3.4297,
+            "p99": 3.5496
+          },
+          "mean_terrain_nodes": 1371.76,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 8772.5,
+          "mean_terrain_point_requests": 1863.34,
+          "mean_terrain_points": 1173.27,
+          "mean_polygons": 3073.56,
+          "mean_draws": 1029.39,
+          "mean_binds": 562.65,
+          "mean_vertex_upload_bytes": 4320,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 167141,
+          "mean_texture_upload_bytes": 2316.93,
+          "mean_terrain_edge_points": 9892.33,
+          "mean_terrain_scratch_allocations": 6,
+          "mean_terrain_scratch_bytes": 680960,
+          "capture_path": "build/profiles/terrain-selection-before-repeat/rpg-rpgmap1-rotate.json",
+          "capture_sha256": "1e52f2cf490c62e07a31c279e92f4c8fb9a41269aee4f8def1dfd34386a333c8",
+          "readback_sha256": "c16e6b360da37688179b131b9acd8815fc142edcd37cfe90d366b03757eb5918"
+        }
+      ],
+      "after": [
+        {
+          "terrain_lod_ms": {
+            "mean": 1.16991,
+            "p95": 1.4259,
+            "p99": 1.5896
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0104062,
+            "p95": 0.0136,
+            "p99": 0.0168
+          },
+          "terrain_select_ms": {
+            "mean": 0.267852,
+            "p95": 0.3205,
+            "p99": 0.3633
+          },
+          "terrain_edges_ms": {
+            "mean": 0.0002825,
+            "p95": 0.0004,
+            "p99": 0.0005
+          },
+          "terrain_emit_ms": {
+            "mean": 0.874148,
+            "p95": 1.109,
+            "p99": 1.2227
+          },
+          "frame_ms": {
+            "mean": 9.4806,
+            "p95": 12.2645,
+            "p99": 13.3778
+          },
+          "prepare_ms": {
+            "mean": 3.98993,
+            "p95": 5.8413,
+            "p99": 6.1784
+          },
+          "capture_ms": {
+            "mean": 1.80673,
+            "p95": 2.5275,
+            "p99": 2.7801
+          },
+          "mean_terrain_nodes": 1371.76,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 8772.5,
+          "mean_terrain_point_requests": 1863.34,
+          "mean_terrain_points": 1173.27,
+          "mean_polygons": 3073.56,
+          "mean_draws": 1029.39,
+          "mean_binds": 562.65,
+          "mean_vertex_upload_bytes": 4320,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 167141,
+          "mean_texture_upload_bytes": 2316.93,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 393216,
+          "capture_path": "build/profiles/terrain-selection-verified/rpg-rpgmap1-rotate.json",
+          "capture_sha256": "722e518084fbb10dc059424dab868d19d1351acf42a177e89419ba9de2bed3a9",
+          "readback_sha256": "c16e6b360da37688179b131b9acd8815fc142edcd37cfe90d366b03757eb5918"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 1.1457,
+            "p95": 1.4041,
+            "p99": 1.5141
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0101467,
+            "p95": 0.0123,
+            "p99": 0.0135
+          },
+          "terrain_select_ms": {
+            "mean": 0.265692,
+            "p95": 0.3173,
+            "p99": 0.3582
+          },
+          "terrain_edges_ms": {
+            "mean": 0.000268333,
+            "p95": 0.0004,
+            "p99": 0.0005
+          },
+          "terrain_emit_ms": {
+            "mean": 0.853215,
+            "p95": 1.071,
+            "p99": 1.1859
+          },
+          "frame_ms": {
+            "mean": 9.41966,
+            "p95": 12.191,
+            "p99": 12.9019
+          },
+          "prepare_ms": {
+            "mean": 3.96279,
+            "p95": 5.7744,
+            "p99": 6.0881
+          },
+          "capture_ms": {
+            "mean": 1.79245,
+            "p95": 2.5561,
+            "p99": 2.6373
+          },
+          "mean_terrain_nodes": 1371.76,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 8772.5,
+          "mean_terrain_point_requests": 1863.34,
+          "mean_terrain_points": 1173.27,
+          "mean_polygons": 3073.56,
+          "mean_draws": 1029.39,
+          "mean_binds": 562.65,
+          "mean_vertex_upload_bytes": 4320,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 167141,
+          "mean_texture_upload_bytes": 2316.93,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 393216,
+          "capture_path": "build/profiles/terrain-selection-verified-repeat/rpg-rpgmap1-rotate.json",
+          "capture_sha256": "137c97715e5a902a00afc488993215dd4b4aa263dae01c50a94a4c0572bf6b0e",
+          "readback_sha256": "c16e6b360da37688179b131b9acd8815fc142edcd37cfe90d366b03757eb5918"
+        }
+      ],
+      "readbacks_identical": true,
+      "workload_counts_identical": true,
+      "mean_terrain_lod_ms_before": 1.91062,
+      "mean_terrain_lod_ms_after": 1.157805,
+      "reduction_percent": 39.40160785504182
+    },
+    "rpg-rpgmap1-stationary": {
+      "before": [
+        {
+          "terrain_lod_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_visibility_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_select_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_edges_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_emit_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "frame_ms": {
+            "mean": 9.71453,
+            "p95": 11.6894,
+            "p99": 13.0449
+          },
+          "prepare_ms": {
+            "mean": 4.12156,
+            "p95": 4.9373,
+            "p99": 5.4597
+          },
+          "capture_ms": {
+            "mean": 1.08621,
+            "p95": 1.3753,
+            "p99": 1.5341
+          },
+          "mean_terrain_nodes": 0,
+          "mean_terrain_validated_heights": 0,
+          "mean_terrain_material_checks": 0,
+          "mean_terrain_point_requests": 0,
+          "mean_terrain_points": 0,
+          "mean_polygons": 5646.98,
+          "mean_draws": 1930.58,
+          "mean_binds": 468,
+          "mean_vertex_upload_bytes": 4320,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 185856,
+          "mean_texture_upload_bytes": 8085.67,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "capture_path": "build/profiles/terrain-selection-before/rpg-rpgmap1-stationary.json",
+          "capture_sha256": "8ec589b7a4cc8704ef4585cc5dcfb1a87fce8dd63f46d6e41750c2ece9756132",
+          "readback_sha256": "7b98cf44690dd317bcedaaa05f72d4187050ccdcbe23a4872f70961c75899f20"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_visibility_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_select_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_edges_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_emit_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "frame_ms": {
+            "mean": 9.77297,
+            "p95": 11.6677,
+            "p99": 13.3448
+          },
+          "prepare_ms": {
+            "mean": 4.1357,
+            "p95": 4.8868,
+            "p99": 5.179
+          },
+          "capture_ms": {
+            "mean": 1.08722,
+            "p95": 1.3685,
+            "p99": 1.5329
+          },
+          "mean_terrain_nodes": 0,
+          "mean_terrain_validated_heights": 0,
+          "mean_terrain_material_checks": 0,
+          "mean_terrain_point_requests": 0,
+          "mean_terrain_points": 0,
+          "mean_polygons": 5646.98,
+          "mean_draws": 1930.58,
+          "mean_binds": 468,
+          "mean_vertex_upload_bytes": 4320,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 185856,
+          "mean_texture_upload_bytes": 8085.67,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "capture_path": "build/profiles/terrain-selection-before-repeat/rpg-rpgmap1-stationary.json",
+          "capture_sha256": "c99a3eb9b2a018c29fdd0cbd93583d9a5cf71ee215df9a926806e55af79fec31",
+          "readback_sha256": "7b98cf44690dd317bcedaaa05f72d4187050ccdcbe23a4872f70961c75899f20"
+        }
+      ],
+      "after": [
+        {
+          "terrain_lod_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_visibility_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_select_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_edges_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_emit_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "frame_ms": {
+            "mean": 9.52812,
+            "p95": 10.772,
+            "p99": 12.3964
+          },
+          "prepare_ms": {
+            "mean": 4.05537,
+            "p95": 4.654,
+            "p99": 4.8513
+          },
+          "capture_ms": {
+            "mean": 1.07167,
+            "p95": 1.3105,
+            "p99": 1.4035
+          },
+          "mean_terrain_nodes": 0,
+          "mean_terrain_validated_heights": 0,
+          "mean_terrain_material_checks": 0,
+          "mean_terrain_point_requests": 0,
+          "mean_terrain_points": 0,
+          "mean_polygons": 5646.98,
+          "mean_draws": 1930.58,
+          "mean_binds": 468,
+          "mean_vertex_upload_bytes": 4320,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 185856,
+          "mean_texture_upload_bytes": 8085.67,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 0,
+          "capture_path": "build/profiles/terrain-selection-verified/rpg-rpgmap1-stationary.json",
+          "capture_sha256": "afd29062f513e07bd84a6c96608f11943baaa56dd70f6db95b0ebb32f7ef313b",
+          "readback_sha256": "7b98cf44690dd317bcedaaa05f72d4187050ccdcbe23a4872f70961c75899f20"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_visibility_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_select_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_edges_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_emit_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "frame_ms": {
+            "mean": 9.52326,
+            "p95": 10.7778,
+            "p99": 11.8942
+          },
+          "prepare_ms": {
+            "mean": 4.09486,
+            "p95": 4.6726,
+            "p99": 5.0475
+          },
+          "capture_ms": {
+            "mean": 1.07923,
+            "p95": 1.2817,
+            "p99": 1.4698
+          },
+          "mean_terrain_nodes": 0,
+          "mean_terrain_validated_heights": 0,
+          "mean_terrain_material_checks": 0,
+          "mean_terrain_point_requests": 0,
+          "mean_terrain_points": 0,
+          "mean_polygons": 5646.98,
+          "mean_draws": 1930.58,
+          "mean_binds": 468,
+          "mean_vertex_upload_bytes": 4320,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 185856,
+          "mean_texture_upload_bytes": 8085.67,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 0,
+          "capture_path": "build/profiles/terrain-selection-verified-repeat/rpg-rpgmap1-stationary.json",
+          "capture_sha256": "877304217e67384b38549681caf0cb77ec7259f1d7a79cc812c2d9bae763961b",
+          "readback_sha256": "7b98cf44690dd317bcedaaa05f72d4187050ccdcbe23a4872f70961c75899f20"
+        }
+      ],
+      "readbacks_identical": true,
+      "workload_counts_identical": true,
+      "mean_terrain_lod_ms_before": 0,
+      "mean_terrain_lod_ms_after": 0,
+      "reduction_percent": 0
+    },
+    "rpg-rpgmap1-travel": {
+      "before": [
+        {
+          "terrain_lod_ms": {
+            "mean": 2.02857,
+            "p95": 2.5104,
+            "p99": 2.6721
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0113067,
+            "p95": 0.0154,
+            "p99": 0.0197
+          },
+          "terrain_select_ms": {
+            "mean": 0.324273,
+            "p95": 0.4305,
+            "p99": 0.4862
+          },
+          "terrain_edges_ms": {
+            "mean": 0.319757,
+            "p95": 0.3778,
+            "p99": 0.3963
+          },
+          "terrain_emit_ms": {
+            "mean": 1.35136,
+            "p95": 1.7314,
+            "p99": 1.8012
+          },
+          "frame_ms": {
+            "mean": 12.826,
+            "p95": 16.749,
+            "p99": 17.9682
+          },
+          "prepare_ms": {
+            "mean": 5.08425,
+            "p95": 6.9653,
+            "p99": 7.4652
+          },
+          "capture_ms": {
+            "mean": 2.70849,
+            "p95": 3.5178,
+            "p99": 3.7881
+          },
+          "mean_terrain_nodes": 1355.8,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 8838.78,
+          "mean_terrain_point_requests": 1843.53,
+          "mean_terrain_points": 1160.47,
+          "mean_polygons": 3044.01,
+          "mean_draws": 1008.37,
+          "mean_binds": 600.929,
+          "mean_vertex_upload_bytes": 4320,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 163541,
+          "mean_texture_upload_bytes": 11772.1,
+          "mean_terrain_edge_points": 9804.23,
+          "mean_terrain_scratch_allocations": 5.9875,
+          "mean_terrain_scratch_bytes": 677850,
+          "capture_path": "build/profiles/terrain-selection-before/rpg-rpgmap1-travel.json",
+          "capture_sha256": "7e53602565aa0a78bbfea0506707694ce10fe02b0d13ff7a075eaa89391e6efa",
+          "readback_sha256": "ffc88026615ba6a1a20594fa5f99d4964fea95cb63de106c6e1977d7dde5ce3a"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 1.96266,
+            "p95": 2.3713,
+            "p99": 2.505
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0107433,
+            "p95": 0.0137,
+            "p99": 0.015
+          },
+          "terrain_select_ms": {
+            "mean": 0.315562,
+            "p95": 0.4195,
+            "p99": 0.4454
+          },
+          "terrain_edges_ms": {
+            "mean": 0.31366,
+            "p95": 0.3665,
+            "p99": 0.3787
+          },
+          "terrain_emit_ms": {
+            "mean": 1.30195,
+            "p95": 1.6643,
+            "p99": 1.792
+          },
+          "frame_ms": {
+            "mean": 12.6033,
+            "p95": 16.1307,
+            "p99": 17.7421
+          },
+          "prepare_ms": {
+            "mean": 4.97705,
+            "p95": 6.9396,
+            "p99": 7.2907
+          },
+          "capture_ms": {
+            "mean": 2.63762,
+            "p95": 3.5057,
+            "p99": 3.7294
+          },
+          "mean_terrain_nodes": 1355.8,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 8838.78,
+          "mean_terrain_point_requests": 1843.53,
+          "mean_terrain_points": 1160.47,
+          "mean_polygons": 3044.01,
+          "mean_draws": 1008.37,
+          "mean_binds": 600.929,
+          "mean_vertex_upload_bytes": 4320,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 163541,
+          "mean_texture_upload_bytes": 11772.1,
+          "mean_terrain_edge_points": 9804.23,
+          "mean_terrain_scratch_allocations": 5.9875,
+          "mean_terrain_scratch_bytes": 677850,
+          "capture_path": "build/profiles/terrain-selection-before-repeat/rpg-rpgmap1-travel.json",
+          "capture_sha256": "7f920aee379b818fe38fe8a84aeb3345d407d9ecfc35eddb23f137a2cbeae44b",
+          "readback_sha256": "ffc88026615ba6a1a20594fa5f99d4964fea95cb63de106c6e1977d7dde5ce3a"
+        }
+      ],
+      "after": [
+        {
+          "terrain_lod_ms": {
+            "mean": 1.26228,
+            "p95": 1.5506,
+            "p99": 1.6648
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0105375,
+            "p95": 0.0137,
+            "p99": 0.0149
+          },
+          "terrain_select_ms": {
+            "mean": 0.266556,
+            "p95": 0.3093,
+            "p99": 0.4004
+          },
+          "terrain_edges_ms": {
+            "mean": 0.000277083,
+            "p95": 0.0004,
+            "p99": 0.0005
+          },
+          "terrain_emit_ms": {
+            "mean": 0.967377,
+            "p95": 1.2167,
+            "p99": 1.3382
+          },
+          "frame_ms": {
+            "mean": 11.4456,
+            "p95": 14.4853,
+            "p99": 16.5478
+          },
+          "prepare_ms": {
+            "mean": 4.13904,
+            "p95": 5.8473,
+            "p99": 6.2755
+          },
+          "capture_ms": {
+            "mean": 1.90477,
+            "p95": 2.5864,
+            "p99": 2.8762
+          },
+          "mean_terrain_nodes": 1355.8,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 8838.78,
+          "mean_terrain_point_requests": 1843.53,
+          "mean_terrain_points": 1160.47,
+          "mean_polygons": 3044.01,
+          "mean_draws": 1008.37,
+          "mean_binds": 600.929,
+          "mean_vertex_upload_bytes": 4320,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 163541,
+          "mean_texture_upload_bytes": 11772.1,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 393216,
+          "capture_path": "build/profiles/terrain-selection-verified/rpg-rpgmap1-travel.json",
+          "capture_sha256": "893c40461208733a30dfa6c067d508b7359d57acc1475d7474755892b224883d",
+          "readback_sha256": "ffc88026615ba6a1a20594fa5f99d4964fea95cb63de106c6e1977d7dde5ce3a"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 1.33195,
+            "p95": 1.6579,
+            "p99": 1.8655
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0108379,
+            "p95": 0.0143,
+            "p99": 0.0157
+          },
+          "terrain_select_ms": {
+            "mean": 0.271404,
+            "p95": 0.3318,
+            "p99": 0.4001
+          },
+          "terrain_edges_ms": {
+            "mean": 0.000304167,
+            "p95": 0.0004,
+            "p99": 0.0007
+          },
+          "terrain_emit_ms": {
+            "mean": 1.03076,
+            "p95": 1.3218,
+            "p99": 1.4486
+          },
+          "frame_ms": {
+            "mean": 12.007,
+            "p95": 15.1802,
+            "p99": 15.7642
+          },
+          "prepare_ms": {
+            "mean": 4.35751,
+            "p95": 6.2695,
+            "p99": 6.7305
+          },
+          "capture_ms": {
+            "mean": 2.00539,
+            "p95": 2.752,
+            "p99": 3.0926
+          },
+          "mean_terrain_nodes": 1355.8,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 8838.78,
+          "mean_terrain_point_requests": 1843.53,
+          "mean_terrain_points": 1160.47,
+          "mean_polygons": 3044.01,
+          "mean_draws": 1008.37,
+          "mean_binds": 600.929,
+          "mean_vertex_upload_bytes": 4320,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 163541,
+          "mean_texture_upload_bytes": 11772.1,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 393216,
+          "capture_path": "build/profiles/terrain-selection-verified-repeat/rpg-rpgmap1-travel.json",
+          "capture_sha256": "8775b8c90f4911bf163f5eb9429c741dce972178d2c79b3502d0414458c3b7ea",
+          "readback_sha256": "ffc88026615ba6a1a20594fa5f99d4964fea95cb63de106c6e1977d7dde5ce3a"
+        }
+      ],
+      "readbacks_identical": true,
+      "workload_counts_identical": true,
+      "mean_terrain_lod_ms_before": 1.9956150000000001,
+      "mean_terrain_lod_ms_after": 1.297115,
+      "reduction_percent": 35.00174131783936
+    },
+    "rpg-rpgmap5-rotate": {
+      "before": [
+        {
+          "terrain_lod_ms": {
+            "mean": 2.3339,
+            "p95": 2.8472,
+            "p99": 3.0908
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0115683,
+            "p95": 0.0153,
+            "p99": 0.0201
+          },
+          "terrain_select_ms": {
+            "mean": 0.460612,
+            "p95": 0.6392,
+            "p99": 0.7042
+          },
+          "terrain_edges_ms": {
+            "mean": 0.36225,
+            "p95": 0.4375,
+            "p99": 0.4634
+          },
+          "terrain_emit_ms": {
+            "mean": 1.47655,
+            "p95": 1.8918,
+            "p99": 2.0761
+          },
+          "frame_ms": {
+            "mean": 11.8772,
+            "p95": 14.5749,
+            "p99": 15.2602
+          },
+          "prepare_ms": {
+            "mean": 6.59946,
+            "p95": 8.2447,
+            "p99": 8.7695
+          },
+          "capture_ms": {
+            "mean": 3.54419,
+            "p95": 4.2833,
+            "p99": 4.5818
+          },
+          "mean_terrain_nodes": 1470.91,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 15606.8,
+          "mean_terrain_point_requests": 2090.57,
+          "mean_terrain_points": 1283.97,
+          "mean_polygons": 4622.46,
+          "mean_draws": 1442.18,
+          "mean_binds": 645.046,
+          "mean_vertex_upload_bytes": 2592,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 163517,
+          "mean_texture_upload_bytes": 2784.6,
+          "mean_terrain_edge_points": 10917.5,
+          "mean_terrain_scratch_allocations": 6,
+          "mean_terrain_scratch_bytes": 680960,
+          "capture_path": "build/profiles/terrain-selection-before/rpg-rpgmap5-rotate.json",
+          "capture_sha256": "fc7e460a0bd18cda15f440a1b0f19ea158d72f4a0d8176f8599abd2f748208dd",
+          "readback_sha256": "9f2654752f08ebe652700b7321a79e4d7e9dbbda90374c2dd58fba204596eea2"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 2.29297,
+            "p95": 2.7434,
+            "p99": 3.0129
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0115746,
+            "p95": 0.0144,
+            "p99": 0.022
+          },
+          "terrain_select_ms": {
+            "mean": 0.442983,
+            "p95": 0.6008,
+            "p99": 0.6469
+          },
+          "terrain_edges_ms": {
+            "mean": 0.355615,
+            "p95": 0.4166,
+            "p99": 0.456
+          },
+          "terrain_emit_ms": {
+            "mean": 1.4603,
+            "p95": 1.77,
+            "p99": 1.9544
+          },
+          "frame_ms": {
+            "mean": 11.5231,
+            "p95": 13.8746,
+            "p99": 14.8086
+          },
+          "prepare_ms": {
+            "mean": 6.43114,
+            "p95": 7.9601,
+            "p99": 8.5492
+          },
+          "capture_ms": {
+            "mean": 3.45604,
+            "p95": 4.0764,
+            "p99": 4.4302
+          },
+          "mean_terrain_nodes": 1470.91,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 15606.8,
+          "mean_terrain_point_requests": 2090.57,
+          "mean_terrain_points": 1283.97,
+          "mean_polygons": 4622.46,
+          "mean_draws": 1442.18,
+          "mean_binds": 645.046,
+          "mean_vertex_upload_bytes": 2592,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 163517,
+          "mean_texture_upload_bytes": 2784.6,
+          "mean_terrain_edge_points": 10917.5,
+          "mean_terrain_scratch_allocations": 6,
+          "mean_terrain_scratch_bytes": 680960,
+          "capture_path": "build/profiles/terrain-selection-before-repeat/rpg-rpgmap5-rotate.json",
+          "capture_sha256": "f146dec8795693d7acfb52b790c2029fa727de4aedaadd5f60abbf11f6f5517d",
+          "readback_sha256": "9f2654752f08ebe652700b7321a79e4d7e9dbbda90374c2dd58fba204596eea2"
+        }
+      ],
+      "after": [
+        {
+          "terrain_lod_ms": {
+            "mean": 1.44116,
+            "p95": 1.7476,
+            "p99": 1.9712
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0106117,
+            "p95": 0.0132,
+            "p99": 0.0157
+          },
+          "terrain_select_ms": {
+            "mean": 0.373183,
+            "p95": 0.4433,
+            "p99": 0.5484
+          },
+          "terrain_edges_ms": {
+            "mean": 0.000284583,
+            "p95": 0.0004,
+            "p99": 0.0005
+          },
+          "terrain_emit_ms": {
+            "mean": 1.03866,
+            "p95": 1.3086,
+            "p99": 1.4147
+          },
+          "frame_ms": {
+            "mean": 10.156,
+            "p95": 12.7641,
+            "p99": 13.551
+          },
+          "prepare_ms": {
+            "mean": 5.40758,
+            "p95": 7.1163,
+            "p99": 7.791
+          },
+          "capture_ms": {
+            "mean": 2.55212,
+            "p95": 3.1386,
+            "p99": 3.3667
+          },
+          "mean_terrain_nodes": 1470.91,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 15606.8,
+          "mean_terrain_point_requests": 2090.57,
+          "mean_terrain_points": 1283.97,
+          "mean_polygons": 4622.46,
+          "mean_draws": 1442.18,
+          "mean_binds": 645.046,
+          "mean_vertex_upload_bytes": 2592,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 163517,
+          "mean_texture_upload_bytes": 2784.6,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 393216,
+          "capture_path": "build/profiles/terrain-selection-verified/rpg-rpgmap5-rotate.json",
+          "capture_sha256": "1ec04794c38418fea150d44497ba2da5ed1491bb0f2051dcde5e7a51295de893",
+          "readback_sha256": "9f2654752f08ebe652700b7321a79e4d7e9dbbda90374c2dd58fba204596eea2"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 1.41297,
+            "p95": 1.6945,
+            "p99": 1.8397
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0108312,
+            "p95": 0.0138,
+            "p99": 0.0166
+          },
+          "terrain_select_ms": {
+            "mean": 0.374788,
+            "p95": 0.4456,
+            "p99": 0.5591
+          },
+          "terrain_edges_ms": {
+            "mean": 0.000273333,
+            "p95": 0.0004,
+            "p99": 0.0005
+          },
+          "terrain_emit_ms": {
+            "mean": 1.0101,
+            "p95": 1.2434,
+            "p99": 1.351
+          },
+          "frame_ms": {
+            "mean": 10.0961,
+            "p95": 12.9639,
+            "p99": 13.5065
+          },
+          "prepare_ms": {
+            "mean": 5.37317,
+            "p95": 6.9736,
+            "p99": 7.8961
+          },
+          "capture_ms": {
+            "mean": 2.53465,
+            "p95": 3.0904,
+            "p99": 3.3777
+          },
+          "mean_terrain_nodes": 1470.91,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 15606.8,
+          "mean_terrain_point_requests": 2090.57,
+          "mean_terrain_points": 1283.97,
+          "mean_polygons": 4622.46,
+          "mean_draws": 1442.18,
+          "mean_binds": 645.046,
+          "mean_vertex_upload_bytes": 2592,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 163517,
+          "mean_texture_upload_bytes": 2784.6,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 393216,
+          "capture_path": "build/profiles/terrain-selection-verified-repeat/rpg-rpgmap5-rotate.json",
+          "capture_sha256": "9546398b0e2777806a0b6955a6a085dec98ff1643ab05a2e96e568f83acbdb42",
+          "readback_sha256": "9f2654752f08ebe652700b7321a79e4d7e9dbbda90374c2dd58fba204596eea2"
+        }
+      ],
+      "readbacks_identical": true,
+      "workload_counts_identical": true,
+      "mean_terrain_lod_ms_before": 2.313435,
+      "mean_terrain_lod_ms_after": 1.427065,
+      "reduction_percent": 38.314022222366305
+    },
+    "rpg-rpgmap5-stationary": {
+      "before": [
+        {
+          "terrain_lod_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_visibility_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_select_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_edges_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_emit_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "frame_ms": {
+            "mean": 8.74995,
+            "p95": 10.6469,
+            "p99": 11.1147
+          },
+          "prepare_ms": {
+            "mean": 4.48367,
+            "p95": 5.3729,
+            "p99": 5.8272
+          },
+          "capture_ms": {
+            "mean": 1.27686,
+            "p95": 1.5966,
+            "p99": 1.6848
+          },
+          "mean_terrain_nodes": 0,
+          "mean_terrain_validated_heights": 0,
+          "mean_terrain_material_checks": 0,
+          "mean_terrain_point_requests": 0,
+          "mean_terrain_points": 0,
+          "mean_polygons": 5922.92,
+          "mean_draws": 2038.07,
+          "mean_binds": 315.858,
+          "mean_vertex_upload_bytes": 2592,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 194560,
+          "mean_texture_upload_bytes": 5842.58,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "capture_path": "build/profiles/terrain-selection-before/rpg-rpgmap5-stationary.json",
+          "capture_sha256": "e311aefea8075fc7968f9101ce8feaca8b3bf6c8a90ec6ea45c97ea03b0f7e0f",
+          "readback_sha256": "f1489aca5161182f6176cfd3ba86974344b4f084d54d067a1a18df6a78f11835"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_visibility_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_select_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_edges_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_emit_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "frame_ms": {
+            "mean": 8.32487,
+            "p95": 9.7493,
+            "p99": 10.9336
+          },
+          "prepare_ms": {
+            "mean": 4.31768,
+            "p95": 5.1102,
+            "p99": 5.5348
+          },
+          "capture_ms": {
+            "mean": 1.24595,
+            "p95": 1.5768,
+            "p99": 1.7166
+          },
+          "mean_terrain_nodes": 0,
+          "mean_terrain_validated_heights": 0,
+          "mean_terrain_material_checks": 0,
+          "mean_terrain_point_requests": 0,
+          "mean_terrain_points": 0,
+          "mean_polygons": 5922.92,
+          "mean_draws": 2038.07,
+          "mean_binds": 315.858,
+          "mean_vertex_upload_bytes": 2592,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 194560,
+          "mean_texture_upload_bytes": 5842.58,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "capture_path": "build/profiles/terrain-selection-before-repeat/rpg-rpgmap5-stationary.json",
+          "capture_sha256": "f6551ca5bce5a0bf47c7d35247cff9eacb3eb98918e5e03ab5dea7f236cfa286",
+          "readback_sha256": "f1489aca5161182f6176cfd3ba86974344b4f084d54d067a1a18df6a78f11835"
+        }
+      ],
+      "after": [
+        {
+          "terrain_lod_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_visibility_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_select_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_edges_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_emit_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "frame_ms": {
+            "mean": 8.02316,
+            "p95": 8.9741,
+            "p99": 10.2736
+          },
+          "prepare_ms": {
+            "mean": 4.18804,
+            "p95": 4.7051,
+            "p99": 5.5279
+          },
+          "capture_ms": {
+            "mean": 1.19306,
+            "p95": 1.3909,
+            "p99": 1.6214
+          },
+          "mean_terrain_nodes": 0,
+          "mean_terrain_validated_heights": 0,
+          "mean_terrain_material_checks": 0,
+          "mean_terrain_point_requests": 0,
+          "mean_terrain_points": 0,
+          "mean_polygons": 5922.92,
+          "mean_draws": 2038.07,
+          "mean_binds": 315.858,
+          "mean_vertex_upload_bytes": 2592,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 194560,
+          "mean_texture_upload_bytes": 5842.58,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 0,
+          "capture_path": "build/profiles/terrain-selection-verified/rpg-rpgmap5-stationary.json",
+          "capture_sha256": "8c62d3525665d2513100180e3095cabb55b2fef3ea9bc9ccbf0f39314b39a466",
+          "readback_sha256": "f1489aca5161182f6176cfd3ba86974344b4f084d54d067a1a18df6a78f11835"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_visibility_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_select_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_edges_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "terrain_emit_ms": {
+            "mean": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "frame_ms": {
+            "mean": 8.05286,
+            "p95": 9.3338,
+            "p99": 10.1896
+          },
+          "prepare_ms": {
+            "mean": 4.2094,
+            "p95": 4.8417,
+            "p99": 5.1753
+          },
+          "capture_ms": {
+            "mean": 1.19722,
+            "p95": 1.3977,
+            "p99": 1.5488
+          },
+          "mean_terrain_nodes": 0,
+          "mean_terrain_validated_heights": 0,
+          "mean_terrain_material_checks": 0,
+          "mean_terrain_point_requests": 0,
+          "mean_terrain_points": 0,
+          "mean_polygons": 5922.92,
+          "mean_draws": 2038.07,
+          "mean_binds": 315.858,
+          "mean_vertex_upload_bytes": 2592,
+          "mean_mesh_upload_bytes": 0,
+          "mean_instance_upload_bytes": 194560,
+          "mean_texture_upload_bytes": 5842.58,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 0,
+          "capture_path": "build/profiles/terrain-selection-verified-repeat/rpg-rpgmap5-stationary.json",
+          "capture_sha256": "b7567f887c22ec58cbed259e04ae81781cf5d2ae0904bbe08c3d7812ad72298a",
+          "readback_sha256": "f1489aca5161182f6176cfd3ba86974344b4f084d54d067a1a18df6a78f11835"
+        }
+      ],
+      "readbacks_identical": true,
+      "workload_counts_identical": true,
+      "mean_terrain_lod_ms_before": 0,
+      "mean_terrain_lod_ms_after": 0,
+      "reduction_percent": 0
+    },
+    "rpg-rpgmap5-travel": {
+      "before": [
+        {
+          "terrain_lod_ms": {
+            "mean": 2.32765,
+            "p95": 2.8964,
+            "p99": 3.0543
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0114567,
+            "p95": 0.015,
+            "p99": 0.0187
+          },
+          "terrain_select_ms": {
+            "mean": 0.431164,
+            "p95": 0.565,
+            "p99": 0.6044
+          },
+          "terrain_edges_ms": {
+            "mean": 0.345295,
+            "p95": 0.4156,
+            "p99": 0.4503
+          },
+          "terrain_emit_ms": {
+            "mean": 1.51708,
+            "p95": 1.9381,
+            "p99": 2.1471
+          },
+          "frame_ms": {
+            "mean": 12.7854,
+            "p95": 16.2054,
+            "p99": 17.9321
+          },
+          "prepare_ms": {
+            "mean": 6.51208,
+            "p95": 8.5247,
+            "p99": 8.8409
+          },
+          "capture_ms": {
+            "mean": 3.52573,
+            "p95": 4.4101,
+            "p99": 4.7025
+          },
+          "mean_terrain_nodes": 1435.65,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 15663.1,
+          "mean_terrain_point_requests": 2046.63,
+          "mean_terrain_points": 1256.17,
+          "mean_polygons": 4584.23,
+          "mean_draws": 1393.98,
+          "mean_binds": 653.267,
+          "mean_vertex_upload_bytes": 2592,
+          "mean_mesh_upload_bytes": 18.2,
+          "mean_instance_upload_bytes": 149307,
+          "mean_texture_upload_bytes": 11791.1,
+          "mean_terrain_edge_points": 10698.9,
+          "mean_terrain_scratch_allocations": 5.99583,
+          "mean_terrain_scratch_bytes": 679923,
+          "capture_path": "build/profiles/terrain-selection-before/rpg-rpgmap5-travel.json",
+          "capture_sha256": "905c90d991bbef04515557334f08bdaab6dafa7f0d1aef9b8a3ceb755706d3ce",
+          "readback_sha256": "d6d59b4e9ba12b059d7b2a17e49c4a0e4936da95867b8b249abd7984163ab4ab"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 2.31838,
+            "p95": 2.8353,
+            "p99": 2.9744
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0112608,
+            "p95": 0.0153,
+            "p99": 0.0175
+          },
+          "terrain_select_ms": {
+            "mean": 0.43321,
+            "p95": 0.5746,
+            "p99": 0.6237
+          },
+          "terrain_edges_ms": {
+            "mean": 0.345216,
+            "p95": 0.4191,
+            "p99": 0.4497
+          },
+          "terrain_emit_ms": {
+            "mean": 1.50552,
+            "p95": 1.8938,
+            "p99": 2.0819
+          },
+          "frame_ms": {
+            "mean": 12.6372,
+            "p95": 15.9905,
+            "p99": 17.1429
+          },
+          "prepare_ms": {
+            "mean": 6.4576,
+            "p95": 8.4481,
+            "p99": 8.8469
+          },
+          "capture_ms": {
+            "mean": 3.50068,
+            "p95": 4.2646,
+            "p99": 4.6125
+          },
+          "mean_terrain_nodes": 1435.65,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 15663.1,
+          "mean_terrain_point_requests": 2046.63,
+          "mean_terrain_points": 1256.17,
+          "mean_polygons": 4584.23,
+          "mean_draws": 1393.98,
+          "mean_binds": 653.267,
+          "mean_vertex_upload_bytes": 2592,
+          "mean_mesh_upload_bytes": 18.2,
+          "mean_instance_upload_bytes": 149307,
+          "mean_texture_upload_bytes": 11791.1,
+          "mean_terrain_edge_points": 10698.9,
+          "mean_terrain_scratch_allocations": 5.99583,
+          "mean_terrain_scratch_bytes": 679923,
+          "capture_path": "build/profiles/terrain-selection-before-repeat/rpg-rpgmap5-travel.json",
+          "capture_sha256": "55bda494f29d6e252a927814a3cd467d2b50f63202e3ce0d4d288b8d304f9ace",
+          "readback_sha256": "d6d59b4e9ba12b059d7b2a17e49c4a0e4936da95867b8b249abd7984163ab4ab"
+        }
+      ],
+      "after": [
+        {
+          "terrain_lod_ms": {
+            "mean": 1.48548,
+            "p95": 1.7406,
+            "p99": 1.8557
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0109017,
+            "p95": 0.0137,
+            "p99": 0.0172
+          },
+          "terrain_select_ms": {
+            "mean": 0.368005,
+            "p95": 0.4148,
+            "p99": 0.525
+          },
+          "terrain_edges_ms": {
+            "mean": 0.0002825,
+            "p95": 0.0004,
+            "p99": 0.0006
+          },
+          "terrain_emit_ms": {
+            "mean": 1.08806,
+            "p95": 1.3197,
+            "p99": 1.4435
+          },
+          "frame_ms": {
+            "mean": 11.4581,
+            "p95": 14.6096,
+            "p99": 15.526
+          },
+          "prepare_ms": {
+            "mean": 5.48526,
+            "p95": 7.2792,
+            "p99": 7.6019
+          },
+          "capture_ms": {
+            "mean": 2.62336,
+            "p95": 3.1729,
+            "p99": 3.3818
+          },
+          "mean_terrain_nodes": 1435.65,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 15663.1,
+          "mean_terrain_point_requests": 2046.63,
+          "mean_terrain_points": 1256.17,
+          "mean_polygons": 4584.23,
+          "mean_draws": 1393.98,
+          "mean_binds": 653.267,
+          "mean_vertex_upload_bytes": 2592,
+          "mean_mesh_upload_bytes": 18.2,
+          "mean_instance_upload_bytes": 149307,
+          "mean_texture_upload_bytes": 11791.1,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 393216,
+          "capture_path": "build/profiles/terrain-selection-verified/rpg-rpgmap5-travel.json",
+          "capture_sha256": "d24956b09a36166b75f5cdbcc9ce73b5fca9b751243538244dbb11a8d12ece14",
+          "readback_sha256": "d6d59b4e9ba12b059d7b2a17e49c4a0e4936da95867b8b249abd7984163ab4ab"
+        },
+        {
+          "terrain_lod_ms": {
+            "mean": 1.5118,
+            "p95": 1.8611,
+            "p99": 2.1054
+          },
+          "terrain_visibility_ms": {
+            "mean": 0.0109208,
+            "p95": 0.0136,
+            "p99": 0.0152
+          },
+          "terrain_select_ms": {
+            "mean": 0.365875,
+            "p95": 0.4534,
+            "p99": 0.5027
+          },
+          "terrain_edges_ms": {
+            "mean": 0.000268333,
+            "p95": 0.0004,
+            "p99": 0.0005
+          },
+          "terrain_emit_ms": {
+            "mean": 1.11605,
+            "p95": 1.4253,
+            "p99": 1.6303
+          },
+          "frame_ms": {
+            "mean": 11.3554,
+            "p95": 15.339,
+            "p99": 16.251
+          },
+          "prepare_ms": {
+            "mean": 5.52372,
+            "p95": 7.4027,
+            "p99": 8.1638
+          },
+          "capture_ms": {
+            "mean": 2.65833,
+            "p95": 3.2916,
+            "p99": 3.7139
+          },
+          "mean_terrain_nodes": 1435.65,
+          "mean_terrain_validated_heights": 66049,
+          "mean_terrain_material_checks": 15663.1,
+          "mean_terrain_point_requests": 2046.63,
+          "mean_terrain_points": 1256.17,
+          "mean_polygons": 4584.23,
+          "mean_draws": 1393.98,
+          "mean_binds": 653.267,
+          "mean_vertex_upload_bytes": 2592,
+          "mean_mesh_upload_bytes": 18.2,
+          "mean_instance_upload_bytes": 149307,
+          "mean_texture_upload_bytes": 11791.1,
+          "mean_terrain_edge_points": 0,
+          "mean_terrain_scratch_allocations": 0,
+          "mean_terrain_scratch_bytes": 0,
+          "mean_terrain_scratch_buffer_bytes": 393216,
+          "capture_path": "build/profiles/terrain-selection-verified-repeat/rpg-rpgmap5-travel.json",
+          "capture_sha256": "508adea923c1752b675b737ae3cfa459bb7bdf912740586b0d4b7fa5634fa680",
+          "readback_sha256": "d6d59b4e9ba12b059d7b2a17e49c4a0e4936da95867b8b249abd7984163ab4ab"
+        }
+      ],
+      "readbacks_identical": true,
+      "workload_counts_identical": true,
+      "mean_terrain_lod_ms_before": 2.323015,
+      "mean_terrain_lod_ms_after": 1.49864,
+      "reduction_percent": 35.48728699556395
+    }
+  }
+}

@@ -73,7 +73,8 @@ bool validMeshPolygon(const HardwarePolygon& p) {
         p.indexCount > p.mesh->indices().size() - p.firstIndex ||
         !std::ranges::all_of(t.camera, finite) || !finite(t.optics) || !finite(t.clip) ||
         !std::ranges::all_of(t.parameters, finite) || !finite(t.geometry) || !finite(t.ambient) ||
-        !finite(t.mapping) || t.optics[0] <= 0 || t.optics[1] <= 0 || t.clip[0] < 1.f / 65536 ||
+        !finite(t.mapping) || !finite(t.origin) || t.optics[0] <= 0 || t.optics[1] <= 0 ||
+        t.clip[0] < 1.f / 65536 ||
         t.clip[1] > 65536 || t.clip[1] <= t.clip[0] || t.clip[2] != 1)
         return false;
     if (t.geometry[2] == 0)

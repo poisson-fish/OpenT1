@@ -27,7 +27,7 @@ struct Output {
 };
 
 struct Instance {
-    float4 camera[3], optics, geometryClip, parameters[8], ambient, geometry, mapping;
+    float4 camera[3], optics, geometryClip, parameters[8], ambient, geometry, mapping, origin;
     float4 lightRect, imageArray;
 };
 
@@ -151,7 +151,9 @@ Output main(Input v, uint instanceId : SV_InstanceID) {
             float2 xy = nativeRing[ring];
             float2 uv = float2(xy.x, 1 - xy.y);
             float4 h = t.parameters[ring];
-            local = float4(xy * t.geometry.x, h.z >= 1 ? h.y : h.x + (h.y - h.x) * h.z, 1);
+            local = float4(t.origin.xyz +
+                               float3(xy * t.geometry.x, h.z >= 1 ? h.y : h.x + (h.y - h.x) * h.z),
+                           1);
             o.uv = uv;
             o.lightMap = t.mapping.xy + uv * t.mapping.zw;
             o.sphereDistance = h.w / t.geometry.y;

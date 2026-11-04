@@ -603,6 +603,74 @@ void terrainReadbacks(platform::SdlWindow& window) {
     }
 }
 
+void terrainSeamCoverage(platform::SdlWindow& window) {
+    ResourceManager manager;
+    auto bitmap = gfx::Bitmap::create(2, 2);
+    CHECK(bitmap);
+    std::ranges::fill(bitmap->pixels, std::byte{1});
+    CHECK(manager.add("seam.bmp", std::move(bitmap)));
+    world::WorldSurfaceMesh mesh;
+    world::TsMaterialResources::Data materials;
+    materials.list.materials.resize(1);
+    materials.list.materials[0].flags = 0x103;
+    materials.list.materialsPerDetail = 1;
+    materials.textures = {manager.load<gfx::Bitmap>("seam.bmp")};
+    mesh.materials = world::TsMaterialResources(std::move(materials));
+    const std::array<Point2F, 8> ring{
+        {{0, 0}, {0, .5f}, {0, 1}, {.5f, 1}, {1, 1}, {1, .5f}, {1, 0}, {.5f, 0}}};
+    std::vector<gfx::HardwareVertex> vertices(8);
+    for (std::size_t i = 0; i < ring.size(); ++i)
+        vertices[i].position = ring[i];
+    const auto topology = gfx::HardwareMesh::create(std::move(vertices), {0, 2, 4, 4, 6, 0});
+    auto patches = std::make_shared<world::WorldSurfaceMesh::TerrainPatches>();
+    patches->farDistance = patches->hazeDistance = 4096;
+    for (int y = 0; y < 64; ++y)
+        for (int x = 0; x < 64; ++x) {
+            world::WorldSurfaceMesh::TerrainPatch patch;
+            patch.topology = topology;
+            patch.extent = 8;
+            patch.origin = {Flt32(-2560 + x * 8), Flt32(-704 + y * 8), 0};
+            patch.firstTriangle = patches->triangles;
+            for (auto& h : patch.heights)
+                h = {90, 90, 0, 0};
+            patches->patches.push_back(std::move(patch));
+            patches->triangles += 2;
+        }
+    mesh.terrainPatches = patches;
+    gfx::Palette palette;
+    palette.palettes[0].colors[1] = {100, 60, 30, 255};
+    auto surface = gfx::SdlGpuSurface::create(window, 800, 600);
+    CHECK(surface);
+    world::TsStaticView view;
+    view.width = 800;
+    view.height = 600;
+    view.focal = {400, 400};
+    view.center = {400, 300};
+    view.nearDistance = .1f;
+    view.farDistance = 4096;
+    gfx::GpuFrameConfig frame;
+    frame.clearColor = {1, 1, 1};
+    // A continuous opaque plane must cover the frame at these downward views,
+    // even at large world coordinates and across independently drawn patches.
+    for (int angle = 0; angle < 12; ++angle) {
+        view.shapeToCamera.set(EulerF{-.9f, 0, Flt32(angle) * .173f},
+                               {-2293.5f, -455, 102.5f});
+        view.shapeToCamera.inverse();
+        const auto polygons = mesh.hardwareInterior(view, palette);
+        CHECK(polygons);
+        const auto batch = gfx::HardwareBatch::prepare(*polygons, &palette);
+        CHECK(batch && surface->render(*batch, frame));
+        std::vector<std::byte> pixels(800 * 600 * 4);
+        CHECK(surface->readback(pixels));
+        unsigned holes{};
+        for (std::size_t i = 0; i < pixels.size(); i += 4)
+            holes += pixels[i] == std::byte{255};
+        if (holes)
+            std::printf("Terrain seam coverage: angle %d, %u uncovered pixels\n", angle, holes);
+        CHECK(holes == 0);
+    }
+}
+
 void terrainSubmission(platform::SdlWindow& window) {
     std::vector<gfx::HardwareVertex> vertices(18);
     std::vector<UInt32> indices;
@@ -1105,6 +1173,7 @@ int runGpuCache(bool requireGpu) {
         pageReadbacks(window);
         arrayReadbacks(window);
         terrainReadbacks(window);
+        terrainSeamCoverage(window);
         terrainSubmission(window);
         fogReadbacks(window);
         fogBlendReadbacks(window);

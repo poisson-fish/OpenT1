@@ -713,6 +713,27 @@ Per-case mean/p95/p99 timings, counters, executable provenance and readback hash
 are recorded in [`render-submission.json`](data/render-submission.json). The
 benchmark now reports input draws, pipeline binds and both uniform-push counts.
 
+## Terrain seam precision (2026-11-04)
+
+The retained terrain path introduced in `8207997` folded each patch's origin into
+its camera translation on the CPU. Adjacent patches then transformed a shared
+endpoint through different floating-point expressions. At some camera angles,
+the projected endpoints rounded to different rasterizer subpixels, exposing
+single background pixels through otherwise continuous terrain.
+
+Terrain instances now carry their origins separately. The vertex shader first
+reconstructs shared mesh coordinates, then applies the common camera transform;
+CPU patch admission uses the same coordinates. HLSL, committed DXIL/SPIR-V and
+the Metal source use the matching layout. The instance stride grows from 288 to
+304 bytes, including existing sampling metadata.
+
+A real-device coverage regression renders an opaque tiled plane at map-sized
+coordinates through 12 rotated downward views. The preceding path leaves six
+uncovered pixels at the first failing angle. The corrected path has no uncovered
+pixels in all 12 views on Windows D3D12 and Vulkan. Matching `rpgmap5` captures
+from the Wasteland installation also fill a previously uncovered terrain pixel.
+All 14 Release CTest checks pass.
+
 ## Reproduction
 
 ```powershell

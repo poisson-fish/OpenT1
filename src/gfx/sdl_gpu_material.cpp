@@ -127,7 +127,7 @@ struct InstanceData {
     std::array<Flt32, 4> imageArray{};
 };
 
-static_assert(sizeof(InstanceData) == 288);
+static_assert(sizeof(InstanceData) == 304);
 
 std::array<Flt32, 4> lightRect(const std::shared_ptr<LightMapSlot>& slot) {
     if (!slot)

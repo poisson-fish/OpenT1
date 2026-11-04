@@ -19,6 +19,7 @@ struct HardwareTransform {
     std::array<Flt32, 4> ambient{};  // TS ambient RGB/count, or terrain haze start in W
     std::array<Flt32, 4> geometry{}; // terrain extent/far/mode/topology, TS haze/unused/2/unused
     std::array<Flt32, 4> mapping{};  // terrain lightmap origin XY, scale XY
+    std::array<Flt32, 4> origin{};   // terrain patch origin XYZ in shared mesh coordinates
     bool operator==(const HardwareTransform&) const = default;
 };
 enum class HardwareBlend : UInt8 { Opaque, Alpha, Additive, Subtractive, Multiply };

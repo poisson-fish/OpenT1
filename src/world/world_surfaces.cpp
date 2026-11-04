@@ -767,8 +767,6 @@ bool WorldSurfaceMesh::appendHardwareInterior(std::vector<gfx::HardwarePolygon>&
         }();
         polygons.reserve(first + terrainPatches->patches.size());
         for (const auto& patch : terrainPatches->patches) {
-            auto local = view.shapeToCamera;
-            local.preTranslate(patch.origin);
             std::array<Point3F, 8> cameraPoints{};
             std::array<bool, 7> outside;
             outside.fill(true);
@@ -779,10 +777,11 @@ bool WorldSurfaceMesh::appendHardwareInterior(std::vector<gfx::HardwarePolygon>&
                 visited |= 1U << id;
                 const auto xy = patch.topology->vertices()[id].position;
                 const auto& h = patch.heights[id];
-                Point3F point{xy.x * patch.extent,
-                              xy.y * patch.extent,
-                              h[2] >= 1 ? h[1] : h[0] + (h[1] - h[0]) * h[2]};
-                m_mul(point, local, cameraPoints[id]);
+                const auto point = patch.origin +
+                                   Point3F{xy.x * patch.extent,
+                                           xy.y * patch.extent,
+                                           h[2] >= 1 ? h[1] : h[0] + (h[1] - h[0]) * h[2]};
+                m_mul(point, view.shapeToCamera, cameraPoints[id]);
                 const auto p = cameraPoints[id];
                 const std::array<Flt64, 7> planes{
                     Flt64(p.y) - view.nearDistance,
@@ -809,8 +808,10 @@ bool WorldSurfaceMesh::appendHardwareInterior(std::vector<gfx::HardwarePolygon>&
             if (!facing)
                 continue;
             auto instance = transform;
-            for (auto i : std::views::iota(std::size_t{0}, std::size_t{3}))
-                instance.camera[i][3] = local.p[i];
+            // Shared edges must enter the same camera transform with identical
+            // coordinates. Folding each patch origin into its translation rounds
+            // the endpoints differently and leaves single-pixel rasterization gaps.
+            instance.origin = {patch.origin.x, patch.origin.y, patch.origin.z, 0};
             instance.parameters = patch.heights;
             instance.ambient = {terrainPatches->farDistance, 0, 0, terrainPatches->hazeDistance};
             instance.geometry = {patch.extent, view.farDistance, 1, Flt32(patch.topologyKey)};

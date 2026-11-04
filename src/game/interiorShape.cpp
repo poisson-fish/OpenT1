@@ -1,5 +1,6 @@
 #include <opent1/game/interior_shape.hpp>
 #include <ranges>
+#include <opent1/core/crc16.hpp>
 #include <opent1/game/string_table.hpp>
 #include <opent1/sim/sim_world_game.hpp>
 
@@ -108,16 +109,19 @@ void InteriorShape::setShapeResources(std::shared_ptr<world::InteriorShapeResour
     checkVals_.clear();
     if (shapeResources_ && shapeResources_->shape) {
         const auto& shape = *shapeResources_->shape;
-        for (const auto& state : shape.states) {
-            for (auto i : std::views::iota(UInt32{0}) | std::views::take_while([&](UInt32 i) {
-                              return i < state.lodCount;
-                          })) {
-                const std::size_t lodIdx = static_cast<std::size_t>(state.firstLod + i);
-                if (lodIdx < shapeResources_->geometry.size() &&
-                    shapeResources_->geometry[lodIdx]) {
-                    checkVals_.push_back(
-                        static_cast<UInt32>(shapeResources_->geometry[lodIdx]->buildId));
-                }
+        // Vanilla verifies every geometry build ID, followed by the base
+        // lighting check for each LOD (including LODs in other shape states).
+        for (const auto& geometry : shapeResources_->geometry) {
+            if (geometry) {
+                checkVals_.push_back(static_cast<UInt32>(geometry->buildId));
+            }
+        }
+        for (const auto& lod : shape.lods) {
+            if (lod.firstLightState < shapeResources_->lighting.size() &&
+                shapeResources_->lighting[lod.firstLightState]) {
+                const auto& lighting = *shapeResources_->lighting[lod.firstLightState];
+                checkVals_.push_back((UInt32(computeCRC16(lighting.mapData)) << 16) |
+                                     computeCRC16(lighting.names));
             }
         }
         if (!shapeResources_->geometry.empty() && shapeResources_->geometry[0]) {

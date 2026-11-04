@@ -869,6 +869,7 @@ bool ComboBox::dismiss(bool accept) {
         return false;
     }
     const auto old = text;
+    const auto life = lifetime();
     auto next = text;
     if (accept) {
         if (const auto* entry = popup_->items.selection()) {
@@ -880,22 +881,37 @@ bool ComboBox::dismiss(bool accept) {
     text = next;
     try {
         if (accept) {
+            selectionCommitted();
+            if (life.expired())
+                return true;
             Text::action();
+            if (life.expired())
+                return true;
         }
     } catch (...) {
+        if (life.expired())
+            return true;
         text = old;
         return false;
     }
     try {
         root->unlockMouse();
     } catch (...) {
+        if (life.expired())
+            return true;
         text = old;
         return false;
     }
+    if (life.expired())
+        return true;
     if (!root->popDialog()) {
+        if (life.expired())
+            return true;
         text = old;
         return false;
     }
+    if (life.expired())
+        return true;
     root->makeFirstResponder(this);
     return true;
 }

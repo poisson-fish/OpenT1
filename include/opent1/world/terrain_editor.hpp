@@ -4,6 +4,9 @@
 #include <map>
 
 namespace opent1::world {
+struct TerrainEditorDisplay {
+    UInt8 show{1}, frameColor{3}, fillColor{4}; // frame, fill, outline bits
+};
 struct TerrainEditorSettings {
     Flt32 height{200}, adjust{5}, scale{1}, smooth{.5f}, mouseAdjust{.25f};
     UInt32 brushDetail{}, pinDetail{1}, pinMax{10};
@@ -127,7 +130,12 @@ public:
     LandscapeTextureRecipe textureRecipe;
     Landscape landscape;
     std::function<bool(TerrainDocument&, bool)> relight;
+    std::function<bool()> initialize;
+    bool focused{};
+    TerrainEditorDisplay selectionDisplay{}, highlightDisplay{1, 2, 8}, shadowDisplay{1, 6, 12};
+    bool blockOutline{};
     std::function<std::optional<TerrainDocument>(std::string_view)> terrainLoader;
+    std::string attachedFile; // host's terrain volume name, distinct from its grid entry
     std::optional<gfx::Palette> palette;
     [[nodiscard]] static std::span<const std::string_view> actions();
     std::optional<std::string> command(std::string_view, std::span<const std::string> = {});

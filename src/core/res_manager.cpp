@@ -146,6 +146,8 @@ struct ResourceManager::Impl {
     struct Volume {
         std::string name;
         std::filesystem::path path;
+        std::filesystem::file_time_type modified{};
+        UInt32 fileSize{};
         VolumeRStream stream;
         std::size_t refs{1};
         UInt64 revision{};
@@ -308,17 +310,31 @@ bool ResourceManager::addVolume(std::string_view name) {
     const auto old = std::ranges::find_if(impl_->volumes, [&](const auto& v) {
         return v->name == *key;
     });
-    if (old != impl_->volumes.end()) {
+    const auto file = impl_->files.find(*key);
+    std::error_code timeError;
+    const auto modified = file != impl_->files.end()
+                              ? std::filesystem::last_write_time(file->second.path, timeError)
+                              : std::filesystem::file_time_type{};
+    if (old != impl_->volumes.end() &&
+        (file == impl_->files.end() ||
+         ((*old)->path == file->second.path && (*old)->fileSize == file->second.size &&
+          (timeError || (*old)->modified == modified)))) {
         ++(*old)->refs;
         return true;
     }
-    const auto file = impl_->files.find(*key);
     if (file == impl_->files.end()) {
         return false;
     }
     auto volume = std::make_unique<Impl::Volume>();
     volume->name = *key;
     volume->path = file->second.path;
+    volume->modified = modified;
+    volume->fileSize = file->second.size;
+    // Client and server SimVolumes may overlap across a mission replacement.
+    // Refresh a changed source without dropping either owner's reference or
+    // invalidating decoded resource handles retained from the previous source.
+    if (old != impl_->volumes.end())
+        volume->refs = (*old)->refs + 1;
     if (!volume->stream.openVolume(volume->path)) {
         return false;
     }
@@ -332,13 +348,20 @@ bool ResourceManager::addVolume(std::string_view name) {
             }
         }
     });
+    if (old != impl_->volumes.end())
+        std::erase_if(impl_->matches, [&](const auto& entry) {
+            return !entry.disk && entry.source == *key;
+        });
     for (const auto& item : entries) {
         if (item.name && keyOf(*item.name)) {
             impl_->matches.insert(impl_->matches.begin(),
                                   {*key, *item.name, false, impl_->nextCursor++});
         }
     }
-    impl_->volumes.insert(impl_->volumes.begin(), std::move(volume));
+    if (old != impl_->volumes.end())
+        *old = std::move(volume);
+    else
+        impl_->volumes.insert(impl_->volumes.begin(), std::move(volume));
     impl_->reconcileCache();
     return true;
 }

@@ -111,6 +111,7 @@ public:
     void uninstall();
     void stop();
     std::function<std::optional<std::vector<std::byte>>(std::string_view)> loadFile;
+    std::function<void(std::string_view)> loadFailed;
     std::function<std::shared_ptr<Delegate>(std::string_view)> loadDelegate;
     bool save(const std::filesystem::path&) const;
     bool editing(bool);

@@ -102,6 +102,7 @@ void compatibility() {
     game::FearGameApp::Config config;
     config.assetRoot = root;
     game::FearGameApp app(config);
+    app.console().setVariable("Server::Port", "0");
 
     struct NeedsArchive : sim::SimObject {
         ResourceManager* resources{};

@@ -438,6 +438,8 @@ add_library(
     src/game/FearMissionEditor.cpp
     src/game/fearMissionPlugin.cpp
     src/game/MissionObjectList.cpp
+    src/game/missionEditorControls.cpp
+    src/game/missionEditorViewport.cpp
     src/game/HudManager.cpp
     src/game/fearGuiHudCtrl.cpp
     src/game/FearGuiHudArrayCtrl.cpp

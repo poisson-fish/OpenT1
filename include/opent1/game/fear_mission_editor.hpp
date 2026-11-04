@@ -82,12 +82,14 @@ public:
         std::string description{};
         std::string lockedBmpName{};
         std::string unlockedBmpName{};
+        std::string className{};
     };
 
     struct InfoEntry {
         sim::SimObjectId id{0};
         sim::SimObject* object{nullptr};
         TMat3F transform{};
+        UInt64 number{};
     };
 
     struct Bookmark {
@@ -104,6 +106,10 @@ public:
     void bindGame(sim::SimGame* game) noexcept {
         game_ = game;
     }
+
+    void setTargetManager(sim::SimManager*);
+    [[nodiscard]] sim::SimManager* targetManager() const;
+    [[nodiscard]] EditCamera* camera() const;
 
     [[nodiscard]] std::optional<std::string> exportScript(const sim::SimObject& object) const;
 
@@ -124,12 +130,18 @@ public:
                       std::string_view lockedBmp = {},
                       std::string_view unlockedBmp = {});
     [[nodiscard]] const TypeInfo* getTypeInfo(sim::SimObject* obj) const;
+    bool registerClassType(std::string_view className,
+                           UInt32 placeMask,
+                           std::string_view selectedBmp = {},
+                           std::string_view unselectedBmp = {});
+    bool setClassPlaceMask(std::string_view className, std::optional<UInt32>);
+    [[nodiscard]] UInt32 placementMask(sim::SimObject*) const;
 
     [[nodiscard]] const std::vector<TypeInfo>& typeInfos() const noexcept {
         return typeInfos_;
     }
 
-    void saveInfo();
+    void saveInfo(sim::SimObject* object = nullptr);
     void restoreInfo();
 
     [[nodiscard]] const std::vector<InfoEntry>& undoEntries() const noexcept {
@@ -145,14 +157,15 @@ public:
 
     void moveObjectRelative(sim::SimObject* obj, const Point3F& delta);
     void moveObjectAbsolute(sim::SimObject* obj, const Point3F& pos);
-    void rotateObject(sim::SimObject* obj, const Point3F& anchor, Flt32 rot);
+    void rotateObject(sim::SimObject* obj, const Point3F& anchor, Flt32 rot, UInt32 axes = 0);
     bool dropObjectDown(sim::SimObject* obj);
-    void onDrop(sim::SimObject* obj);
+    void onDrop(sim::SimObject* obj, UInt32 dropType = 0);
     void objectsToCamera();
     void cameraToObjects();
 
     bool copySelection();
     bool pasteSelection();
+    bool pasteFile(std::string_view);
     bool duplicateSelection();
     void deleteSelection();
 
@@ -173,6 +186,7 @@ public:
 
     void setPlaceMask(UInt32 mask) noexcept {
         placeMask_ = mask;
+        defaultPlaceMask_ = mask;
     }
 
     [[nodiscard]] UInt32 defaultPlaceMask() const noexcept {
@@ -181,11 +195,13 @@ public:
 
     void setDefaultPlaceMask(UInt32 mask) noexcept {
         defaultPlaceMask_ = mask;
+        placeMask_ = mask;
     }
 
     [[nodiscard]] UInt32 flags() const noexcept {
         return flags_.mask();
     }
+    [[nodiscard]] bool focused() const noexcept { return focused_; }
 
     [[nodiscard]] const Point3F& granularity() const noexcept {
         return granularity_;
@@ -198,9 +214,11 @@ public:
     bool onAdd() override;
     void onRemove() override;
     void onDeleteNotify(sim::SimObject& object) override;
+    bool processEvent(const sim::SimEvent&) override;
 
 private:
     void deleteObjectRecursive(sim::SimObject* obj);
+    bool pasteScript(std::string_view, bool drop);
 
     SelectionSet selection_{};
     std::vector<TypeInfo> typeInfos_{};
@@ -218,6 +236,10 @@ private:
     UInt32 placeMask_{SimTerrainObjectType | SimInteriorObjectType};
     UInt32 defaultPlaceMask_{SimTerrainObjectType | SimInteriorObjectType};
     sim::SimManager* targetManager_{nullptr};
+    sim::SimObject* teardownObject_{};
+    UInt64 targetRevision_{};
+    bool serverTarget_{};
+    bool focused_{};
 };
 
 class FearMissionPlugin : public sim::SimConsolePlugin {
@@ -229,17 +251,12 @@ public:
     void init(Console& console, sim::SimManager* manager) override;
 
     void setManager(sim::SimManager* manager) override {
-        if (manager_ != manager) {
-            me_ = nullptr;
-        }
         manager_ = manager;
     }
 
     void endFrame() override;
 
-    [[nodiscard]] FearMissionEditor* editor() const noexcept {
-        return me_;
-    }
+    [[nodiscard]] FearMissionEditor* editor() const noexcept;
 
 private:
     std::optional<std::string>

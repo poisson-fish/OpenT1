@@ -18,8 +18,13 @@ public:
     // The game host can submit the world separately (including GPU batches).
     bool sceneRenderedExternally{false};
     std::weak_ptr<sim::SimWorld> world;
+    // Editors may render a server scene through a camera owned by the client.
+    // Resolve the scene on every frame; never retain a replaced world's pointer.
+    std::function<sim::SimWorld*()> sceneWorld;
     std::function<std::optional<sim::EnvironmentCamera>(Point2I)> camera;
     std::function<bool(const MouseRay&)> mouse;
+    std::function<bool(const Event&)> input;
+    std::function<bool(gfx::SoftwareSurface&, Point2I, RectI)> overlay;
     bool attach(sim::SimWorld&, sim::SimObject*, sim::SimObject* data = nullptr);
     bool nextCamera(sim::SimWorld&);
     bool queryCamera(sim::SimWorld&);
@@ -43,7 +48,10 @@ public:
     pick(sim::SimWorld&, const Event&, UInt32 mask = ~UInt32{}) const;
     void tick(double) override;
     bool event(const Event&) override;
+    bool wantsTab() const override { return bool(input); }
+    bool becomeFirstResponder() const override { return bool(input); }
     bool processEvent(const sim::SimEvent&) override;
+    void close() override;
     void onRemove() override;
     void onDeleteNotify(sim::SimObject&) override;
     bool draw(gfx::SoftwareSurface&, Point2I, RectI) const override;

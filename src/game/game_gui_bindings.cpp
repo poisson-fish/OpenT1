@@ -202,6 +202,12 @@ bool FearGameApp::setGameplayGuiMode(UInt32 mode) {
     }
     auto& cg = fearPlugin_->clientGlobals();
     gameplayGuiMode_ = mode;
+    // A late control/GUI packet can arrive after editor.cs has opened. Retain
+    // the requested play mode without replacing the active editing graph.
+    if (const auto* root = guiRuntime_ ? guiRuntime_->canvas.top() : nullptr;
+        root && (root->getName() == "editorGui" || root->getName() == "EditorGui")) {
+        return true;
+    }
     if (!cg.playerPSC || !guiRuntime_) {
         return false;
     }
@@ -293,8 +299,8 @@ bool FearGameApp::escapeGameplay() {
     }
     if (gameplayGuiMode_ == 6) {
         return setGameplayGuiMode(cg.playerPSC->guiMode() >= 1 && cg.playerPSC->guiMode() <= 5
-                                     ? cg.playerPSC->guiMode()
-                                     : 1);
+                                      ? cg.playerPSC->guiMode()
+                                      : 1);
     }
     if (!game_.console().isFunction("remotePlayMode")) {
         return setGameplayGuiMode(1);

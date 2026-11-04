@@ -2456,6 +2456,13 @@ void Canvas::tab(bool prev) {
 }
 
 void Canvas::cancel() noexcept {
+    // A viewport can capture the mouse without participating in keyboard tab
+    // traversal. It still needs cancellation to roll back its active gesture.
+    if (capture_ && std::ranges::find(tabs_, capture_) == tabs_.end()) {
+        Event event;
+        event.type = EventType::Cancel;
+        try { capture_->event(event); } catch (...) {}
+    }
     nextMouse_.reset();
     nextKey_.reset();
     leftDown_ = rightDown_ = mouseClicked_ = false;

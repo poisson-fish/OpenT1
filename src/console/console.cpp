@@ -381,6 +381,20 @@ script::ExecutionResult Console::execute(std::string_view name,
     });
 }
 
+std::optional<std::string> Console::readScript(std::string_view name) const {
+    if (impl_->loader) {
+        auto source = impl_->loader(name);
+        return source && source->size() <= impl_->limits.parser.maxSourceBytes ? source : std::nullopt;
+    }
+    if (!impl_->resources) return {};
+    std::vector<std::byte> bytes;
+    const auto max = static_cast<UInt32>(std::min<std::size_t>(
+        impl_->limits.parser.maxSourceBytes, std::numeric_limits<UInt32>::max()));
+    if (!impl_->resources->read(name, bytes, max)) return {};
+    if (bytes.empty()) return std::string{};
+    return std::string(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+}
+
 script::ExecutionResult Console::executeFile(std::string_view name) {
     return script::Evaluator::run(*this, [&] {
         std::string file(script::cText(name));

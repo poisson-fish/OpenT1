@@ -1,4 +1,6 @@
 #include <opent1/game/fear_mission_editor.hpp>
+#include <opent1/world/world_mission.hpp>
+#include <opent1/core/filename.hpp>
 #include <ranges>
 
 #include <charconv>
@@ -6,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <chrono>
+#include <cmath>
 #include <atomic>
 #ifdef _WIN32
 #include <windows.h>
@@ -42,6 +45,15 @@ enum MECommandId : Int32 {
     MESetHandCursor = 24,
     MEUndo = 25,
     MERebuildCommandMap = 26,
+    MEOnSelected,
+    MEOnUnselected,
+    MEObjectToCamera,
+    MECameraToObject,
+    MEOnUseTerrainGrid,
+    MERedo,
+    MEObjectToSC,
+    MEPasteFile,
+    MEMissionLight,
 };
 
 [[nodiscard]] Int32 parseIntArg(std::string_view sv) noexcept {
@@ -51,9 +63,33 @@ enum MECommandId : Int32 {
 }
 
 [[nodiscard]] UInt32 parseUIntArg(std::string_view sv) noexcept {
+    // The shipped scripts pass decimal complements (e.g. -68). Convert the
+    // signed value modulo 2^32, as vanilla's atoi-to-DWORD assignment does.
+    if (sv.starts_with('-')) {
+        Int32 val{};
+        const auto result = std::from_chars(sv.data(), sv.data() + sv.size(), val);
+        return result.ec == std::errc{} && result.ptr == sv.data() + sv.size()
+                   ? static_cast<UInt32>(val)
+                   : 0;
+    }
     UInt32 val = 0;
     std::from_chars(sv.data(), sv.data() + sv.size(), val);
     return val;
+}
+
+std::string missionWriteName(Console& console, sim::SimManager& manager, const std::string& name) {
+    auto* service = sim::SimResource::find(manager);
+    const auto assetRoot = console.getVariable("OpenT1::AssetRoot");
+    const auto source =
+        service ? service->get().getFullPath(FileName(name).getTitle()) : std::nullopt;
+    if (!assetRoot.empty() && source) {
+        for (const auto& root : {std::filesystem::path(assetRoot), console.filePath("")}) {
+            const auto relative = source->lexically_relative(root);
+            if (!relative.empty() && !relative.is_absolute() && *relative.begin() != "..")
+                return relative.generic_string();
+        }
+    }
+    return name;
 }
 
 } // namespace
@@ -95,29 +131,72 @@ void FearMissionPlugin::init(Console& console, sim::SimManager* manager) {
     bindCmd(MESetHandCursor, "ME::SetHandCursor");
     bindCmd(MEUndo, "ME::Undo");
     bindCmd(MERebuildCommandMap, "ME::RebuildCommandMap");
+    bindCmd(MEOnSelected, "ME::onSelected");
+    bindCmd(MEOnUnselected, "ME::onUnselected");
+    bindCmd(MEClearSelection, "ME::onSelectionCleared");
+    bindCmd(MEObjectToCamera, "ME::ObjectToCamera");
+    bindCmd(MECameraToObject, "ME::CameraToObject");
+    bindCmd(MEOnUseTerrainGrid, "ME::onUseTerrainGrid");
+    bindCmd(MERedo, "ME::Redo");
+    bindCmd(MEObjectToSC, "ME::ObjectToSC");
+    bindCmd(MEPasteFile, "ME::PasteFile");
+    bindCmd(MEMissionLight, "ME::MissionLight");
 }
 
 void FearMissionPlugin::endFrame() {}
 
+FearMissionEditor* FearMissionPlugin::editor() const noexcept {
+    auto* owner = manager_;
+    if (game_) {
+        auto* client = game_->world(sim::WorldType::Client);
+        owner = client ? &client->manager() : nullptr;
+    }
+    return owner ? dynamic_cast<FearMissionEditor*>(owner->findObject(sim::MissionEditorId))
+                 : nullptr;
+}
+
 std::optional<std::string>
 FearMissionPlugin::handleCommand(Console& console, Int32 id, std::span<const std::string> argv) {
-    if (!manager_) {
+    me_ = editor();
+    auto* target = me_ ? me_->targetManager() : nullptr;
+    if (!manager_ && !game_) {
         return "False";
     }
-    if (!me_) {
-        me_ = dynamic_cast<FearMissionEditor*>(manager_->findObject(sim::MissionEditorId));
+    if (id != MECreate && !target) {
+        return "False";
     }
 
     switch (id) {
         case MECreate: {
-            if (!me_) {
+            auto* client = game_ ? game_->world(sim::WorldType::Client) : nullptr;
+            auto* server = game_ ? game_->world(sim::WorldType::Server) : nullptr;
+            auto* owner = game_ ? (client ? &client->manager() : nullptr) : manager_;
+            auto* editTarget = game_ ? (server ? &server->manager() : nullptr) : manager_;
+            if (argv.size() != 2 || !owner || !editTarget ||
+                !dynamic_cast<sim::SimCanvas*>(owner->findObject(argv[1]))) {
+                return "False";
+            }
+            if (me_) {
+                me_->deleteObject();
+                me_ = nullptr;
+            }
+            {
                 auto created = std::make_unique<FearMissionEditor>();
                 created->bindGame(game_);
                 me_ = created.get();
-                if (manager_->addObject(std::move(created))) {
-                    manager_->assignId(*me_, sim::MissionEditorId);
+                if (owner->addObject(std::move(created))) {
+                    if (!owner->assignId(*me_, sim::MissionEditorId)) {
+                        me_->deleteObject();
+                        me_ = nullptr;
+                        return "False";
+                    }
                     me_->assignName("MissionEditor");
-                    me_->init();
+                    me_->setTargetManager(editTarget);
+                    if (!me_->init()) {
+                        me_->deleteObject();
+                        me_ = nullptr;
+                        return "False";
+                    }
                 } else {
                     me_ = nullptr;
                     return "False";
@@ -136,7 +215,7 @@ FearMissionPlugin::handleCommand(Console& console, Int32 id, std::span<const std
                      return index != 0;
                  })) {
                 name = std::format("{}{}", argv[1], index);
-                if (!manager_->findObject(name) && !me_->getAddGroup()->findObject(name)) {
+                if (!target->findObject(name) && !me_->getAddGroup()->findObject(name)) {
                     break;
                 }
             }
@@ -144,8 +223,16 @@ FearMissionPlugin::handleCommand(Console& console, Int32 id, std::span<const std
             // processArguments. Passing arguments directly preserves quoted values.
             std::vector<std::string> args{name, argv[2]};
             args.insert(args.end(), argv.begin() + 3, argv.end());
-            const auto result = console.execute("newObject", args);
-            auto* object = result.ok() ? manager_->findObject(result.value) : nullptr;
+            script::ExecutionResult result;
+            const auto create = [&] {
+                result = console.execute("newObject", args);
+            };
+            if (game_) {
+                game_->withWorld(sim::WorldType::Server, create);
+            } else {
+                create();
+            }
+            auto* object = result.ok() ? target->findObject(result.value) : nullptr;
             if (!object) {
                 return "False";
             }
@@ -153,11 +240,22 @@ FearMissionPlugin::handleCommand(Console& console, Int32 id, std::span<const std
                 object->deleteObject();
                 return "False";
             }
-            me_->selection().clearSet();
-            me_->selection().addObject(*object);
+            me_->selection().calcCentroid();
             me_->onDrop(object);
             if (me_->flags() & FearMissionEditor::DropToGround) {
                 me_->dropObjectDown(object);
+            }
+            if (console.isFunction("MissionObjectList::ClearSelection")) {
+                (void)console.execute("MissionObjectList::ClearSelection");
+            }
+            me_->selection().clearSet();
+            const std::array<std::string, 2> selected{"1", std::to_string(object->getId())};
+            if (console.isFunction("MissionObjectList::SelectObject")) {
+                (void)console.execute("MissionObjectList::SelectObject", selected);
+            }
+            me_->selection().addObject(*object);
+            if (console.isFunction("MissionObjectList::Inspect")) {
+                (void)console.execute("MissionObjectList::Inspect", selected);
             }
             return std::to_string(object->getId());
         }
@@ -166,13 +264,13 @@ FearMissionPlugin::handleCommand(Console& console, Int32 id, std::span<const std
             if (argv.size() < 3 || !me_) {
                 return "False";
             }
-            const UInt32 mask = parseUIntArg(argv[1]);
-            const std::string_view desc = argv[2];
+            const UInt32 mask = parseUIntArg(argv[2]);
+            const std::string_view desc = argv[1];
             const std::string_view lockedBmp =
                 (argv.size() >= 4) ? std::string_view(argv[3]) : std::string_view{};
             const std::string_view unlockedBmp =
                 (argv.size() >= 5) ? std::string_view(argv[4]) : std::string_view{};
-            return me_->registerType(mask, desc, lockedBmp, unlockedBmp) ? "True" : "False";
+            return me_->registerClassType(desc, mask, lockedBmp, unlockedBmp) ? "True" : "False";
         }
 
         case MEGetConsoleOptions:
@@ -211,6 +309,30 @@ FearMissionPlugin::handleCommand(Console& console, Int32 id, std::span<const std
             }
             return me_->pasteSelection() ? "True" : "False";
 
+        case MEPasteFile:
+            return argv.size() == 2 && me_->pasteFile(argv[1]) ? "True" : "False";
+
+        case MEMissionLight: {
+            if (argv.size() > 2)
+                return "False";
+            console.setVariable("ME::LightingStatus", "Failed");
+            if (handleCommand(console, MESave, {}).value_or("False") != "True")
+                return "False";
+            const bool quick = argv.size() == 2 && script::toBool(argv[1]);
+            const auto result = console.execute(
+                "Ted::relight", std::array<std::string, 1>{quick ? "false" : "true"});
+            if (!result.ok() || !script::toBool(result.value))
+                return "False";
+            if (handleCommand(console, MESave, {}).value_or("False") != "True") {
+                (void)console.execute("Ted::undo");
+                return "False";
+            }
+            console.setVariable("ME::LightingStatus", "TerrainBaked");
+            console.print("Mission lighting: terrain lightmaps baked and saved; authored interior "
+                          "lightmaps retained.");
+            return "True";
+        }
+
         case MEDuplicateSelection:
             if (!me_) {
                 return "False";
@@ -230,7 +352,7 @@ FearMissionPlugin::handleCommand(Console& console, Int32 id, std::span<const std
                 return "False";
             }
             const std::string mission(console.getVariable("missionFile"));
-            auto* group = manager_->findObject("MissionGroup");
+            auto* group = target->findObject("MissionGroup");
             if (mission.empty() || !group) {
                 return "False";
             }
@@ -250,7 +372,10 @@ FearMissionPlugin::handleCommand(Console& console, Int32 id, std::span<const std
                     return "False";
                 }
             }
-            const std::filesystem::path destination(mission);
+            // Scripts omit the active mod prefix (e.g. base/missions). Mirror
+            // the resource's selected directory in the write overlay so a
+            // subsequent mission/volume load can discover the saved files.
+            const auto destination = console.filePath(missionWriteName(console, *target, mission));
             static std::atomic<UInt64> serial{};
             auto temporary = destination;
             temporary +=
@@ -258,6 +383,11 @@ FearMissionPlugin::handleCommand(Console& console, Int32 id, std::span<const std
                 std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + "-" +
                 std::to_string(serial.fetch_add(1));
             std::error_code ec;
+            if (destination.has_parent_path()) {
+                std::filesystem::create_directories(destination.parent_path(), ec);
+                if (ec)
+                    return "False";
+            }
             {
                 std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
                 output << *script;
@@ -283,6 +413,10 @@ FearMissionPlugin::handleCommand(Console& console, Int32 id, std::span<const std
                 std::filesystem::remove(temporary, ec);
                 return "False";
             }
+            console.setVariable("ME::LastSavedMission", destination.generic_string());
+            if (console.hasVariable("ConsoleWorld::DefaultSearchPath"))
+                console.setVariable("ConsoleWorld::DefaultSearchPath",
+                                    console.getVariable("ConsoleWorld::DefaultSearchPath"));
             return "True";
         }
 
@@ -326,20 +460,22 @@ FearMissionPlugin::handleCommand(Console& console, Int32 id, std::span<const std
             if (argv.size() < 2 || !me_) {
                 return "False";
             }
-            if (auto* obj = manager_->findObject(argv[1])) {
-                me_->addObject(obj);
-                return "True";
+            if (auto* obj = target->findObject(argv[1])) {
+                return me_->addObject(obj) ? "True" : "False";
             }
             return "False";
         }
 
         case MESelectObject:
-        case MEUnselectObject: {
-            if (argv.size() < 2 || !me_) {
+        case MEUnselectObject:
+        case MEOnSelected:
+        case MEOnUnselected: {
+            const bool callback = id == MEOnSelected || id == MEOnUnselected;
+            if (argv.size() != (callback ? 3U : 2U) || !me_ || (callback && argv[1] != "1")) {
                 return "False";
             }
-            if (auto* obj = manager_->findObject(argv[1])) {
-                if (id == MESelectObject) {
+            if (auto* obj = target->findObject(argv[callback ? 2 : 1])) {
+                if (id == MESelectObject || id == MEOnSelected) {
                     me_->selection().addObject(*obj);
                 } else {
                     me_->selection().removeObject(*obj);
@@ -350,15 +486,18 @@ FearMissionPlugin::handleCommand(Console& console, Int32 id, std::span<const std
         }
 
         case MECreateGroup: {
-            if (argv.size() < 2 || !me_) {
+            if (argv.size() > 2 || !me_) {
                 return "False";
             }
             auto grp = std::make_unique<sim::SimGroup>();
             auto* raw = grp.get();
-            if (manager_->addObject(std::move(grp))) {
-                raw->assignName(argv[1]);
-                me_->addObject(raw);
-                return std::format("{}", raw->getId());
+            if (target->addObject(std::move(grp))) {
+                raw->assignName(argv.size() == 2 ? argv[1] : "SimGroup");
+                if (!me_->addObject(raw)) {
+                    raw->deleteObject();
+                    return "False";
+                }
+                return argv.size() == 2 ? std::to_string(raw->getId()) : "True";
             }
             return "False";
         }
@@ -371,11 +510,15 @@ FearMissionPlugin::handleCommand(Console& console, Int32 id, std::span<const std
             return "True";
 
         case MESetPlaceMask:
-            if (argv.size() < 2 || !me_) {
+            if (argv.size() < 2 || argv.size() > 3 || !me_) {
                 return "False";
             }
-            me_->setPlaceMask(parseUIntArg(argv[1]));
-            return "True";
+            return me_->setClassPlaceMask(argv[1],
+                                          argv.size() == 3
+                                              ? std::optional<UInt32>(parseUIntArg(argv[2]))
+                                              : std::nullopt)
+                       ? "True"
+                       : "False";
 
         case MESetDefaultPlaceMask:
             if (argv.size() < 2 || !me_) {
@@ -393,6 +536,51 @@ FearMissionPlugin::handleCommand(Console& console, Int32 id, std::span<const std
             }
             me_->restoreInfo();
             return "True";
+
+        case MERedo:
+            // Vanilla registers this name but has no redo implementation.
+            return "False";
+
+        case MEObjectToCamera:
+        case MEObjectToSC:
+        case MECameraToObject: {
+            auto* obj = target->findObject(console.getVariable("ME::InspectObject"));
+            auto* cam = me_->camera();
+            if (!obj || !cam || (id != MECameraToObject && obj->isLocked())) {
+                return "False";
+            }
+            sim::SimObjectTransformQuery query;
+            if (!obj->processQuery(query)) {
+                return "False";
+            }
+            if (id != MECameraToObject) {
+                me_->saveInfo(obj);
+                query.transform.p = {};
+                sim::SimObjectTransformEvent event;
+                event.transform = query.transform;
+                obj->processEvent(event);
+                me_->onDrop(obj,
+                            id == MEObjectToSC ? FearMissionEditor::DropToScreenCenter
+                                               : FearMissionEditor::DropAtCamera);
+            } else {
+                me_->saveInfo(cam);
+                cam->setPos(query.transform.p);
+            }
+            return "True";
+        }
+
+        case MEOnUseTerrainGrid: {
+            auto* terrain =
+                dynamic_cast<world::SimMissionTerrain*>(target->findObject(sim::TerrainId));
+            const auto resources = terrain ? terrain->editableResources() : std::nullopt;
+            if (!resources || !resources->grid) {
+                return "False";
+            }
+            const auto snap = std::to_string(std::ldexp(1.0, resources->grid->scale));
+            console.setVariable("ME::XGridSnap", snap);
+            console.setVariable("ME::YGridSnap", snap);
+            return "True";
+        }
 
         case MERebuildCommandMap:
             if (!me_) {

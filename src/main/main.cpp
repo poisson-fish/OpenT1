@@ -702,6 +702,19 @@ protected:
         return root && root->getName() == "commandGui";
     }
 
+    bool editorMouseLook() const {
+        const auto* runtime = app_.guiRuntime().get();
+        const auto* root = runtime ? runtime->canvas.top() : nullptr;
+        return root && (root->getName() == "editorGui" || root->getName() == "EditorGui") && !app_.consoleVisible() &&
+               script::toBool(app_.console().getVariable("ME::MouseLook"));
+    }
+
+    bool editorKeyboardActive() const {
+        const auto* runtime = app_.guiRuntime().get();
+        const auto* root = runtime ? runtime->canvas.top() : nullptr;
+        return root && (root->getName() == "editorGui" || root->getName() == "EditorGui") && !app_.consoleVisible();
+    }
+
     void bindInput() {
         auto& cg = app_.fearPlugin().clientGlobals();
         (void)app_.bindGameplayActions();
@@ -741,7 +754,7 @@ protected:
                 if (auto* psc = app_.fearPlugin().clientGlobals().playerPSC) {
                     psc->resetInput();
                 }
-                actionInputCaptured_ = app_.gameplayKeyboardActive() ||
+                actionInputCaptured_ = app_.gameplayKeyboardActive() || editorKeyboardActive() ||
                                        (commanderInputActive() && !app_.consoleVisible());
                 if (gameInput_) {
                     gameInput_->capture(actionInputCaptured_);
@@ -773,6 +786,12 @@ protected:
         const bool commanding = commanderInputActive();
         if (const auto* key = std::get_if<platform::KeyEvent>(&ev.data);
             key && key->down && !key->repeat && key->key == SDLK_ESCAPE) {
+            const auto* runtime = app_.guiRuntime().get();
+            const auto* root = runtime ? runtime->canvas.top() : nullptr;
+            if (root && (root->getName() == "editorGui" || root->getName() == "EditorGui")) {
+                if (guiInput_) (void)guiInput_->process(ev);
+                return;
+            }
             if (cg.playerPSC) {
                 (void)app_.escapeGameplay();
                 actionInputCaptured_ = app_.gameplayKeyboardActive() || commanderInputActive();
@@ -793,8 +812,8 @@ protected:
         // PDA actions share the keyboard action map while the tactical screen
         // keeps an absolute mouse for selecting units and placing waypoints.
         const bool commandKey =
-            (commanding || app_.gameplayKeyboardActive()) && key && (!editing || !key->down);
-        if (gameInput_ && (playing || lifecycle || commandKey)) {
+            (commanding || editorKeyboardActive() || app_.gameplayKeyboardActive()) && key && (!editing || !key->down);
+        if (gameInput_ && (playing || editorMouseLook() || lifecycle || commandKey)) {
             (void)gameInput_->process(ev);
         }
         if (guiInput_ && (!playing || lifecycle)) {
@@ -829,9 +848,9 @@ protected:
         bindInput();
         bindGameplayAudio();
         auto& cg = app_.fearPlugin().clientGlobals();
-        const bool capture = app_.gameplayInputActive() && (foreground() || opts_.verifyInput);
+        const bool capture = (app_.gameplayInputActive() || editorMouseLook()) && (foreground() || opts_.verifyInput);
         const bool actionCapture =
-            (app_.gameplayKeyboardActive() || (commanderInputActive() && !app_.consoleVisible())) &&
+            (app_.gameplayKeyboardActive() || editorKeyboardActive() || (commanderInputActive() && !app_.consoleVisible())) &&
             (foreground() || opts_.verifyInput);
         if (actionCapture != actionInputCaptured_) {
             actionInputCaptured_ = actionCapture;

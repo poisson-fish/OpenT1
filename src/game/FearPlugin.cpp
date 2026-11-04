@@ -17,6 +17,7 @@
 #include <opent1/game/explosion.hpp>
 #include <opent1/game/f_base.hpp>
 #include <opent1/game/fear_mission_editor.hpp>
+#include <opent1/game/mission_editor_controls.hpp>
 #include <opent1/game/fear_player_psc.hpp>
 #include <opent1/game/fear_plugin.hpp>
 #include <opent1/game/flying_camera.hpp>
@@ -1074,6 +1075,11 @@ bool FearPlugin::createClientWorld() {
 }
 
 void FearPlugin::destroyServerWorld() {
+    if (console_) console_->setVariable("ME::Loaded", "False");
+    if (terrainEditor_) {
+        terrainEditor_->focused = false;
+        terrainEditor_->detach();
+    }
     localClientId_ = 0;
     pendingLocalKick_.reset();
     if (scriptPlugin_) {
@@ -1756,9 +1762,12 @@ void FearPlugin::installTerrainEditing(Console& console) {
     };
     terrainEditor_->terrainLoader =
         [this](std::string_view name) -> std::optional<world::TerrainDocument> {
-        auto* activeManager = game_.manager();
-        auto* terrain =
-            dynamic_cast<world::SimMissionTerrain*>(resolveSimObject(activeManager, name));
+        // The normal ted.cs attach has no name and runs with client focus.
+        auto* server = game_.world(sim::WorldType::Server);
+        auto* activeManager = server ? &server->manager() : game_.manager();
+        auto* terrain = dynamic_cast<world::SimMissionTerrain*>(
+            name.empty() ? (activeManager ? activeManager->findObject(sim::TerrainId) : nullptr)
+                         : resolveSimObject(activeManager, name));
         if (!terrain) {
             return std::nullopt;
         }
@@ -1782,6 +1791,27 @@ void FearPlugin::installTerrainEditing(Console& console) {
             activeManager == sg_.manager ? sim::WorldType::Server : sim::WorldType::Client;
         editedTerrainWorldRevision_ = game_.worldRevision(editedTerrainWorld_);
         editedTerrain_ = terrain->address();
+        // currFile names the enclosing terrain volume, not its .dtf entry.
+        // Keep writes under the configured write root, using the mission's
+        // relative directory instead of an installed asset's absolute path.
+        const auto source = resources_ ? resources_->getFullPath(document.gridName) : std::nullopt;
+        FileName mission(console_->getVariable("missionFile"));
+        auto filename = source ? source->filename()
+                               : std::filesystem::path(document.gridName).replace_extension(".ted");
+        terrainEditor_->attachedFile =
+            (FileName(mission.getPath()).toFilesystemPath() / filename).generic_string();
+        if (source) {
+            const auto assetRoot = console_->getVariable("OpenT1::AssetRoot");
+            if (!assetRoot.empty()) {
+                for (const auto& root : {std::filesystem::path(assetRoot), console_->filePath("")}) {
+                    const auto relative = source->lexically_relative(root);
+                    if (!relative.empty() && !relative.is_absolute() && *relative.begin() != "..") {
+                        terrainEditor_->attachedFile = relative.generic_string();
+                        break;
+                    }
+                }
+            }
+        }
         return document;
     };
     terrainEditor_->publisher([selected](const world::TerrainDocument& document) {
@@ -1860,6 +1890,7 @@ void FearPlugin::installTerrainEditing(Console& console) {
         return world::relightTerrainDetailed(document, *lighting, options);
     };
     world::installTerrainEditorCommands(console, terrainEditor_);
+    installTerrainEditorFocus(game_, terrainEditor_);
 }
 
 void FearPlugin::init(Console& console, sim::SimManager* manager) {
@@ -3203,6 +3234,7 @@ void FearGameApp::registerGameClassesAndFactories() {
     registerFlierClass(classes);
     registerExplosionClass(classes);
     registerFearGuiClasses(classes);
+    registerMissionEditorGuiClasses(classes);
     gui::registerViewportClass(classes);
 
     classes.registerClass<Sky>("Sky", TribesSkyPersTag);
@@ -3393,8 +3425,12 @@ void FearGameApp::registerGameClassesAndFactories() {
     game_.registerFactory("ObserverCamera", []() {
         return std::make_unique<ObserverCamera>();
     });
-    game_.registerFactory("EditCamera", []() {
-        return std::make_unique<EditCamera>();
+    game_.registerFactory("EditCamera", [this]() {
+        auto camera = std::make_unique<EditCamera>();
+        camera->loadActionMap = [this](std::string_view name) {
+            return inputMaps_.find(name);
+        };
+        return camera;
     });
     game_.registerFactory("AIManager", []() {
         return std::make_unique<AIManager>();
@@ -3922,6 +3958,10 @@ void FearGameApp::installRuntimeServices() {
     auto tags = std::shared_ptr<const TagDictionary>(&console.tags(), [](const TagDictionary*) {});
     auto bindings = gui::resourceBindings(resources_, tags);
     bindings.custom = [this](gui::Control& control) {
+        if (!bindMissionEditorGuiControl(control, game_, *resources_)) {
+            return false;
+        }
+        bindMissionEditorViewport(control, game_, fearPlugin_->terrainEditor());
         if (auto* button = dynamic_cast<FGUniversalButton*>(&control)) {
             button->playSound = [this](std::string_view name) {
                 if (playShellSound) {
@@ -4649,6 +4689,7 @@ void FearGameApp::installRuntimeServices() {
     console.removeCommand("cursorOn");
     console.removeCommand("cursorOff");
     guiRuntime_->install();
+    installMissionEditorGuiCommands(console, guiRuntime_, game_);
     installShellCommands();
     legacySound.install(console);
     // Track explicitly required exec failures without replacing script functions.

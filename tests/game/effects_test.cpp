@@ -4,6 +4,7 @@
 #include <opent1/game/explosion.hpp>
 #include <opent1/game/mine.hpp>
 #include <opent1/game/player.hpp>
+#include <opent1/game/proj_laser.hpp>
 #include <opent1/game/smoke_puff.hpp>
 #include <opent1/world/world_scene.hpp>
 #include <chrono>
@@ -156,6 +157,76 @@ void effects() {
     checkGeometry(frozen, {}); // captured resources survive puff expiry/reuse
 }
 
+class BeamProbe final : public LaserProjectile {
+public:
+    using LaserProjectile::LaserProjectile;
+
+    void setShooter(ShapeBase* shooter) {
+        m_pShooter_ = shooter;
+    }
+};
+
+void unarmedBeams() {
+    FearGameApp app;
+    CHECK(app.init() && app.fearPlugin().createClientWorld());
+    auto& globals = app.fearPlugin().clientGlobals();
+    auto& manager = *globals.manager;
+    auto& dbm = *globals.dbm;
+    CHECK(app.resources().add("beam-armor.dts", test::ts::load(test::ts::shape())));
+    CHECK(app.resources().add("beam.bmp", gfx::Bitmap::create(4, 4)));
+    auto* armor = dynamic_cast<PlayerData*>(
+        dbm.createDataBlock("BeamArmor", DataBlockManager::PlayerDataType));
+    auto* data =
+        dynamic_cast<LaserData*>(dbm.createDataBlock("SpellBeam", DataBlockManager::LaserDataType));
+    CHECK(armor && data);
+    armor->shape = app.resources().load<world::TsShape>("beam-armor.dts");
+    data->pBitmapName = "beam.bmp";
+    data->liveTime = 1.5f;
+    auto ownedPlayer = std::make_unique<Player>();
+    ownedPlayer->bindDataBlockManager(&dbm);
+    ownedPlayer->setDatFileName("BeamArmor");
+    CHECK(ownedPlayer->setNetFlags(sim::SimNetObject::IsGhost));
+    auto* player = ownedPlayer.get();
+    CHECK(manager.addObject(std::move(ownedPlayer)));
+    player->setPos({10, 20, 30});
+    player->setViewPitch(-.3f);
+    TMat3F muzzle;
+    CHECK(!player->getMuzzleTransform(0, &muzzle));
+
+    auto ownedBeam = std::make_unique<BeamProbe>(data->dbmIndex);
+    ownedBeam->bindDataBlockManager(&dbm);
+    CHECK(ownedBeam->setNetFlags(sim::SimNetObject::IsGhost));
+    ownedBeam->setShooter(player);
+    const Point3F impact{10, 40, 25};
+    ownedBeam->setBeamEndpoints({}, impact, true);
+    auto* beam = ownedBeam.get();
+    CHECK(manager.addObject(std::move(ownedBeam)));
+    CHECK((beam->startPoint() - player->getBoxCenter()).len() < .001f);
+    sim::EnvironmentCamera camera;
+    camera.viewport = {0, 0, 640, 480};
+    camera.focal = {320, 320};
+    camera.center = {320, 240};
+    camera.worldToCamera.p = {-8, -18, -31};
+    camera.worldToCamera.flags |= RMat3F::Matrix_HasTranslation;
+    world::WorldSurfaceQuery query;
+    query.camera = camera;
+    CHECK(beam->processQuery(query) && query.image && !query.image->mesh->triangles.empty());
+    CHECK(beam->endPoint() == impact); // remote shooters keep the replicated contact
+    player->setPlayerControl(true);
+    player->setPos({11, 20, 30});
+    beam->clientProcess(32);
+    CHECK((beam->startPoint() - player->getBoxCenter()).len() < .001f);
+    Point3F direction;
+    player->getEyeTransform().getRow(1, direction);
+    auto actual = beam->endPoint() - player->getEyeTransform().p;
+    actual.normalize();
+    CHECK((actual - direction).len() < .001f);
+    beam->clientProcess(1501);
+    query = {};
+    query.camera = camera;
+    CHECK(!beam->processQuery(query));
+}
+
 void installedEffects() {
     const auto* assets = std::getenv("OPENT1_TEST_ASSETS");
     if (!assets || !std::filesystem::exists(std::filesystem::path(assets) / "RPG/scripts.vol"))
@@ -241,6 +312,126 @@ void installedEffects() {
     CHECK(smoke->processQuery(puffs) && puffs.image && puffs.attachments.size() >= 1);
     checkGeometry(*puffs.image, *puffs.cameraPosition, app.defaultPalette().get());
     checkGeometry(puffs.attachments[0], *puffs.cameraPosition, app.defaultPalette().get());
+
+    CHECK(app.fearPlugin().focusServer());
+    player->setPos(player->getPos() + Point3F{0, 0, 2});
+    player->setRot({});
+    player->setViewPitch(-.8f);
+    player->setForceMask(0);
+    player->setLinearVelocity({});
+    (void)player->unmountItem(0);
+    CHECK(app.console()
+              .evaluate(R"(
+        $PlayerSkill[2049, $SkillOffensiveCasting] = 1000;
+        $PlayerSkill[2049, $SkillEnergy] = 1000;
+        setMANA(2049);
+        $SpellCast = BeginCastSpell(2049, "beam");
+    )")
+              .ok());
+    CHECK(script::toBool(app.console().getVariable("SpellCast")));
+    auto& server = *app.fearPlugin().serverGlobals().manager;
+    server.advanceToTime(server.getCurrentTime());
+    auto* projectiles = dynamic_cast<sim::SimSet*>(server.findObject(PlayerSetId));
+    CHECK(projectiles);
+    LaserProjectile* beam = nullptr;
+    for (auto* object : projectiles->objects())
+        if (auto* candidate = dynamic_cast<LaserProjectile*>(object))
+            beam = candidate;
+    CHECK(beam);
+    const auto beamId = beam->getId();
+    player->setLinearVelocity({}); // hold the camera still after the spell's recoil
+    for (unsigned tick = 47; tick <= 54; ++tick)
+        CHECK(app.stepFrame(tick * .032, false));
+    auto* beamGhost =
+        dynamic_cast<LaserProjectile*>(app.fearPlugin().findGhostForServerObject(beamId));
+    CHECK(beamGhost);
+    sim::EnvironmentCamera beamCamera;
+    beamCamera.viewport = {0, 0, 640, 480};
+    beamCamera.focal = {320, 320};
+    beamCamera.center = {320, 240};
+    beamCamera.worldToCamera = ghost->getEyeTransform();
+    beamCamera.worldToCamera.inverse();
+    world::WorldSurfaceQuery beamQuery;
+    beamQuery.camera = beamCamera;
+    CHECK(beamGhost->processQuery(beamQuery) && beamQuery.image);
+    CHECK((beamGhost->startPoint() - ghost->getEyeTransform().p).len() > .1f);
+    world::TsStaticView beamView;
+    beamView.shapeToCamera = beamCamera.worldToCamera;
+    const auto beamFrame = beamQuery.image->mesh->prepare(beamView);
+    CHECK(beamFrame && beamFrame->polygonCount() > 0);
+    auto beamPixels = gfx::SoftwareSurface::create(640, 480);
+    CHECK(beamPixels && beamPixels->setPalette(*app.defaultPalette()));
+    beamPixels->clear(0);
+    CHECK(beamFrame->draw(*beamPixels));
+    CHECK(std::ranges::any_of(beamPixels->pixels(), [](auto pixel) {
+        return pixel != std::byte{};
+    }));
+    const auto beamHardware = beamFrame->hardware(app.defaultPalette().get());
+    CHECK(beamHardware && !beamHardware->draws().empty());
+    const auto beamScene = world::WorldSceneFrame::captureContainers(
+        *app.fearPlugin().clientGlobals().world, beamCamera, {}, false);
+    CHECK(beamScene);
+    const auto beamBitmap = app.resources().load<gfx::Bitmap>("forcefield.bmp");
+    CHECK(std::ranges::any_of(beamScene->surfaces(), [&](const auto& surface) {
+        return !surface.mesh->materials.textures().empty() &&
+               surface.mesh->materials.textures()[0].get() == beamBitmap.get();
+    }));
+
+    CHECK(app.fearPlugin().focusServer());
+    auto& console = app.console();
+    unsigned tick = 55;
+    for (const auto& [keyword, explosionName] :
+         {std::pair{"fireball", "plasmaExp"}, std::pair{"icespike", "energyExp"}}) {
+        CHECK(app.fearPlugin().focusServer());
+        CHECK(console
+                  .evaluate(R"(
+            $SpellLOS = GameBase::getLOSInfo(Client::getOwnedObject(2049), 80);
+        )")
+                  .ok());
+        CHECK(script::toBool(console.getVariable("SpellLOS")));
+        CHECK(console.evaluate(std::format("$SpellCast = BeginCastSpell(2049, \"{}\");", keyword))
+                  .ok());
+        CHECK(script::toBool(console.getVariable("SpellCast")));
+        Int32 explosionId = -1;
+        CHECK(app.fearPlugin().serverGlobals().dbm->lookupDataBlock(
+            explosionName, DataBlockManager::ExplosionDataType, &explosionId));
+        bool spellEffect = false;
+        const unsigned end = tick + 64;
+        for (; tick < end; ++tick) {
+            CHECK(app.stepFrame(tick * .032, false));
+            if (spellEffect)
+                continue;
+            for (auto* effect : explosions(client)) {
+                if (effect->getDatFileId() != explosionId)
+                    continue;
+                spellEffect = true;
+                world::WorldShapeQuery shape;
+                shape.cameraPosition = effect->position() - Point3F{0, 8, 0};
+                CHECK(effect->processQuery(shape) && shape.image);
+                checkGeometry(*shape.image, *shape.cameraPosition, app.defaultPalette().get());
+                auto* render = dynamic_cast<sim::SimSet*>(client.findObject(sim::RenderSetId));
+                CHECK(render);
+                const auto scene = world::WorldSceneFrame::captureContainers(
+                    *app.fearPlugin().clientGlobals().world, beamCamera, {}, false);
+                CHECK(scene);
+                CHECK(render->removeObject(*effect));
+                const auto without = world::WorldSceneFrame::captureContainers(
+                    *app.fearPlugin().clientGlobals().world, beamCamera, {}, false);
+                CHECK(render->addObject(*effect));
+                CHECK(without && scene->shapes().size() == without->shapes().size() + 1);
+                auto before = gfx::SoftwareSurface::create(640, 480);
+                auto after = gfx::SoftwareSurface::create(640, 480);
+                CHECK(before && after && before->setPalette(*app.defaultPalette()) &&
+                      after->setPalette(*app.defaultPalette()));
+                before->clear(0);
+                after->clear(0);
+                CHECK(without->draw(*before) && scene->draw(*after));
+                CHECK(!std::ranges::equal(before->pixels(), after->pixels()));
+                break;
+            }
+        }
+        CHECK(spellEffect);
+    }
 }
 }
 
@@ -260,3 +451,15 @@ int opent1_test_effects_focused() {
 
 OPENT1_REGISTER_TEST("effects", "effects", opent1_test_effects_focused);
 OPENT1_REGISTER_TEST("effects", "installed_effects", opent1_test_installed_effects);
+
+int opent1_test_unarmed_beams() {
+    return opent1::test::run(unarmedBeams);
+}
+
+OPENT1_REGISTER_TEST("game", "unarmed_beams", opent1_test_unarmed_beams);
+
+int opent1_test_unarmed_beams_focused() {
+    return opent1::test::run(unarmedBeams);
+}
+
+OPENT1_REGISTER_TEST("effects", "unarmed_beams", opent1_test_unarmed_beams_focused);

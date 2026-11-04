@@ -70,6 +70,32 @@ Pixel counts establish visibility; they are not comparisons against vanilla
 framebuffer captures. The installed test exercises the shared effect function,
 not the spell's skill/mana checks or the entire remort progression.
 
+## Unarmed spell casting
+
+The follow-up regression uses `BeginCastSpell` for Beam, Fireball and Icespike
+on `rpgmap5`, with slot 0 unmounted. Fireball and Icespike create explosions at
+the line-of-sight target; the installed scripts do not launch moving projectiles
+for these spells. Both require a target within 80 units.
+
+Beam uses `sniperLaser`. Its client rendering required
+`Player::getAimedMuzzleTransform` to succeed, so an unarmed caster produced no
+beam geometry. The client also left the initial beam start at the world origin
+when it could not find a muzzle. The repair uses the animated `dummy hand` node
+for the visual origin and the eye ray for the local caster's contact query.
+Shapes without a hand node fall back to their box center. A remote caster keeps
+the replicated endpoint. This avoids an eye-origin ribbon collapsing to zero
+projected area in first person.
+
+The native `projLaser.cpp::readjustEnd` also assumes a mounted weapon, and
+`FearPlugin.cpp::c_getMuzzleTransform` leaves `total` uninitialized in its
+unarmed branch. The hand origin is an explicit fallback for that unsupported
+native edge case. Weapon-backed beams continue to use the aimed muzzle path.
+
+The asset-free `unarmed_beams` regression checks initial placement, remote
+contacts, local eye targeting, movement and expiry. The installed test exercises
+all three original cast functions, verifies first-person Beam pixels and hardware
+geometry, and compares scene pixels with and without each target-point explosion.
+
 ## Other confirmed parity gaps
 
 This audit does not establish complete parity for every visual effect:

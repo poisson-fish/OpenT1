@@ -53,6 +53,24 @@ UInt32 currentTimeMs(const sim::SimManager* mgr, UInt32 fallback = 0) noexcept {
     return static_cast<UInt32>(mgr->getCurrentTime() * 1000.0f);
 }
 
+Point3F unarmedBeamStart(const ShapeBase& shooter) {
+    if (const auto* player = dynamic_cast<const Player*>(&shooter)) {
+        if (const auto pose = player->animationPose()) {
+            const auto& shape = *pose->shape();
+            for (auto i : std::views::iota(std::size_t{0}, shape.nodes.size())) {
+                const auto name = shape.nodes[i].name;
+                if (name >= 0 && std::size_t(name) < shape.names.size() &&
+                    shape.names[name].starts_with("dummy hand")) {
+                    Point3F position;
+                    m_mul(pose->nodeTransforms()[i].p, shooter.getTransform(), position);
+                    return position;
+                }
+            }
+        }
+    }
+    return shooter.getBoxCenter();
+}
+
 class LaserHitShape final : public world::SimTsShape {
 public:
     bool visible{true};
@@ -155,6 +173,8 @@ bool LaserProjectile::onAdd() {
                 } else {
                     m_startPoint_ = muzzleTrans.p;
                 }
+            } else {
+                m_startPoint_ = unarmedBeamStart(*m_pShooter_);
             }
         }
         if (m_projectileData_ && m_projectileData_->lightRange != 0.0f) {
@@ -278,21 +298,24 @@ bool LaserProjectile::readjustEnd() {
     if (m_pLaserData_ && !m_pLaserData_->detachFromShooter && m_pShooter_) {
         if (auto* player = dynamic_cast<Player*>(m_pShooter_)) {
             TMat3F muzzle;
-            if (!player->getAimedMuzzleTransform(0, &muzzle)) {
-                return false;
+            const bool unarmed = !player->getAimedMuzzleTransform(0, &muzzle);
+            if (unarmed) {
+                // Scripted spells aim from the eye without a mounted item.
+                // Draw from the hand so the ribbon has area in first person.
+                muzzle = player->getEyeTransform();
             }
-            m_startPoint_ = muzzle.p;
+            m_startPoint_ = unarmed ? unarmedBeamStart(*player) : muzzle.p;
             if (player->hasPlayerControl() && getManager()) {
                 Point3F direction;
                 muzzle.getRow(1, direction);
                 direction.normalize();
-                m_endPoint_ = m_startPoint_ + direction * projectileBeamRange(getManager());
+                m_endPoint_ = muzzle.p + direction * projectileBeamRange(getManager());
                 sim::SimContainerQuery query;
                 query.id = player->getId();
                 query.type = ~UInt32{0};
                 query.mask = csm_collisionMask;
                 query.detail = -1;
-                query.box.fMin = m_startPoint_;
+                query.box.fMin = muzzle.p;
                 query.box.fMax = m_endPoint_;
                 sim::SimCollisionInfo collision;
                 auto* root = dynamic_cast<sim::SimContainer*>(

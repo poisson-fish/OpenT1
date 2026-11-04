@@ -447,6 +447,7 @@ std::optional<TsStaticShapeFrame> TsStaticShapeFrame::prepare(TsShapeResources r
     result.detail_ = detail;
     result.perspective_ = view.perspective;
     result.opacity_ = view.opacity;
+    result.translucentHaze_ = view.perspective && view.haze > .0001f ? view.haze : 0.f;
     result.texturePerspective_ = view.texturePerspective;
     if (view.automaticDetail && detail == -1) {
         result.resources_ = std::move(resources);
@@ -816,18 +817,21 @@ bool TsStaticShapeFrame::appendHardwarePolygons(std::vector<gfx::HardwarePolygon
             }
             material.shadeSource = p.shadeSource;
             material.shade = p.shade;
-            // Original OpenGL EmitPoly queues haze for every fill mode, including
-            // ordinary TS shapes. Flush it after the scene's translucent draws.
+            // Fog belongs to this fragment, including translucent foliage.
+            // A later overlay cannot use its depth because translucency does not write Z.
             if (std::ranges::any_of(p.vertices, [](const auto& v) {
                     return v.haze > 0;
                 })) {
                 material.hazeSource = gfx::PolygonSource::Vertex;
-                material.deferredHaze = true;
             }
             if (p.vertices[0].haze > 0 && p.vertices[0].haze == p.vertices[1].haze &&
                 p.vertices[0].haze == p.vertices[2].haze) {
                 material.hazeSource = gfx::PolygonSource::Constant;
                 material.haze = p.vertices[0].haze;
+            }
+            if ((source.flags & 0x2000U) && translucentHaze_ > 0) {
+                material.hazeSource = gfx::PolygonSource::Constant;
+                material.haze = translucentHaze_;
             }
             material.lightMap = p.lightMap.get();
             if (source.type() == 3) {
@@ -887,7 +891,9 @@ bool TsStaticShapeFrame::appendHardwarePolygons(std::vector<gfx::HardwarePolygon
                 auto& input = inputs.back();
                 input.mesh = p.retained->mesh;
                 input.transform = p.retained->transform;
-                input.transform.geometry[0] = p.vertices[0].haze;
+                input.transform.geometry[0] = material.hazeSource == gfx::PolygonSource::Constant
+                                                  ? material.haze
+                                                  : p.vertices[0].haze;
                 input.firstIndex = p.firstIndex;
                 input.indexCount = 3;
             }
@@ -1162,6 +1168,7 @@ const TsStaticShapeFrame* TsStaticShapeFrame::projected() const {
         result->detail_ = detail_;
         result->perspective_ = perspective_;
         result->opacity_ = opacity_;
+        result->translucentHaze_ = translucentHaze_;
         result->texturePerspective_ = texturePerspective_;
         std::vector<Vertex> vertices, scratch;
         vertices.reserve(10);

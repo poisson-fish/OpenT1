@@ -830,7 +830,6 @@ bool WorldSurfaceMesh::appendHardwareInterior(std::vector<gfx::HardwarePolygon>&
             material.paletteMode = gfx::HardwarePaletteMode::OpenGL;
             material.paletteGamma = gamma;
             material.hazeSource = gfx::PolygonSource::Vertex;
-            material.deferredHaze = terrainPatches->hazeDistance < terrainPatches->farDistance;
             gfx::HardwarePolygon polygon{placeholder,
                                          material,
                                          material.lightMap ? std::span<const Point2F>(lightUV)

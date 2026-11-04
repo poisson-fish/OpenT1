@@ -181,7 +181,7 @@ struct DrawState {
 };
 
 // Merge only consecutive triangle ranges, preserving primitive/blend order.
-// The caller flushes at every material/haze/layer boundary. Bindings survive
+// The caller flushes at every composed layer boundary. Bindings survive
 // pipeline changes, but this encoder must be recreated for each render pass.
 class DrawEncoder {
     SDL_GPUCommandBuffer* commands_;
@@ -1076,14 +1076,18 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
                      {bindings[draw.lightMap]->gpu, samplers_[3]},
                      {image->array ? image->gpu : whiteArray_, imageSampler}}};
                 const auto frame = vertexUniform(w, h, draw, batch);
-                FragmentUniform material{
-                    {draw.color.x, draw.color.y, draw.color.z, draw.opacity},
-                    {config.hazeColor.x, config.hazeColor.y, config.hazeColor.z, 0},
-                    {1, 1, draw.lodBias, Flt32(draw.alphaSource)},
-                    {draw.alphaCutoff,
-                     draw.transparent ? 1.f : 0.f,
-                     draw.deferredHaze ? 1.f : 0.f,
-                     0}};
+                // Fog the source before blending. Fully fogged effects must
+                // approach their blend's neutral color, without adding fog light.
+                auto fog = config.hazeColor;
+                if (draw.blend == HardwareBlend::Additive ||
+                    draw.blend == HardwareBlend::Subtractive)
+                    fog = {0, 0, 0};
+                else if (draw.blend == HardwareBlend::Multiply)
+                    fog = {1, 1, 1};
+                FragmentUniform material{{draw.color.x, draw.color.y, draw.color.z, draw.opacity},
+                                         {fog.x, fog.y, fog.z, 0},
+                                         {1, 1, draw.lodBias, Flt32(draw.alphaSource)},
+                                         {draw.alphaCutoff, draw.transparent ? 1.f : 0.f, 0, 0}};
                 if (draw.mesh)
                     material.clip = frame.clip;
                 if (!draw.mesh || batch.meshes()[draw.mesh - 1].transform.geometry[2] != 1) {
@@ -1103,40 +1107,6 @@ SDL_GPUTexture* GpuMaterialRenderer::render(const HardwareBatch& batch,
                              draw.vertexCount,
                              frame.frame[3] == 2 ? draw.mesh - 1 : 0);
             });
-            encoder.flush();
-            for (const auto& draw : layer) {
-                if (!draw.deferredHaze) {
-                    continue;
-                }
-                const auto depth = draw.depth == HardwareDepth::Disabled ? HardwareDepth::Disabled
-                                                                         : HardwareDepth::TestOnly;
-                // The overlay shader uses only interpolated haze. Canonical
-                // white bindings allow different base textures to share a run.
-                const std::array<SDL_GPUTextureSamplerBinding, 3> samplers{
-                    {{bindings[0]->gpu, samplers_[0]},
-                     {bindings[0]->gpu, samplers_[3]},
-                     {whiteArray_, samplers_[0]}}};
-                const auto frame = vertexUniform(w, h, draw, batch);
-                FragmentUniform material{
-                    {1, 1, 1, 1},
-                    {config.hazeColor.x, config.hazeColor.y, config.hazeColor.z, 0},
-                    {1, 0, 0, 0},
-                    {0, 0, 2, 0}};
-                if (draw.mesh)
-                    material.clip = frame.clip;
-                auto* mesh = draw.mesh ? meshBindings[draw.mesh - 1] : nullptr;
-                encoder.draw(
-                    {pipelines_[(draw.mesh ? 20U : 0U) + std::size_t(HardwareBlend::Alpha) * 4 +
-                                std::size_t(depth)],
-                     samplers,
-                     frame,
-                     material,
-                     mesh ? mesh->vertices : r.vertices,
-                     mesh ? mesh->indices : nullptr},
-                    draw.firstVertex,
-                    draw.vertexCount,
-                    frame.frame[3] == 2 ? draw.mesh - 1 : 0);
-            }
             encoder.flush();
             start = end;
         }

@@ -5,6 +5,7 @@
 #include <opent1/world/world_surfaces.hpp>
 #include <opent1/sim/sim_hardware_environment.hpp>
 #include <array>
+#include <cmath>
 #include <string_view>
 
 using namespace opent1;
@@ -635,7 +636,6 @@ void terrainSubmission(platform::SdlWindow& window) {
         polygon.indexCount = 18;
         polygon.material.texture = images[i].get();
         polygon.material.lightMap = &maps[i];
-        polygon.material.deferredHaze = true;
         auto& t = polygon.transform;
         t.camera = {
             {{1, 0, 0, Flt32(i % 4) * 2 - 4}, {0, 0, 0, 8}, {0, 1, 0, Flt32(i / 4) * 2 - 4}}};
@@ -668,12 +668,11 @@ void terrainSubmission(platform::SdlWindow& window) {
                 p.material.blend = gfx::HardwareBlend::Alpha;
                 p.material.depth = gfx::HardwareDepth::TestOnly;
                 p.material.opacity = .4f;
-                p.material.deferredHaze = false;
             }
         }
         if (mode == 3) {
             // Cutouts with overlapping, interleaved near/far patches exercise
-            // color/depth writes and the independent uncut haze overlay.
+            // discard before both fog color and depth writes.
             for (auto i : std::views::iota(std::size_t{0}, polygons.size())) {
                 auto& p = polygons[i];
                 p.transform.camera[1][3] = 5 + Flt32((i * 7) % 16) * .25f;
@@ -693,12 +692,8 @@ void terrainSubmission(platform::SdlWindow& window) {
         auto batch = gfx::HardwareBatch::prepare(polygons, &palette);
         CHECK(batch);
         if (mode == 2) {
-            // Composed layers retain separate base/haze passes even when their
+            // Composed layers retain their draw boundaries even when their
             // bindings and ranges would otherwise be compatible.
-            for (auto& p : polygons)
-                p.material.deferredHaze = true;
-            batch = gfx::HardwareBatch::prepare(polygons, &palette);
-            CHECK(batch);
             const std::array<const gfx::HardwareBatch*, 2> layers{&*batch, &*batch};
             batch = gfx::HardwareBatch::compose(layers);
             CHECK(batch);
@@ -709,10 +704,10 @@ void terrainSubmission(platform::SdlWindow& window) {
         for (auto i : std::views::iota(std::size_t{0}, a.size()))
             CHECK(std::abs(int(a[i]) - int(b[i])) <= 2);
         const auto stats = batched->submissionStats();
-        CHECK(stats.inputDraws == (mode == 1 ? 16U : mode == 2 ? 64U : 32U));
-        const std::array expectedDraws{2U, 1U, 4U, 2U, 32U};
-        const std::array expectedVertexPushes{1U, 1U, 2U, 1U, 32U};
-        const std::array expectedFragmentPushes{2U, 1U, 4U, 2U, 2U};
+        CHECK(stats.inputDraws == (mode == 2 ? 32U : 16U));
+        const std::array expectedDraws{1U, 1U, 2U, 1U, 16U};
+        const std::array expectedVertexPushes{1U, 1U, 2U, 1U, 16U};
+        const std::array expectedFragmentPushes{1U, 1U, 1U, 1U, 1U};
         CHECK(stats.draws == expectedDraws[mode]);
         CHECK(stats.fragmentUniformPushes == expectedFragmentPushes[mode]);
         CHECK(stats.vertexUniformPushes == expectedVertexPushes[mode]);
@@ -721,6 +716,206 @@ void terrainSubmission(platform::SdlWindow& window) {
         CHECK(batched->trimCaches() && batched->render(*batch, frame) && batched->readback(a));
         CHECK(a == b);
     }
+}
+
+void fogReadbacks(platform::SdlWindow& window) {
+    ResourceManager manager;
+    CHECK(world::registerTsLoaders(manager) && gfx::registerBitmapFontLoaders(manager));
+    auto leaf = gfx::Bitmap::create(2, 1);
+    auto terrain = gfx::Bitmap::create(1, 1);
+    CHECK(leaf && terrain);
+    leaf->pixels[0] = std::byte{0};
+    leaf->pixels[1] = std::byte{1};
+    terrain->pixels[0] = std::byte{2};
+    CHECK(manager.add("test.bmp", std::move(leaf)) &&
+          manager.add("fog-terrain.bmp", std::move(terrain)));
+    std::array<world::TsShapeResources, 2> leaves;
+    for (auto i : std::views::iota(std::size_t{0}, leaves.size())) {
+        auto shape = test::ts::load(test::ts::shape());
+        CHECK(shape);
+        for (auto& mesh : shape->meshes)
+            std::ranges::fill(mesh.textureVertices, Point2F{i ? .25f : .75f, .5f});
+        const auto name = i ? "leaf-hole.dts" : "leaf-solid.dts";
+        CHECK(manager.add(name, std::move(shape)));
+        const auto resources = world::TsShapeResources::load(manager, name);
+        CHECK(resources);
+        leaves[i] = *resources;
+    }
+    const std::array<Point2F, 8> ring{
+        {{0, 0}, {0, .5f}, {0, 1}, {.5f, 1}, {1, 1}, {1, .5f}, {1, 0}, {.5f, 0}}};
+    std::vector<gfx::HardwareVertex> vertices(8);
+    for (auto i : std::views::iota(std::size_t{0}, ring.size()))
+        vertices[i].position = ring[i];
+    world::WorldSurfaceMesh::TerrainPatch patch;
+    patch.extent = 16;
+    patch.topology = gfx::HardwareMesh::create(std::move(vertices), {0, 2, 4, 4, 6, 0});
+    CHECK(patch.topology);
+    world::WorldSurfaceMesh ground;
+    world::TsMaterialResources::Data materials;
+    materials.list.materials.resize(1);
+    materials.list.materials[0].flags = 0x103;
+    materials.list.materialsPerDetail = 1;
+    materials.textures = {manager.load<gfx::Bitmap>("fog-terrain.bmp")};
+    ground.materials = world::TsMaterialResources(std::move(materials));
+    world::TsStaticView terrainView;
+    terrainView.width = terrainView.height = 64;
+    terrainView.focal = terrainView.center = {32, 32};
+    terrainView.farDistance = 32;
+    // Face a flat native terrain patch toward the camera to cover the viewport.
+    terrainView.shapeToCamera.m = {{{1, 0, 0}, {0, 0, 1}, {0, -1, 0}}};
+    terrainView.shapeToCamera.p = {-8, 8, -8};
+    terrainView.shapeToCamera.flags = RMat3F::Matrix_HasRotation | RMat3F::Matrix_HasTranslation;
+    sim::EnvironmentCamera camera;
+    camera.viewport = {0, 0, 63, 63};
+    camera.center = camera.focal = {32, 32};
+    camera.nearDistance = .1f;
+    camera.farDistance = 32;
+    auto surface = gfx::SdlGpuSurface::create(window, 64, 64);
+    CHECK(surface);
+    gfx::GpuFrameConfig frame;
+    frame.hazeColor = {.2f, .3f, .4f};
+    frame.clearColor = {.1f, .15f, .2f};
+    std::array<gfx::PolygonVertex, 4> foreground{{{{0, 0}}, {{64, 0}}, {{64, 64}}, {{0, 64}}}};
+    for (auto& v : foreground)
+        v.inverseDepth = .5f;
+    gfx::HardwareMaterial foregroundMaterial;
+    foregroundMaterial.color = {0, 0, 1};
+
+    struct LeafCase {
+        UInt32 flags;
+        UInt8 alpha;
+        Flt32 haze;
+        bool hole{};
+    };
+
+    const std::array cases{LeafCase{0x2403, 255, 0},
+                           LeafCase{0x2403, 128, 0},
+                           LeafCase{0x2403, 0, 0, true},
+                           LeafCase{0x2403, 128, .5f},
+                           LeafCase{0x2403, 128, 1},
+                           LeafCase{0x1403, 255, .5f},
+                           LeafCase{0x1403, 255, .5f, true},
+                           LeafCase{0x403, 255, .5f}};
+    gfx::Palette palette;
+    palette.palettes[0].colors[0] = {0, 255, 0, 0};
+    palette.palettes[0].colors[2] = {255, 0, 0, 255};
+    for (bool retainedTerrain : {false, true})
+        for (bool retainedShape : {false, true})
+            for (Flt32 terrainHaze : {-1.f, 0.f, .5f, 1.f}) {
+                auto patches = std::make_shared<world::WorldSurfaceMesh::TerrainPatches>();
+                patches->farDistance = 32;
+                patches->hazeDistance = 8;
+                patches->triangles = 2;
+                for (auto& h : patch.heights)
+                    h = {0, 0, 0, 8 + 24 * std::max(terrainHaze, 0.f)};
+                patches->patches = {patch};
+                ground.terrainPatches = patches;
+                for (const auto& c : cases) {
+                    palette.palettes[0].colors[1] = {0, 255, 0, c.alpha};
+                    auto resources = leaves[c.hole ? 1 : 0];
+                    auto data = resources.materials.data();
+                    data.list.materials[0].flags = c.flags;
+                    resources.materials = world::TsMaterialResources(std::move(data));
+                    auto view = terrainView;
+                    view.shapeToCamera.identity();
+                    view.shapeToCamera.p.y = 4;
+                    view.haze = c.haze;
+                    const auto pose = world::TsShapePose::sample(resources.shape);
+                    CHECK(pose);
+                    const auto shapeFrame =
+                        world::TsStaticShapeFrame::prepare(resources, view, *pose, retainedShape);
+                    CHECK(shapeFrame);
+                    const auto shapePolygons = shapeFrame->hardwarePolygons(&palette);
+                    CHECK(shapePolygons && !shapePolygons->empty());
+                    auto polygons = *shapePolygons;
+                    // Submit cutouts before terrain: holes must discard both fog and Z.
+                    const auto terrainFrame = ground.prepare(terrainView);
+                    CHECK(terrainFrame);
+                    const auto terrainPolygons = retainedTerrain
+                                                     ? ground.hardwareInterior(terrainView, palette)
+                                                     : terrainFrame->hardwarePolygons(&palette);
+                    CHECK(terrainPolygons && !terrainPolygons->empty());
+                    if (terrainHaze >= 0)
+                        polygons.insert(
+                            polygons.end(), terrainPolygons->begin(), terrainPolygons->end());
+                    for (bool occluded : {false, true}) {
+                        auto scene = polygons;
+                        if (occluded)
+                            scene.push_back({foreground, foregroundMaterial});
+                        const auto batch =
+                            sim::prepareHardwareEnvironment(camera, {}, {}, palette, {}, scene);
+                        CHECK(batch && surface->render(*batch, frame));
+                        std::vector<std::byte> pixels(64 * 64 * 4);
+                        CHECK(surface->readback(pixels));
+                        const auto fog = frame.hazeColor;
+                        const auto background =
+                            terrainHaze < 0
+                                ? frame.clearColor
+                                : Point3F(1, 0, 0) * (1 - terrainHaze) + fog * terrainHaze;
+                        const auto source = Point3F(0, 1, 0) * (1 - c.haze) + fog * c.haze;
+                        const auto alpha =
+                            c.hole ? 0.f : (c.flags & 0x2000U ? c.alpha / 255.f : 1.f);
+                        const auto expected =
+                            occluded ? Point3F(0, 0, 1) : source * alpha + background * (1 - alpha);
+                        for (auto channel : std::views::iota(std::size_t{0}, std::size_t{3}))
+                            CHECK(std::abs(int(pixels[(33 * 64 + 32) * 4 + channel]) -
+                                           int(std::lround(expected[channel] * 255))) <= 2);
+                    }
+                }
+            }
+}
+
+void fogBlendReadbacks(platform::SdlWindow& window) {
+    auto surface = gfx::SdlGpuSurface::create(window, 16, 16);
+    CHECK(surface);
+    std::array<gfx::PolygonVertex, 4> quad{{{{0, 0}}, {{16, 0}}, {{16, 16}}, {{0, 16}}}};
+    gfx::GpuFrameConfig frame;
+    frame.clearColor = {.25f, .5f, .75f};
+    frame.hazeColor = {.7f, .2f, .1f};
+    for (const auto blend : {gfx::HardwareBlend::Opaque,
+                             gfx::HardwareBlend::Alpha,
+                             gfx::HardwareBlend::Additive,
+                             gfx::HardwareBlend::Subtractive,
+                             gfx::HardwareBlend::Multiply})
+        for (const Flt32 haze : {0.f, .5f, 1.f}) {
+            gfx::HardwareMaterial material;
+            material.color = {.2f, .4f, .6f};
+            material.opacity = .5f;
+            material.alphaSource = gfx::HardwareAlphaSource::Constant;
+            material.blend = blend;
+            material.hazeSource = gfx::PolygonSource::Constant;
+            material.haze = haze;
+            const gfx::HardwarePolygon polygon{quad, material};
+            const auto batch = gfx::HardwareBatch::prepare(std::span(&polygon, 1));
+            CHECK(batch && surface->render(*batch, frame));
+            std::vector<std::byte> pixels(16 * 16 * 4);
+            CHECK(surface->readback(pixels));
+            for (auto channel : std::views::iota(std::size_t{0}, std::size_t{3})) {
+                const auto background = frame.clearColor[channel];
+                const auto source = material.color[channel] * (1 - haze);
+                Flt32 expected{};
+                switch (blend) {
+                    case gfx::HardwareBlend::Opaque:
+                        expected = source + frame.hazeColor[channel] * haze;
+                        break;
+                    case gfx::HardwareBlend::Alpha:
+                        expected =
+                            (source + frame.hazeColor[channel] * haze) * .5f + background * .5f;
+                        break;
+                    case gfx::HardwareBlend::Additive:
+                        expected = background + source * .5f;
+                        break;
+                    case gfx::HardwareBlend::Subtractive:
+                        expected = background * (1 - source);
+                        break;
+                    case gfx::HardwareBlend::Multiply:
+                        expected = background * (source + haze);
+                        break;
+                }
+                CHECK(std::abs(int(pixels[(8 * 16 + 8) * 4 + channel]) -
+                               int(std::lround(std::clamp(expected, 0.f, 1.f) * 255))) <= 2);
+            }
+        }
 }
 
 void shadowReadbacks(platform::SdlWindow& window) {
@@ -911,6 +1106,8 @@ int runGpuCache(bool requireGpu) {
         arrayReadbacks(window);
         terrainReadbacks(window);
         terrainSubmission(window);
+        fogReadbacks(window);
+        fogBlendReadbacks(window);
         shadowReadbacks(window);
         shapeReadbacks(window);
     });

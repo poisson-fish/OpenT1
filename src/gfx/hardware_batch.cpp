@@ -695,7 +695,6 @@ std::optional<HardwareBatch> HardwareBatch::prepare(std::span<const HardwarePoly
                               m.alphaSource,
                               m.alphaCutoff,
                               m.transparent,
-                              m.deferredHaze,
                               m.magnificationLinear.value_or(m.linear)};
             if (p.mesh) {
                 if (p.transform.geometry[2] == 1) {

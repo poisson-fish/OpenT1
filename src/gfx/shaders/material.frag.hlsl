@@ -26,8 +26,7 @@ cbuffer Material : register(b0, space3) {
     float4 tint; // RGB, opacity
     float4 hazeColor;
     float4 options; // inverse gamma, enable discard, mip LOD bias, alpha source
-    float4
-        alphaControls; // alpha cutoff, zero-alpha texture cutout, haze pass (0=inline,1=deferred base,2=overlay), unused
+    float4 alphaControls; // alpha cutoff, zero-alpha texture cutout, unused, unused
     float4 geometryClip; // near, far, local geometry, unused
     float4 lightRect; // page UV scale/offset; (1,1,0,0) for standalone maps
     float4 arrayControls; // layer, enabled, unused, unused
@@ -48,8 +47,6 @@ float4 main(float4 position : SV_Position,
         discard;
     if (sphereDistance > 1)
         discard;
-    if (alphaControls.z == 2)
-        return float4(hazeColor.rgb, saturate(haze));
     float4 rect = instanceImageArray.z != 0 ? instanceLightRect : lightRect;
     float2 array = instanceImageArray.z != 0 ? instanceImageArray.xy : arrayControls.xy;
     float4 texel = array.y != 0
@@ -65,6 +62,6 @@ float4 main(float4 position : SV_Position,
         discard;
     float3 rgb = lerp(texel.rgb * light * color * tint.rgb,
                       hazeColor.rgb,
-                      alphaControls.z == 1 ? 0 : saturate(haze));
+                      saturate(haze));
     return float4(pow(saturate(rgb), options.xxx), alpha);
 }

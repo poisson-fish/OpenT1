@@ -170,10 +170,9 @@ prepareHardwareEnvironment(const EnvironmentCamera& camera,
                     }
                     material.hazeSource = gfx::PolygonSource::Vertex;
                     material.blend = gfx::HardwareBlend::Alpha;
-                    // SimVolumetric::BoxRenderDmlImage retains ZTEST_AND_WRITE;
-                    // original OpenGL queues vertex haze until the scene flush.
+                    // Preserve the volume's authored depth writes. Fog is applied
+                    // to its source color before blending, like other materials.
                     material.depth = gfx::HardwareDepth::TestAndWrite;
-                    material.deferredHaze = true;
                 } else {
                     const auto& color = palette.find().colors[index];
                     material.color = {color.red / 255.f, color.green / 255.f, color.blue / 255.f};

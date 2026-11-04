@@ -184,6 +184,7 @@ private:
     Int32 detail_{};
     bool perspective_{true};
     Flt32 opacity_{1};
+    Flt32 translucentHaze_{}; // hardware source fog; software keeps native translucent palettes
     bool texturePerspective_{true};
     std::optional<TsShapePose> retainedPose_;
     std::optional<TsStaticView> retainedView_;

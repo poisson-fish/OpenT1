@@ -131,6 +131,12 @@ and scale. Animated silhouettes project onto terrain and interior surfaces using
 the mission sun, with a downward fallback when no suitable sun is available.
 Up to 32 nearby shadows are rendered per frame.
 
+Hardware fog is applied to each material before transparency blending. Terrain
+fog therefore stays behind foreground tree leaves, while cutout holes preserve
+the background's color and depth. Translucent shapes receive their own haze;
+fully fogged additive, subtractive and multiply effects fade to their blend's
+neutral color. The indexed software renderer retains its native palette rules.
+
 ## Network and console services
 
 Game sessions use UDP, with optional native IPX routing when the Windows OS

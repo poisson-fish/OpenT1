@@ -1,5 +1,7 @@
 // Expectations are derived from legacy/program/code, not an original binary.
 // Synthetic checks run in CTest; an asset root adds an installed hunt trace.
+// --mayor observes normal map5 spawning; optional 'patrol' loads its installed
+// patrol script into this isolated server without editing the installation.
 #include <opent1/game/ai.hpp>
 #include <opent1/game/game_app.hpp>
 #include <opent1/game/proj_target_laser.hpp>
@@ -10,6 +12,7 @@
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -101,7 +104,149 @@ struct Fixture {
         const auto value = app.console().getVariable("Acquired");
         return value.empty() ? 0 : std::stod(value);
     }
+
+    void walkingFloor() {
+        auto& g = app.fearPlugin().serverGlobals();
+        auto* armor = dynamic_cast<PlayerData*>(
+            g.dbm->lookupDataBlock("AuditArmor", DataBlockManager::PlayerDataType));
+        require(armor != nullptr, "walking armor");
+        armor->maxForwardSpeed = 7;
+        armor->maxBackwardSpeed = 5.6f;
+        armor->maxSideSpeed = 5.25f;
+        armor->groundForce = 675;
+        armor->groundTraction = 3;
+        const std::array<Flt32, 4> heights{};
+        const std::array<world::TerrainCollisionCell, 1> cells{};
+        auto floor = world::TerrainCollision::prepare(1, 1, 256.f, heights, cells);
+        require(floor.has_value(), "waypoint floor");
+        require(g.manager->addObject(std::make_unique<world::SimWorldCollider>(
+                    world::SimTerrainCollisionImage(
+                        std::make_shared<const world::TerrainCollision>(std::move(*floor))),
+                    TMat3F(EulerF{}, Point3F{-100, -100, 100}))) != nullptr,
+                "waypoint floor collider");
+        bot->player()->setPos({0, 0, 100});
+        bot->player()->setForceMask(~UInt32{0});
+        bot->player()->addForce(sim::MovementGravityForce, {0, 0, -20});
+    }
 };
+
+void waypointSynthetic() {
+    // Exercise physical travel in every quadrant, including unequal armor axis
+    // speeds, rather than asserting only the generated input direction.
+    const std::array<Point3F, 8> destinations{{{0, 20, 100},
+                                               {20, 20, 100},
+                                               {20, 0, 100},
+                                               {20, -20, 100},
+                                               {0, -20, 100},
+                                               {-20, -20, 100},
+                                               {-20, 0, 100},
+                                               {-20, 20, 100}}};
+    for (std::size_t i = 0; i < destinations.size(); ++i) {
+        Fixture f;
+        f.walkingFloor();
+        const auto goal = destinations[i];
+        f.eval(std::format(
+            "AI::directiveWaypoint(Auditor, \"{} {} {}\", 99);", goal.x, goal.y, goal.z));
+        Flt32 nearest = 100, corridor = 0;
+        const auto length = std::hypot(goal.x, goal.y);
+        for (int tick = 0; tick < 250; ++tick) {
+            f.advance(1);
+            const auto p = f.bot->player()->getPos();
+            nearest = std::min(nearest, std::hypot(p.x - goal.x, p.y - goal.y));
+            corridor = std::max(corridor, std::abs(p.x * goal.y - p.y * goal.x) / length);
+        }
+        compare(std::format("waypoint_bearing{}_arrives", i), nearest < 1.2f, 1);
+        compare(std::format("waypoint_bearing{}_corridor", i), corridor < 2.f, 1);
+    }
+    for (int type = 0; type < 3; ++type) {
+        Fixture f;
+        f.bot->setPathType(type);
+        f.eval(R"(
+            AI::directiveWaypoint(Auditor, "0 20 100", 100);
+            AI::directiveWaypoint(Auditor, "20 20 100", 200);
+            AI::directiveWaypoint(Auditor, "20 0 100", 300);
+        )");
+        f.advance(1);
+        compare(std::format("path{}_first", type), f.bot->curDest().y, 20);
+        f.bot->player()->setPos({0, 20, 100});
+        f.advance(1);
+        compare(std::format("path{}_second", type), f.bot->curDest().x, 20);
+        f.bot->player()->setPos({20, 20, 100});
+        f.advance(1);
+        compare(std::format("path{}_third", type), f.bot->curDest().y, 0);
+        f.bot->player()->setPos({20, 0, 100});
+        f.advance(1);
+        if (type == AIObj::OneWay) {
+            const auto& move = f.bot->lastGeneratedMove();
+            compare("one_way_stops",
+                    move.forwardAction + move.backwardAction + move.leftAction + move.rightAction,
+                    0);
+        } else {
+            compare(std::format("path{}_endpoint_next_x", type),
+                    f.bot->curDest().x,
+                    type == AIObj::TwoWay ? 20 : 0);
+            compare(std::format("path{}_endpoint_next_y", type), f.bot->curDest().y, 20);
+        }
+    }
+    {
+        Fixture f;
+        f.eval("AI::directiveWaypoint(Auditor, \"0 20 100\", 99);");
+        f.advance(2);
+        f.eval(
+            "AI::directiveRemove(Auditor, 99); AI::directiveWaypoint(Auditor, \"20 0 100\", 99);");
+        f.advance(1);
+        compare("replace_active_order99_destination", f.bot->curDest().x, 20);
+        f.bot->player()->setPos({20, 0, 100});
+        f.advance(1);
+        f.eval(
+            "AI::directiveRemove(Auditor, 99); AI::directiveWaypoint(Auditor, \"0 -20 100\", 99);");
+        f.advance(1);
+        compare("replace_completed_order99_destination", f.bot->curDest().y, -20);
+    }
+    {
+        Fixture f;
+        f.eval("AI::spawn(AliasBot, AuditArmor, \"0 0 100\", \"0 0 0\", PublicAlias);");
+        auto* alias = f.app.fearPlugin().serverGlobals().aiManager->findAI("AliasBot");
+        require(alias != nullptr, "alias bot");
+        f.eval("AI::directiveWaypoint(PublicAlias, \"20 20 100\", 99);");
+        compare("display_name_waypoint_matches", double(alias->directives().size()), 1);
+        f.eval("AI::setVar(\"Public*\", attackMode, 2);");
+        compare("display_name_wildcard_variable_matches", alias->attackMode(), 2);
+        std::vector<AIObj*> matches;
+        f.app.fearPlugin().serverGlobals().aiManager->buildExpressionList(matches, "*");
+        compare("display_and_internal_match_once", double(matches.size()), 2);
+    }
+    {
+        Fixture f;
+        f.targetDirective(100);
+        f.advance(10);
+        f.bot->attackPlayer(99999);
+        f.advance(1);
+        compare("legacy_attack_suppresses_stale_directive_target", f.bot->attackedTargetId(), -1);
+        compare("legacy_attack_clears_directive_selection", f.bot->currentTarget().id, -1);
+    }
+    {
+        Fixture f;
+        f.eval("AI::directiveTargetPoint(Auditor, \"0 20 100\", 100);");
+        f.advance(3);
+        f.bot->attackPlayer(99999);
+        f.advance(1);
+        compare("legacy_attack_suppresses_point_target", f.bot->lastGeneratedMove().trigger, 0);
+    }
+    {
+        Fixture f;
+        f.eval(R"(
+            function AI::onTargetLOSAcquired(%name, %target) { AI::Attack(%name, 99999); }
+        )");
+        f.targetDirective(100);
+        f.advance(5);
+        compare("callback_attack_preserves_current_setup_selection",
+                f.bot->currentTarget().id,
+                f.targetId);
+        f.advance(1);
+        compare("callback_attack_suppresses_next_setup_selection", f.bot->currentTarget().id, -1);
+    }
+}
 
 void synthetic() {
     {
@@ -265,7 +410,8 @@ void synthetic() {
         f.eval(std::format("AI::directiveFollow(Auditor, {}, 0, 99);", f.targetId));
         f.targetDirective(100);
         f.advance(10);
-        compare("attack_mode0_follows_route", f.bot->lastGeneratedMove().forwardAction, 1, .000001);
+        // Native aiming dope can add a small turn to the movement compensation.
+        compare("attack_mode0_follows_route", f.bot->lastGeneratedMove().forwardAction, 1, .001);
         f.bot->setAttackMode(2);
         f.advance(1);
         const auto still = f.bot->lastGeneratedMove();
@@ -275,8 +421,9 @@ void synthetic() {
         f.bot->setAttackMode(1);
         f.target->setPos({0, 10, 100});
         f.advance(1);
-        compare(
-            "attack_mode1_keeps_17_units", f.bot->lastGeneratedMove().backwardAction, 1, .000001);
+        // Aiming dope can add a small turn. Do not depend on shared RNG state
+        // to produce an exactly axial retreat.
+        compare("attack_mode1_keeps_17_units", f.bot->lastGeneratedMove().backwardAction, 1, .001);
     }
     {
         Fixture f;
@@ -419,6 +566,113 @@ void synthetic() {
     }
 }
 
+void mayorTrace(const std::filesystem::path& assets, int ticks, bool loadPatrol) {
+    FearGameApp::Config config;
+    config.assetRoot = assets;
+    config.writeRoot = std::filesystem::temp_directory_path() /
+                       std::format("opent1-mayor-audit-{}",
+                                   std::chrono::steady_clock::now().time_since_epoch().count());
+
+    struct Cleanup {
+        std::filesystem::path path;
+
+        ~Cleanup() {
+            std::error_code error;
+            std::filesystem::remove_all(path, error);
+        }
+    } cleanup{config.writeRoot};
+
+    FearGameApp app(config);
+    const std::array<std::string_view, 2> args{"-mod", "RPG"};
+    require(app.init(args), "mayor init");
+    app.console().setVariable("PCFG::Name", "MayorAudit");
+    app.console().setVariable("PCFG::Script", "");
+    app.console().setVariable("PCFG::Info", "mayor-audit-password");
+    require(app.loadMission("rpgmap5"), "mayor map");
+    for (int tick = 0; tick < 8; ++tick)
+        require(app.stepFrame(tick * .032, false), "mayor initial frame");
+    require(app.fearPlugin().focusServer(), "mayor server focus");
+    const auto localId = Int32(app.fearPlugin().clientGlobals().manager->getId());
+    require(app.console()
+                .evaluate(std::format("processMenupickgroup({0}, 3); processMenupickclass({0}, 1);",
+                                      localId))
+                .ok(),
+            "mayor observer character");
+    auto& g = app.fearPlugin().serverGlobals();
+    auto* observer = dynamic_cast<Player*>(g.playerManager->findClient(localId)->ownedObject);
+    require(observer != nullptr, "mayor observer");
+    observer->setPos({-2340, -280, 65});
+    std::printf("MAYOR trace started bots=%zu mayorFunction=%d running=%s\n",
+                g.aiManager->aiList().size(),
+                int(app.console().isFunction("Taurik::Mayor")),
+                app.console().getVariable("TaurikMayorRunning").c_str());
+    if (loadPatrol)
+        require(app.console().evaluate("exec(Taurik_Mayor);").ok(), "load installed mayor patrol");
+    Int32 mayorId = -1;
+    Flt32 furthest = 0, lowest = std::numeric_limits<Flt32>::max();
+    for (int tick = 0; tick <= ticks; ++tick) {
+        require(app.stepFrame((tick + 8) * .032, false), "mayor frame");
+        if (tick % 256 == 0)
+            std::printf("MAYOR progress tick=%d time=%u bots=%zu\n",
+                        tick,
+                        g.currentTime,
+                        g.aiManager->aiList().size());
+        for (const auto& ai : g.aiManager->aiList()) {
+            if (ai->name.find("Mayor") != std::string::npos ||
+                ai->name.find("mayor") != std::string::npos) {
+                mayorId = ai->id;
+                if (ai->player()) {
+                    const auto p = ai->player()->getPos();
+                    furthest = std::max(furthest, std::hypot(p.x + 2343.f, p.y + 308.f));
+                    lowest = std::min(lowest, p.z);
+                }
+                if (tick % 32 == 0 && ai->player()) {
+                    const auto p = ai->player()->getPos();
+                    const auto d = ai->curDest();
+                    const auto v = ai->player()->getLinearVelocity();
+                    const auto scriptDestination =
+                        app.console()
+                            .evaluate(std::format("return fetchData({}, tmpbotdata);", ai->id))
+                            .value;
+                    const auto scriptMode =
+                        app.console()
+                            .evaluate(std::format("return fetchData({}, botAttackMode);", ai->id))
+                            .value;
+                    std::printf("MAYOR tick=%d name=%s id=%d pos=(%.3f,%.3f,%.3f) "
+                                "dest=(%.3f,%.3f,%.3f) vel=(%.3f,%.3f,%.3f) "
+                                "yaw=%.3f contact=%d waypoints=%zu attackMode=%d botMode=%s "
+                                "step=%s tmp=%s\n",
+                                tick,
+                                ai->name.c_str(),
+                                ai->id,
+                                p.x,
+                                p.y,
+                                p.z,
+                                d.x,
+                                d.y,
+                                d.z,
+                                v.x,
+                                v.y,
+                                v.z,
+                                ai->player()->getRot().z,
+                                int(ai->player()->didContact()),
+                                ai->listDirectives(AIObj::WaypointDirective).size(),
+                                ai->attackMode(),
+                                scriptMode.c_str(),
+                                app.console().getVariable("Mayor_PathStep").c_str(),
+                                scriptDestination.c_str());
+                }
+            }
+        }
+    }
+    require(mayorId >= 0, "No Mayor spawned");
+    std::printf("MAYOR result patrolLoaded=%d running=%s furthest=%.3f lowestZ=%.3f\n",
+                int(app.console().isFunction("Taurik::Mayor")),
+                app.console().getVariable("TaurikMayorRunning").c_str(),
+                furthest,
+                lowest);
+}
+
 void installed(const std::filesystem::path& assets, int ticks) {
     FearGameApp::Config config;
     config.assetRoot = assets;
@@ -443,6 +697,9 @@ void installed(const std::filesystem::path& assets, int ticks) {
     console.setVariable("PCFG::Script", "");
     console.setVariable("PCFG::Info", "audit-local-password");
     require(app.loadMission("rpgmap1"), "rpgmap1");
+    // The installed Wasteland cage has map5-only bounds. Drain its scheduled
+    // pass before spawning a player in this map1 crypt hunt fixture.
+    console.setVariable("Server::bPlayerCageEnabled", "false");
     for (int tick = 0; tick < 8; ++tick)
         require(app.stepFrame(tick * .032), "initial frame");
     require(app.fearPlugin().focusServer(), "server focus");
@@ -578,6 +835,16 @@ void installed(const std::filesystem::path& assets, int ticks) {
 int main(int argc, char** argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     try {
+        if (argc >= 3 && std::string_view(argv[1]) == "--mayor") {
+            if (argc > 5 || (argc == 5 && std::string_view(argv[4]) != "patrol"))
+                throw std::runtime_error(
+                    "Usage: opent1_ai_behavior_audit --mayor assets [ticks [patrol]]");
+            mayorTrace(argv[2],
+                       argc >= 4 ? std::stoi(argv[3]) : 4000,
+                       argc >= 5 && std::string_view(argv[4]) == "patrol");
+            return 0;
+        }
+        waypointSynthetic();
         synthetic();
         if (argc == 2 || argc == 3)
             installed(argv[1], argc == 3 ? std::stoi(argv[2]) : 1250);

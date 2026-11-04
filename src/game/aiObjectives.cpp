@@ -534,7 +534,7 @@ void AIObj::findTargets() {
     }
 }
 
-void AIObj::updateDirectives(SimTime dt, PlayerMove& pm) {
+void AIObj::updateDirectives(SimTime dt, PlayerMove& pm, bool directiveTargetsEnabled) {
     if (!player_)
         return;
     const Point3F myPos = player_->getLeadCenter();
@@ -690,7 +690,7 @@ void AIObj::updateDirectives(SimTime dt, PlayerMove& pm) {
     Int32 laserOwner = -1;
     Flt32 bestDistance = std::numeric_limits<Flt32>::max();
     for (const auto& directive : directives_) {
-        if (!(directive.orderMask & TargetDirective)) {
+        if (!directiveTargetsEnabled || !(directive.orderMask & TargetDirective)) {
             continue;
         }
         if (directive.targetMode == PlayerTarget) {
@@ -855,6 +855,10 @@ void AIObj::doServerProcesses(SimTime curTime) {
                            : 0.032f;
     lastProcessTime_ = curTime;
 
+    // Native setup clears currentTarget and only selects directives when its
+    // legacy seek flag is unset. Capture that decision before synchronous
+    // callbacks can change the flag during this setup pass.
+    const bool directiveTargetsEnabled = player_ && !player_->isDead() && !seekFlag_;
     if (player_ && player_->isDead()) {
         seekFlag_ = 0;
         currentTarget_ = {};
@@ -868,7 +872,7 @@ void AIObj::doServerProcesses(SimTime curTime) {
         return;
     PlayerMove pm{};
     pm.reset();
-    updateDirectives(dt, pm);
+    updateDirectives(dt, pm, directiveTargetsEnabled);
     lastMove_ = pm;
 
     if (player_) {

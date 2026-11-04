@@ -158,6 +158,7 @@ bool AIManager::spawn(Console& console,
     player->setName(shown, &console);
     auto ai = std::make_unique<AIObj>(this);
     ai->name = aiName;
+    ai->matchDisplayName_ = !equalIgnoreCase(player->getName(), aiName);
     ai->voice = voice;
     ai->spawnBodyOnTick = false;
     ai->setPlayer(player);
@@ -277,7 +278,9 @@ AIObj* AIManager::findByPlayer(const Player* player) const noexcept {
 void AIManager::buildExpressionList(std::vector<AIObj*>& outList, std::string_view expr) const {
     outList.clear();
     for (const auto& ai : aiList_) {
-        if (AIObj::wildCardMatch(ai->name, expr)) {
+        if (AIObj::wildCardMatch(ai->name, expr) ||
+            (ai->matchDisplayName_ && ai->player() &&
+             AIObj::wildCardMatch(ai->player()->getName(), expr))) {
             outList.push_back(ai.get());
         }
     }

@@ -392,7 +392,7 @@ public:
     void findTargets();
     void refreshAutomaticTargets();
     void preProcess();
-    void updateDirectives(SimTime dt, PlayerMove& pm);
+    void updateDirectives(SimTime dt, PlayerMove& pm, bool directiveTargetsEnabled = true);
     void doServerProcesses(SimTime curTime);
 
     static bool wildCardMatch(std::string_view key, std::string_view pattern) noexcept;
@@ -404,6 +404,7 @@ private:
     State state_{State::NeedToThink};
     Int32 thinkCounter_{}, seekFlag_{}, currentTargetId_{-1};
     bool wasDead_{};
+    bool matchDisplayName_{};
     Point3F targetDope(const Point3F& target, Flt32 width, Flt32 height) noexcept;
     void aimAt(PlayerMove& move, const Point3F& target, Flt32 threshold);
     Directive* findDirectiveIdentity(UInt64 identity) noexcept;

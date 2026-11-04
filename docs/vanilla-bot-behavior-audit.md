@@ -1,5 +1,9 @@
 # Vanilla bot behavior audit and corrections
 
+The [2026-11-04 waypoint and Mayor re-audit](ai-waypoint-parity-audit.md) adds
+physical route coverage, display-name command matching, legacy attack isolation,
+and findings specific to the Wasteland installation.
+
 Baseline audited 2026-11-03 against OpenT1 `ac33a9e` and
 `../TribesRE/legacy/tribes-rebirth`. Corrections implement the native contracts
 below without changing installed scripts or assets. The earlier

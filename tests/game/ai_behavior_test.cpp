@@ -173,7 +173,8 @@ void acquisitionAndFollow() {
 
 void installedRpgHunt() {
     const auto* assets = std::getenv("OPENT1_TEST_ASSETS");
-    if (!assets || !std::filesystem::exists(std::filesystem::path(assets) / "RPG/scripts.vol"))
+    // RPG can ship loose scripts (as Wasteland does), without scripts.vol.
+    if (!assets || !std::filesystem::exists(std::filesystem::path(assets) / "RPG"))
         return;
     FearGameApp::Config config;
     config.assetRoot = assets;
@@ -198,6 +199,10 @@ void installedRpgHunt() {
     console.setVariable("PCFG::Script", "");
     console.setVariable("PCFG::Info", "hunt-test-password");
     CHECK(app.loadMission("rpgmap1"));
+    // Wasteland's PlayerCage uses map5 bounds even on map1 and would wrap this
+    // crypt fixture's player to x=-5118. Stop that unrelated wrapping loop
+    // before creating the character; retain the original bot/combat scripts.
+    console.setVariable("Server::bPlayerCageEnabled", "false");
     for (int tick = 0; tick < 8; ++tick)
         CHECK(app.stepFrame(tick * .032));
     CHECK(app.fearPlugin().focusServer());

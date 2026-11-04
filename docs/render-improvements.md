@@ -734,6 +734,18 @@ pixels in all 12 views on Windows D3D12 and Vulkan. Matching `rpgmap5` captures
 from the Wasteland installation also fill a previously uncovered terrain pixel.
 All 14 Release CTest checks pass.
 
+This coverage fix does not remove bright texels authored into the terrain artwork.
+A follow-up `rpgmap5` capture at 1600x1200 identifies such a speck in `lnnnn.bmp`,
+source coordinate (82,72): index 248 in subpalette 506 is RGB (255,253,254).
+After lighting, the corresponding screen pixel is RGB (143,141,141) in the
+retained path and (143,141,140) in the projected compatibility path. Both the
+bitmap in `lushDML.vol` and the palette in `lushWorld.vol` match the original
+Tribes installation; the complete respective archive SHA-256 values match too.
+Terrain-only sweeps through 360 moving/rotating views at both 800x600 and
+1600x1200 find no isolated uncovered pixels after the seam fix. The reproduced
+texture speck remains visible with solid terrain coverage, so eliminating it
+would require changing the artwork or its filtering rather than seam projection.
+
 ## Reproduction
 
 ```powershell

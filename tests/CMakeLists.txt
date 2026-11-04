@@ -32,6 +32,7 @@ add_executable(
     gui/routing_test.cpp
     gui/editor_test.cpp
     game/player_test.cpp
+    game/player_collision_test.cpp
     game/weapons_test.cpp
     game/network_parity_test.cpp
     game/mission_editor_test.cpp

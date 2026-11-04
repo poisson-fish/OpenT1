@@ -1105,7 +1105,10 @@ protected:
         return true;
     }
 
-    void onExit(Int32 /*exitCode*/) override {
+    void onExit(Int32 exitCode) override {
+        if (exitCode != 0 && !error().empty()) {
+            std::cerr << "Application failed: " << error() << '\n';
+        }
         if ((opts_.verifyInput && !inputVerified_) ||
             (opts_.smoke &&
              (framesRun_ == 0u || app_.renderedFrames() == 0u || firstFrameNonZeroPixels_ == 0u))) {

@@ -157,7 +157,13 @@ bool PlayerCollisionImage::collide(const SimCollisionImage& image,
             CollisionSurface surface{};
             surface.position = sphere.center;
             surface.normal = sphere.center - center2;
-            surface.normal.normalize();
+            // Spawned players can share a center. Use the sphere collision
+            // fallback when the separation is too small to normalize reliably.
+            if (dist < .001f) {
+                surface.normal.set(0.0f, 0.0f, 1.0f);
+            } else {
+                surface.normal.normalize();
+            }
             surface.distance = dist;
             surface.material = 0;
             surface.part = 0;

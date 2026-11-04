@@ -44,6 +44,7 @@ add_executable(
     game/compatibility_test.cpp
     game/shell_controls_test.cpp
     game/model_rendering_test.cpp
+    game/sky_test.cpp
     game/weather_test.cpp
     game/disconnect_test.cpp
     video/video_test.cpp

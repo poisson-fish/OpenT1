@@ -37,11 +37,12 @@ Sky::Sky(std::string_view in_dmlName) : Sky() {
 Sky::~Sky() = default;
 
 void Sky::setDmlName(std::string_view name) {
-    const std::size_t n = std::min<std::size_t>(name.size(), 15);
-    if (dmlName_ != name.substr(0, n)) {
+    // Only the legacy binary file field is limited to 15 characters; mission
+    // scripts and ghost updates carry full material-list resource names.
+    if (dmlName_ != name) {
         materials_.reset();
     }
-    dmlName_.assign(name.data(), n);
+    dmlName_.assign(name);
     setMaskBits(Modified);
 }
 

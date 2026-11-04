@@ -381,7 +381,10 @@ bool Grenade::advanceGrenade(UInt32 currTime, bool collisions) {
             query.id = (!m_projectileData_->collideWithOwner || m_ownerGraceMS_ > 0)
                            ? getOwnerId()
                            : static_cast<sim::SimObjectId>(-1);
-            query.box = Box3F{getLinearPosition(), target.p};
+            // These are directed ray endpoints. Box3F's two-point constructor
+            // sorts each axis and would change descending or backward paths.
+            query.box.fMin = getLinearPosition();
+            query.box.fMax = target.p;
             if (!collisions || !root ||
                 !root->findLOS(query, collision, sim::SimCollisionImageQuery::High) ||
                 collision.surfaces.surfaces.empty()) {

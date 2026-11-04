@@ -25,12 +25,13 @@ public:
     bool processArguments(std::span<const std::string> args) override;
     bool initResources(GameBaseData* in_data) override;
     bool onAdd() override;
+    void onCollisionNotify(GameBase* object) override;
     bool processEvent(const sim::SimEvent& event) override;
 
     void serverProcess(UInt32 curTime) override;
     void clientProcess(UInt32 curTime) override;
 
-    void onDamageStateChange(Int32 oldState);
+    void onDamageStateChange(Int32 oldState) override;
     void sinkIn(Flt32 interval);
     [[nodiscard]] Int32 getDamageId() const noexcept;
 

@@ -4,8 +4,10 @@
 #include <opent1/game/explosion.hpp>
 #include <opent1/game/mine.hpp>
 #include <opent1/game/player.hpp>
+#include <opent1/game/proj_grenade.hpp>
 #include <opent1/game/proj_laser.hpp>
 #include <opent1/game/smoke_puff.hpp>
+#include <opent1/world/world_collision_sim.hpp>
 #include <opent1/world/world_scene.hpp>
 #include <chrono>
 #include <cstdlib>
@@ -157,6 +159,209 @@ void effects() {
     checkGeometry(frozen, {}); // captured resources survive puff expiry/reuse
 }
 
+void mineLifecycle() {
+    FearGameApp app;
+    CHECK(app.init() && app.fearPlugin().createServerWorld({}, true));
+    auto& globals = app.fearPlugin().serverGlobals();
+    auto& manager = *globals.manager;
+    auto& console = app.console();
+    CHECK(app.resources().add("lifecycle.dts", test::ts::load(test::ts::shape())));
+    auto* data = dynamic_cast<MineData*>(
+        globals.dbm->createDataBlock("LifecycleBomb", DataBlockManager::MineDataType));
+    CHECK(data);
+    data->shape = app.resources().load<world::TsShape>("lifecycle.dts");
+    data->maxDamage = 1;
+    data->explosionRadius = 10;
+    data->damageValue = .5f;
+    CHECK(console
+              .evaluate(R"(
+        $MineContacts = 0;
+        $MineDamageEvents = 0;
+        $MineDestroyed = 0;
+        function LifecycleBomb::onCollision(%this, %object) { $MineContacts++; }
+        function LifecycleBomb::onDestroyed(%this) { $MineDestroyed++; }
+        PlayerData LifecycleArmor { maxDamage = 1; };
+        function LifecycleArmor::onDamage(%this, %type, %value) {
+            $MineDamageEvents++;
+            $MineBlastDamage = %value;
+            $DamageAfterDestroyed = $MineDestroyed;
+        }
+        newObject(LifecycleTarget, Player, LifecycleArmor);
+        GameBase::setPosition(LifecycleTarget, "0 3 0");
+    )")
+              .ok());
+
+    auto owned = std::make_unique<Mine>();
+    owned->bindDataBlockManager(globals.dbm);
+    owned->setDatFileName("LifecycleBomb");
+    auto* bomb = owned.get();
+    CHECK(manager.addObject(std::move(owned)));
+    const auto id = bomb->getId();
+    sim::SimCollisionImageQuery collision;
+    CHECK(bomb->processQuery(collision) && !collision.images.empty());
+    GameBase liveContact, destroyedContact;
+    liveContact.setType(SimPlayerObjectType);
+    destroyedContact.setType(SimPlayerObjectType);
+    manager.advanceToTime(.125f);
+    bomb->onCollisionNotify(&liveContact);
+    CHECK(console.getVariable("MineContacts") == "1");
+    manager.advanceToTime(.25f);
+    bomb->setDamageLevel(data->maxDamage);
+    CHECK(bomb->getState() == StaticBase::Destroyed);
+    CHECK(console.getVariable("MineDestroyed") == "1");
+    CHECK(console.getVariable("MineDamageEvents") == "1");
+    CHECK(std::stof(console.getVariable("MineBlastDamage")) > 0);
+    CHECK(console.getVariable("DamageAfterDestroyed") == "1");
+    collision = {};
+    CHECK(!bomb->processQuery(collision) && collision.images.empty());
+    bomb->setDamageLevel(data->maxDamage);
+    bomb->serverProcess(250);
+    CHECK(console.getVariable("MineDamageEvents") == "1");
+    // Use a new contact so the collision throttle cannot hide a pickup callback.
+    bomb->onCollisionNotify(&destroyedContact);
+    CHECK(console.getVariable("MineContacts") == "1");
+    CHECK(bomb->isCollideable());
+    manager.advanceToTime(.749f);
+    CHECK(manager.findObject(id) == bomb); // allow the destroyed state to replicate
+    manager.advanceToTime(.75f);
+    CHECK(!manager.findObject(id));
+}
+
+class GrenadeProbe final : public Grenade {
+public:
+    using Grenade::Grenade;
+    unsigned blasts{};
+
+protected:
+    void applyRadiusDamage(const Point3F& position) override {
+        ++blasts;
+        Grenade::applyRadiusDamage(position);
+    }
+};
+
+void grenadeLifecycle() {
+    for (const int direction : {-1, 1, 0}) {
+        const bool timeout = direction == 0;
+        FearGameApp app;
+        CHECK(app.init() && app.fearPlugin().createClientWorld() &&
+              app.fearPlugin().createServerWorld({}, true));
+        auto& globals = app.fearPlugin().serverGlobals();
+        auto& server = *globals.manager;
+        auto& client = *app.fearPlugin().clientGlobals().manager;
+        CHECK(app.resources().add("grenade-lifecycle.dts", test::ts::load(test::ts::shape())));
+        auto* effect = dynamic_cast<ExplosionData*>(
+            globals.dbm->createDataBlock("GrenadeBlast", DataBlockManager::ExplosionDataType));
+        auto* data = dynamic_cast<GrenadeData*>(
+            globals.dbm->createDataBlock("LifecycleShell", DataBlockManager::GrenadeDataType));
+        CHECK(effect && data);
+        effect->shape = app.resources().load<world::TsShape>("grenade-lifecycle.dts");
+        data->bulletShapeName = "grenade-lifecycle.dts";
+        data->explosionTag = effect->dbmIndex;
+        data->explosionRadius = 10;
+        data->elasticity = .45f;
+        data->liveTime = 1;
+        data->totalTime = 2;
+        data->pSmokeName.clear();
+
+        const std::array<PlaneF, 1> planes{{{0, 0, 1, 0}}};
+        const std::array<world::InteriorCollisionNode, 1> nodes{{{0, -1, -2}}};
+        const std::array<world::InteriorCollisionLeaf, 2> leaves{{{false, {}}, {true, {0}}}};
+        const std::array<world::InteriorCollisionSurface, 1> surfaces{{
+            {0, true, 0, {{-100, -100, 0}, {-100, 100, 0}, {100, 100, 0}, {100, -100, 0}}},
+        }};
+        auto floor = world::InteriorCollision::prepare(planes, nodes, leaves, surfaces);
+        CHECK(floor);
+        const std::array<sim::SimCollisionMaterial, 1> materials{{{0, .5f, 3}}};
+        for (auto* manager : {&server, &client})
+            CHECK(manager->addObject(std::make_unique<world::SimWorldCollider>(
+                world::SimInteriorCollisionImage(
+                    std::make_shared<const world::InteriorCollision>(*floor), materials),
+                Box3F{{-100, -100, -1}, {100, 100, 0}})));
+
+        auto owned = std::make_unique<GrenadeProbe>(data->dbmIndex);
+        owned->bindDataBlockManager(globals.dbm);
+        owned->initProjectile(TMat3F(EulerF{}, {0, 0, timeout ? 1000.f : 1.1f}), {}, 0);
+        auto* shell = owned.get();
+        CHECK(server.addObject(std::move(owned)));
+        const auto id = shell->getId();
+        shell->setForceMask(timeout ? sim::MovementGravityForce : 0);
+        CHECK(shell->addForce(sim::MovementGravityForce, {0, 0, -20}, true));
+        shell->setLinearVelocity(timeout ? Point3F{} : Point3F{4.f * direction, 0, -10});
+        auto ghostOwned = std::make_unique<Grenade>(data->dbmIndex);
+        ghostOwned->bindDataBlockManager(globals.dbm);
+        CHECK(ghostOwned->setNetFlags(ghostOwned->netFlags() | sim::SimNetObject::IsGhost));
+        auto* ghost = ghostOwned.get();
+        CHECK(client.addObject(std::move(ghostOwned)));
+        sim::network::GhostManager gm;
+        const auto replicate = [&](UInt32 mask) {
+            std::array<std::byte, 1024> bytes{};
+            BitStream writer{std::span<std::byte>{bytes}};
+            shell->packUpdate(gm, mask, writer);
+            CHECK(writer.isValid());
+            BitStream reader{std::span<const std::byte>{bytes}};
+            CHECK(ghost->unpackUpdate(gm, reader));
+        };
+        replicate(Projectile::InitialUpdate);
+        ghost->setForceMask(timeout ? sim::MovementGravityForce : 0);
+        CHECK(ghost->addForce(sim::MovementGravityForce, {0, 0, -20}, true));
+        UInt32 now = 0;
+        const auto process = [&](UInt32 time) {
+            server.advanceToTime(static_cast<float>(time) * .001f);
+            shell->serverProcess(time);
+        };
+        bool bounceChecked = false;
+        for (now = 32; now <= 1024; now += 32) {
+            process(now);
+            ghost->clientProcess(now);
+            CHECK(!shell->hasExploded() && shell->blasts == 0);
+            CHECK(!ghost->hasExploded());
+            if (!timeout && shell->hasBounced() && !bounceChecked) {
+                CHECK(std::abs(shell->getLinearVelocity().x - .9f * direction) < .001f);
+                CHECK(std::abs(shell->getLinearVelocity().z - 2.2545f) < .001f);
+                CHECK(shell->lastSurfaceType() == 3);
+                bounceChecked = true;
+            }
+        }
+        if (timeout) {
+            CHECK(shell->getLinearPosition().z < 995); // gravity acts throughout the airborne fuse
+            process(2000);
+            CHECK(!shell->hasExploded());
+            now = 2001;
+        } else {
+            CHECK(bounceChecked);
+            CHECK(shell->setPosition(TMat3F(EulerF{}, {0, 0, 1.1f}), true));
+            shell->setLinearVelocity({0, 0, -10});
+            CHECK(ghost->setPosition(shell->getTransform(), true));
+            ghost->setLinearVelocity(shell->getLinearVelocity());
+            now = 1200;
+        }
+        process(now);
+        CHECK(shell->hasExploded() && shell->isWaitingForDelete() && shell->blasts == 1);
+        auto* smoke = SmokeManager::get(&client);
+        CHECK(smoke);
+        smoke->addPuff("grenade-lifecycle.dts", 1, shell->getLinearPosition(), {});
+        smoke->addPuff(
+            "grenade-lifecycle.dts", 1, shell->getLinearPosition() + Point3F{100, 0, 0}, {});
+        CHECK(smoke->activePuffCount() == 2);
+        ghost->clientProcess(now);
+        CHECK(ghost->hasExploded() ==
+              !timeout); // contacts predict; airborne timeout is authoritative
+        replicate(Projectile::FPExplosionMask | Projectile::FPPositionMask |
+                  Projectile::FPVelocityMask);
+        CHECK(ghost->hasExploded() && explosions(client).size() == 1);
+        CHECK((explosions(client).front()->position() - shell->getLinearPosition()).len() < .001f);
+        CHECK(smoke->activePuffCount() == 1);
+        replicate(Projectile::FPExplosionMask | Projectile::FPPositionMask);
+        CHECK(explosions(client).size() == 1);
+        world::WorldShapeQuery query;
+        CHECK(!ghost->processQuery(query));
+        process(now + 499);
+        CHECK(server.findObject(id) == shell && shell->blasts == 1);
+        process(now + 500);
+        CHECK(!server.findObject(id));
+    }
+}
+
 class BeamProbe final : public LaserProjectile {
 public:
     using LaserProjectile::LaserProjectile;
@@ -268,6 +473,14 @@ void installedEffects() {
         CreateAndDetBomb(2049, "Bomb7", "10010 10000 10000", False, 19);
     )")
               .ok());
+    auto& server = *app.fearPlugin().serverGlobals().manager;
+    auto* projectiles = dynamic_cast<sim::SimSet*>(server.findObject(PlayerSetId));
+    CHECK(projectiles);
+    std::vector<sim::SimObjectId> initialBombs;
+    for (auto* object : projectiles->objects())
+        if (auto* bomb = dynamic_cast<Mine*>(object); bomb && bomb->getPos().x > 9990)
+            initialBombs.push_back(bomb->getId());
+    CHECK(initialBombs.size() == 2);
     auto& client = *app.fearPlugin().clientGlobals().manager;
     std::vector<Int32> seen;
     for (unsigned tick = 8; tick < 40; ++tick) {
@@ -285,6 +498,10 @@ void installedEffects() {
         }
     }
     CHECK(seen.size() == 2);
+    for (const auto id : initialBombs) {
+        CHECK(!server.findObject(id));
+        CHECK(!app.fearPlugin().findGhostForServerObject(id));
+    }
     CHECK(app.fearPlugin().focusServer());
     CHECK(app.console().evaluate("Player::mountItem(2049, OrbOfLuminance0, 2);").ok());
     CHECK(app.stepFrame(40 * .032, false));
@@ -329,10 +546,7 @@ void installedEffects() {
     )")
               .ok());
     CHECK(script::toBool(app.console().getVariable("SpellCast")));
-    auto& server = *app.fearPlugin().serverGlobals().manager;
     server.advanceToTime(server.getCurrentTime());
-    auto* projectiles = dynamic_cast<sim::SimSet*>(server.findObject(PlayerSetId));
-    CHECK(projectiles);
     LaserProjectile* beam = nullptr;
     for (auto* object : projectiles->objects())
         if (auto* candidate = dynamic_cast<LaserProjectile*>(object))
@@ -432,6 +646,78 @@ void installedEffects() {
         }
         CHECK(spellEffect);
     }
+
+    CHECK(app.fearPlugin().focusServer());
+    CHECK(console
+              .evaluate(R"(
+        $HellstormCast = DoCastSpell(2049, 18, GameBase::getPosition(2049),
+                                    "10000 10000 10000", 0, "");
+    )")
+              .ok());
+    CHECK(script::toBool(console.getVariable("HellstormCast")));
+    std::vector<sim::SimAddress> hellstormBombs, hellstormGhosts;
+    unsigned destroyed = 0;
+    bool hellstormEffect = false;
+    const auto end = tick + 100;
+    for (; tick < end; ++tick) {
+        CHECK(app.stepFrame(tick * .032, false));
+        for (auto* object : projectiles->objects()) {
+            auto* bomb = dynamic_cast<Mine*>(object);
+            if (!bomb || bomb->getPos().x < 9990)
+                continue;
+            const auto address = bomb->address();
+            if (std::ranges::none_of(hellstormBombs, [&](const auto& seenBomb) {
+                    return seenBomb.objectId == address.objectId &&
+                           seenBomb.generation == address.generation;
+                })) {
+                // Deleted object IDs are reused during this multi-stage spell.
+                hellstormBombs.push_back(address);
+            }
+            if (auto* bombGhost = app.fearPlugin().findGhostForServerObject(bomb->getId()))
+                hellstormGhosts.push_back(bombGhost->address());
+            if (bomb->getState() == StaticBase::Destroyed)
+                ++destroyed;
+        }
+        for (auto* effect : explosions(client))
+            if (effect->position().x > 9990)
+                hellstormEffect = true;
+    }
+    CHECK(hellstormBombs.size() == 26); // 25 falling plasma effects and one final blast
+    CHECK(destroyed > 0 && hellstormEffect);
+    for (const auto& address : hellstormBombs)
+        CHECK(!address.resolve(server));
+    CHECK(!hellstormGhosts.empty());
+    for (const auto& address : hellstormGhosts)
+        CHECK(!address.resolve(client));
+
+    CHECK(app.fearPlugin().focusServer());
+    CHECK(console
+              .evaluate(R"(
+        newObject(EffectHandGrenade, Mine, Handgrenade);
+        GameBase::throw(EffectHandGrenade, Client::getOwnedObject(2049), 9, False);
+        GameBase::setPosition(EffectHandGrenade, "10000 10000 10000");
+    )")
+              .ok());
+    auto* hand = dynamic_cast<Mine*>(server.findObject("EffectHandGrenade"));
+    CHECK(hand && hand->throwSource() == player && hand->getLinearVelocity().len() > 0);
+    const auto handAddress = hand->address();
+    const auto handExplosion = hand->mineData()->explosionId;
+    const auto handSpawnTime = server.getCurrentTime();
+    bool handDestroyed = false, handEffect = false;
+    const auto handEnd = tick + 96;
+    for (; tick < handEnd; ++tick) {
+        CHECK(app.stepFrame(tick * .032, false));
+        hand = dynamic_cast<Mine*>(handAddress.resolve(server));
+        if (server.getCurrentTime() < handSpawnTime + 1.99f)
+            CHECK(hand && hand->getState() != StaticBase::Destroyed);
+        if (hand && hand->getState() == StaticBase::Destroyed)
+            handDestroyed = true;
+        for (auto* explosion : explosions(client))
+            if (explosion->getDatFileId() == handExplosion && explosion->position().x > 9900)
+                handEffect = true;
+    }
+    CHECK(handDestroyed && handEffect && !handAddress.resolve(server));
+    CHECK(!app.fearPlugin().findGhostForServerObject(handAddress.objectId));
 }
 }
 
@@ -451,6 +737,30 @@ int opent1_test_effects_focused() {
 
 OPENT1_REGISTER_TEST("effects", "effects", opent1_test_effects_focused);
 OPENT1_REGISTER_TEST("effects", "installed_effects", opent1_test_installed_effects);
+
+int opent1_test_mine_lifecycle() {
+    return opent1::test::run(mineLifecycle);
+}
+
+OPENT1_REGISTER_TEST("game", "mine_lifecycle", opent1_test_mine_lifecycle);
+
+int opent1_test_mine_lifecycle_focused() {
+    return opent1::test::run(mineLifecycle);
+}
+
+OPENT1_REGISTER_TEST("effects", "mine_lifecycle", opent1_test_mine_lifecycle_focused);
+
+int opent1_test_grenade_lifecycle() {
+    return opent1::test::run(grenadeLifecycle);
+}
+
+OPENT1_REGISTER_TEST("game", "grenade_lifecycle", opent1_test_grenade_lifecycle);
+
+int opent1_test_grenade_lifecycle_focused() {
+    return opent1::test::run(grenadeLifecycle);
+}
+
+OPENT1_REGISTER_TEST("effects", "grenade_lifecycle", opent1_test_grenade_lifecycle_focused);
 
 int opent1_test_unarmed_beams() {
     return opent1::test::run(unarmedBeams);

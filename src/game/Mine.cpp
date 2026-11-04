@@ -19,6 +19,8 @@ constexpr UInt32 ClientCollisionMask = SimTerrainObjectType | SimInteriorObjectT
 
 Mine::Mine() {
     setType(MineObjectType);
+    setCollideable(true);
+    deleteOnDestroy_ = true;
     setForceMask(static_cast<UInt32>(-1));
     setMovementFlags((movementFlags() | UseElasticity | UseFriction | UseDrag | UseCurrent) &
                      ~RotateBoundingBox);
@@ -51,13 +53,15 @@ bool Mine::onAdd() {
     return true;
 }
 
+void Mine::onCollisionNotify(GameBase* object) {
+    if (!isGhost() && getState() != Destroyed) {
+        Parent::onCollisionNotify(object);
+    }
+}
+
 void Mine::serverProcess(UInt32 curTime) {
     const Flt32 timeInterval = static_cast<Flt32>(curTime - getLastProcessTime()) * 0.001f;
-    const Int32 prevState = getState();
     Parent::serverProcess(curTime);
-    if (getState() != prevState) {
-        onDamageStateChange(prevState);
-    }
 
     if (isAtRest()) {
         sinkIn(timeInterval);
@@ -104,7 +108,8 @@ void Mine::sinkIn(Flt32 interval) {
     }
 }
 
-void Mine::onDamageStateChange(Int32 /*oldState*/) {
+void Mine::onDamageStateChange(Int32 oldState) {
+    Parent::onDamageStateChange(oldState);
     if (getState() == Destroyed && !isGhost() && mineData_) {
         Explosion::applyRadiusDamage(getManager(),
                                      mineData_->damageType,

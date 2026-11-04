@@ -232,6 +232,17 @@ void StaticBase::setState(Int32 ns, bool force) {
                 }
             } else {
                 damageLevel_ = staticData_ ? staticData_->maxDamage : 1.0f;
+                const auto deleteField = getFieldValue("deleteOnDestroy");
+                const bool deleteOnDestroy =
+                    deleteField ? script::toBool(*deleteField) : deleteOnDestroy_;
+                if (deleteOnDestroy && getManager() && prevState != Destroyed) {
+                    // Native StaticBase keeps the destroyed object for 0.5s so
+                    // ghosts can receive the transition before it is removed.
+                    auto event = std::make_unique<sim::SimMessageEvent>();
+                    event->time = getManager()->getCurrentTime() + .5f;
+                    event->message = 1;
+                    postEvent(std::move(event));
+                }
             }
             break;
         }
@@ -241,6 +252,12 @@ void StaticBase::setState(Int32 ns, bool force) {
     setMaskBits(DamageMask);
     updateAmbientSound();
     if (!isGhost() && !force) {
+        onDamageStateChange(prevState);
+    }
+}
+
+void StaticBase::onDamageStateChange(Int32 /*oldState*/) {
+    if (!isGhost()) {
         if (auto* con = resolveConsole()) {
             const std::string_view scriptEv =
                 (state_ == Enabled)
@@ -475,7 +492,8 @@ void StaticBase::enableCollision() {
 }
 
 std::shared_ptr<sim::SimCollisionImage> StaticBase::getSelfImage() {
-    if (disableCollisionCount_ > 0 || !collisionImage_ || collisionImage_->collisionDetail == -1) {
+    if (disableCollisionCount_ > 0 || (state_ == Destroyed && !damageThreadIndex_) ||
+        !collisionImage_ || collisionImage_->collisionDetail == -1) {
         return nullptr;
     }
     collisionImage_->transform = getTransform();
@@ -483,7 +501,8 @@ std::shared_ptr<sim::SimCollisionImage> StaticBase::getSelfImage() {
 }
 
 bool StaticBase::onSimCollisionImageQuery(sim::SimCollisionImageQuery& query) const {
-    if (disableCollisionCount_ == 0 && collisionImage_ && collisionImage_->collisionDetail != -1) {
+    if (disableCollisionCount_ == 0 && (state_ != Destroyed || damageThreadIndex_) &&
+        collisionImage_ && collisionImage_->collisionDetail != -1) {
         collisionImage_->transform = getTransform();
         query.images.push_back(collisionImage_);
         if (outerCollisionImage_ && query.detail != sim::SimCollisionImageQuery::Editor) {
@@ -506,6 +525,10 @@ bool StaticBase::onSimEditEvent(const sim::SimEditEvent& event) {
 }
 
 bool StaticBase::processEvent(const sim::SimEvent& event) {
+    if (dynamic_cast<const sim::SimMessageEvent*>(&event)) {
+        deleteObject();
+        return true;
+    }
     if (const auto* editEv = dynamic_cast<const sim::SimEditEvent*>(&event)) {
         return onSimEditEvent(*editEv);
     }

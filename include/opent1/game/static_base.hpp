@@ -122,6 +122,7 @@ public:
     write(StreamIO& sio, Int32 version, Int32 user, Persistent::StoreContext& ctx) const override;
 
 protected:
+    virtual void onDamageStateChange(Int32 oldState);
     void updateAmbientSound();
     void stopAmbientSound();
     std::shared_ptr<sim::SimCollisionImage> getSelfImage() override;
@@ -131,6 +132,7 @@ protected:
     StaticBaseData* staticData_{nullptr};
     Int32 state_{None};
     bool active_{false};
+    bool deleteOnDestroy_{false};
     bool isTarget_{false};
     bool hasUnpackedInitial_{false};
     Int32 scoreValue_{0};

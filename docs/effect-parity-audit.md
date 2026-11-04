@@ -35,6 +35,61 @@ CreateAndDetBomb -> newObject("", "Mine", datablock)
 The repairs use existing datablocks, geometry, animations, materials and network
 state. They do not introduce a new effect type or wire format.
 
+### Hellstorm mine cleanup (November 4, 2026)
+
+The restored mine construction exposed two further lifecycle omissions. Hellstorm
+(spell 18) schedules 25 `Bomb9` mines and one `Bomb1`. Their datablocks use
+`className = "Handgrenade"` and `description = "Handgrenade"`. The objects
+survived destruction and still dispatched collision callbacks, falling back to
+`Item::onCollision`. The RPG pickup script passed their unset `%this.delta` to
+`Item::giveItem`, producing `You received  Handgrenade.` with an empty quantity.
+
+Vanilla `Mine::onCollisionNotify` suppresses callbacks after destruction. Its
+constructor also enables solid collision and `deleteOnDestroy`; vanilla
+`StaticBase::setState` posts a deletion message 0.5 seconds after destruction,
+allowing clients to receive the explosion state first. OpenT1 now restores these
+mine defaults, the collision guard, and the delayed deletion event. StaticBase
+also honors an explicit `deleteOnDestroy` object field.
+
+The asset-free `mine_lifecycle` regression reproduced the destroyed collision
+callback before the repair and checks live contacts, suppression after
+destruction, and deletion at the half-second boundary. The installed effects
+test runs the original Hellstorm `DoCastSpell` branch, observes all 26 mines and
+their explosions, and verifies that every mine and client ghost is removed.
+
+### Grenade behavior audit (November 4, 2026)
+
+Hand grenades use `Mine` with the `Handgrenade` datablock and a scripted
+two-second `Mine::Detonate` fuse. Launcher grenades use the separate `Grenade`
+projectile class. The comparison found and repaired two additional divergences:
+
+- **Mine blast damage:** OpenT1 polled for state changes inside
+  `Mine::serverProcess`, missing destruction caused by `Mine::Detonate` between
+  ticks. Restored vanilla's virtual `StaticBase::onDamageStateChange` dispatch,
+  including the parent script callback before mine radius damage. A destroyed
+  object without a visibility/hulk sequence also stops supplying collision
+  images, matching vanilla and preventing the spent mine from blocking its own
+  blast coverage rays.
+- **Launcher collision rays:** `Grenade::advanceGrenade` constructed a `Box3F`
+  from its ray endpoints. That constructor sorts each coordinate, changing the
+  ray for descending and backward movement. Assign the start and end separately,
+  as vanilla `Grenade::losStep` does.
+
+The `mine_lifecycle` regression also reproduced the missing blast damage before
+the repair. It checks immediate, single blast damage and callback ordering.
+The installed test verifies a thrown `Handgrenade` stays live until its original
+two-second fuse, displays its explosion, and removes the server object and ghost.
+
+The asset-free `grenade_lifecycle` test covers forward and backward descending
+throws, the reflected normal and tangential velocities scaled by both grenade
+and surface elasticity, material selection for bounce sounds, gravity, bouncing
+before arming, no airburst merely on reaching `liveTime`, contact detonation
+after arming, `totalTime` expiry, one blast, client prediction and authoritative
+explosion replication without duplicates, smoke removal, and half-second server
+cleanup. Existing vanilla wire fixtures continue to cover grenade datablocks,
+initial/bounce packets, aiming and truncated-packet rollback. These checks do not
+establish frame-by-frame trajectory parity for every surface and network delay.
+
 ## Validation
 
 `tests/game/effects_test.cpp` covers the mine constructor contract, one explosion

@@ -174,6 +174,8 @@ public:
 
     // Movement & physics (player.cpp / playerUpdate.cpp)
     void serverUpdateMove(std::span<const PlayerMove> moves) override;
+    bool getWeaponAmmoType(ProjectileDataType& primary,
+                           ProjectileDataType& secondary) const override;
     void serverProcess(UInt32 curTime) override;
     void clientProcess(UInt32 curTime) override;
     void updateMove(const PlayerMove* curMove, bool server);
@@ -236,6 +238,14 @@ public:
     }
 
     void setDead(bool dead);
+
+    [[nodiscard]] Point3F getLeadCenter() const noexcept {
+        return mount_ ? mount_->getLinearPosition() : getBoxCenter();
+    }
+
+    [[nodiscard]] const Point3F& getLeadVelocity() const noexcept override {
+        return mount_ ? mount_->getLeadVelocity() : Parent::getLeadVelocity();
+    }
 
     [[nodiscard]] bool isExposed() const noexcept {
         return !mount_ || mount_->mountRender();

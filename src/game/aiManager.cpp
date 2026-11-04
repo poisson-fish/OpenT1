@@ -221,10 +221,13 @@ bool AIManager::remove(std::string_view aiName, bool deletePlayer) {
             }
             if (Player* pl = ai.player()) {
                 clearNotify(*pl);
+                ai.setPlayer(nullptr);
                 if (deletePlayer && getManager() != nullptr) {
                     pl->deleteObject();
                 }
             }
+            if (processing_)
+                retiredAIs_.push_back(std::move(aiList_[i]));
             aiList_.erase(aiList_.begin() + static_cast<std::ptrdiff_t>(i));
             return true;
         }
@@ -281,60 +284,56 @@ void AIManager::buildExpressionList(std::vector<AIObj*>& outList, std::string_vi
 }
 
 void AIManager::doServerProcesses(SimTime curTime) {
-    // Deleting a body initiates removal on the next AI pass, not a death callback.
     std::vector<std::string> removed;
-    for (const auto& ai : aiList_) {
-        if (!ai->player() && !ai->spawnBodyOnTick) {
+    for (const auto& ai : aiList_)
+        if (!ai->player() && !ai->spawnBodyOnTick)
             removed.push_back(ai->name);
-        }
-    }
-    for (const auto& name : removed) {
+    for (const auto& name : removed)
         remove(name, false);
-    }
-    std::vector<Int32> identities;
+
+    std::vector<AIObj*> identities;
     for (const auto& ai : aiList_) {
-        identities.push_back(ai->id);
+        identities.push_back(ai.get());
+        if (ai->player())
+            ai->preProcess();
     }
-    const auto flushCallbacks = [&] {
-        auto callbacks = std::move(pendingCallbacks_);
-        pendingCallbacks_.clear();
-        for (const auto& callback : callbacks) {
-            if (auto* manager = getManager())
-                if (auto* console = manager->console();
-                    console && console->isFunction(callback.function)) {
-                    if (callback.extraArg.empty()) {
-                        (void)console->execute(callback.function,
-                                               std::array<std::string, 1>{callback.aiName});
-                    } else {
-                        (void)console->execute(
-                            callback.function,
-                            std::array<std::string, 2>{callback.aiName, callback.extraArg});
-                    }
-                }
-        }
-    };
-    for (const auto clientId : identities) {
-        if (auto* ai = findByPlayerId(clientId); ai && ai->player()) {
-            processing_ = true;
-            ai->doServerProcesses(curTime);
-            processing_ = false;
-            flushCallbacks();
-        }
+    if (!aiList_.empty()) {
+        auto* ai = aiList_[cyclingVar_++ % aiList_.size()].get();
+        cyclingVar_ &= 0x7fff;
+        if (ai->player())
+            ai->refreshAutomaticTargets();
     }
-    // Original post-loop phase runs after every AI has generated its move.
-    for (const auto clientId : identities) {
-        auto* ai = findByPlayerId(clientId);
-        if (!ai || !ai->player()) {
+
+    struct ProcessingScope {
+        AIManager& manager;
+
+        ~ProcessingScope() {
+            manager.processing_ = false;
+            manager.retiredAIs_.clear();
+        }
+    } scope{*this};
+
+    processing_ = true;
+    for (auto* ai : identities) {
+        // Removed AIs are retired until this pass ends, with their body cleared.
+        // Snapshot pointers cannot be reused by an AI spawned from a callback.
+        if (!ai->player())
             continue;
-        }
+        if (recomputePulse_)
+            ai->scaleIQVariables();
+        ai->doServerProcesses(curTime);
+    }
+    recomputePulse_ = false;
+    // Native death and periodic callbacks run after all bots generate movement.
+    for (auto* ai : identities) {
+        if (!ai->player())
+            continue;
         ++ai->wrappedFireAngle_;
         if (ai->player()->isDead() && !ai->wasDead_) {
             ai->wasDead_ = true;
             ai->invokeCallback(AIObj::AIKilled);
-            ai = findByPlayerId(clientId);
-            if (!ai) {
+            if (!ai->player())
                 continue;
-            }
             removeVariables(getManager() ? getManager()->console() : nullptr, ai->name);
             ai->name = ("Corpse" + std::to_string(corpseCounter_++) + " " + ai->name).substr(0, 31);
         }
@@ -348,27 +347,17 @@ void AIManager::doServerProcesses(SimTime curTime) {
 void AIManager::recordCallback(std::string_view fn,
                                std::string_view aiName,
                                std::string_view extraArg) {
-    callbackHistory_.push_back(CallbackRecord{
-        std::string(fn),
-        std::string(aiName),
-        std::string(extraArg),
-    });
-
-    if (processing_) {
-        pendingCallbacks_.push_back(callbackHistory_.back());
-        return;
-    }
-    if (auto* mgr = getManager()) {
-        if (auto* con = mgr->console()) {
-            if (con->isFunction(fn)) {
-                if (extraArg.empty()) {
-                    const std::array<std::string, 1> argv{std::string(aiName)};
-                    (void)con->execute(fn, argv);
-                } else {
-                    const std::array<std::string, 2> argv{std::string(aiName),
-                                                          std::string(extraArg)};
-                    (void)con->execute(fn, argv);
-                }
+    const CallbackRecord callback{std::string(fn), std::string(aiName), std::string(extraArg)};
+    callbackHistory_.push_back(callback);
+    if (auto* manager = getManager()) {
+        if (auto* console = manager->console(); console && console->isFunction(callback.function)) {
+            if (callback.extraArg.empty()) {
+                (void)console->execute(callback.function,
+                                       std::array<std::string, 1>{callback.aiName});
+            } else {
+                (void)console->execute(
+                    callback.function,
+                    std::array<std::string, 2>{callback.aiName, callback.extraArg});
             }
         }
     }

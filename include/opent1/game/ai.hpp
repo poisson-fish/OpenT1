@@ -148,6 +148,10 @@ public:
         Int32 targetPlayerId{-1};
         bool targetDirectly{true};
         bool hadLOS{false};
+        bool haveLOS{false};
+        bool validLOS{false};
+        bool targetWasDead{false};
+        UInt64 identity{0};
         DynamicTarget activeTarget{};
     };
 
@@ -231,6 +235,7 @@ public:
         Flt32 jetTimer{0.0f};
         Point3F midpoint{}, savedVelocity{};
         Int32 jumpCount{};
+        bool flightStarted{};
 
         void init(const AIObj& ai, const Point3F& dest) noexcept;
         bool jetToPoint(AIObj& ai, PlayerMove& pm, const Point3F& dest) noexcept;
@@ -262,10 +267,7 @@ public:
         return iq_;
     }
 
-    void setIq(Flt32 v) noexcept {
-        iq_ = v;
-        scaleIQVariables();
-    }
+    void setIq(Flt32 v) noexcept;
 
     [[nodiscard]] Int32 attackMode() const noexcept {
         return attackMode_;
@@ -373,8 +375,8 @@ public:
     void dopeOffset(Flt32 dist, Point3F& offset) noexcept;
 
     void fireAtPlayerTarget(PlayerMove* pm, const DynamicTarget& targ);
-    void fireAtLaserTarget(PlayerMove* pm, const Point3F& targetPos);
-    void fireAtLaserOwner(PlayerMove* pm, Int32 playerId);
+    bool fireAtLaserTarget(PlayerMove* pm, const Point3F& targetPos);
+    bool fireAtLaserOwner(PlayerMove* pm, Int32 playerId);
     void fireAtPointTarget(PlayerMove* pm, const Point3F& targetPos);
 
     [[nodiscard]] static Flt32 wrapRotation(Flt32 r, Flt32 rangeMin = 0.0f) noexcept;
@@ -388,6 +390,8 @@ public:
                                           Flt32 playerRotZ) const noexcept;
 
     void findTargets();
+    void refreshAutomaticTargets();
+    void preProcess();
     void updateDirectives(SimTime dt, PlayerMove& pm);
     void doServerProcesses(SimTime curTime);
 
@@ -402,6 +406,8 @@ private:
     bool wasDead_{};
     Point3F targetDope(const Point3F& target, Flt32 width, Flt32 height) noexcept;
     void aimAt(PlayerMove& move, const Point3F& target, Flt32 threshold);
+    Directive* findDirectiveIdentity(UInt64 identity) noexcept;
+    Flt32 distance3(const Point3F& a, const Point3F& b) const noexcept;
     Trigger trigger_;
     AIManager* aiManager_{nullptr};
     Player* player_{nullptr};
@@ -426,13 +432,9 @@ private:
 
     Point3F curDest_{0.0f, 0.0f, 0.0f};
 
-    struct TargetVisibility {
-        Int32 id{-1};
-        bool visible{}, seen{}, dead{};
-    };
-
-    std::vector<TargetVisibility> targetVisibility_;
-    Int32 lastLosCheckId_{-1};
+    UInt64 nextDirectiveIdentity_{0};
+    bool frameAccurate_{false};
+    Int32 lastLosCheckId_{0};
     Int32 losThinkCounter_{};
     UInt8 wrappedFireAngle_{};
     DynamicTarget currentTarget_{};
@@ -491,6 +493,11 @@ public:
     }
 
     void doServerProcesses(SimTime curTime);
+
+    void requestRecomputation() noexcept {
+        recomputePulse_ = true;
+    }
+
     Player* spawnRespawnCorpse(AIObj& ai, bool respawnLivePlayer = true);
 
     [[nodiscard]] Int32 corpseCount() const noexcept {
@@ -518,7 +525,9 @@ private:
     AIGraph graph_{};
     Int32 corpseCounter_{0};
     std::vector<CallbackRecord> callbackHistory_{};
-    std::vector<CallbackRecord> pendingCallbacks_{};
+    std::vector<std::unique_ptr<AIObj>> retiredAIs_{};
+    UInt32 cyclingVar_{};
+    bool recomputePulse_{true};
     bool processing_{};
 };
 

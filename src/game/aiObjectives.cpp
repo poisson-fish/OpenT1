@@ -262,6 +262,9 @@ bool AIObj::orderMatch(Int32 order, std::string_view expr) noexcept {
 
 void AIObj::addDirective(const Directive& input, bool overwrite) {
     auto directive = input;
+    directive.identity = ++nextDirectiveIdentity_;
+    directive.haveLOS = directive.hadLOS = directive.validLOS = directive.targetWasDead = false;
+    directive.activeTarget = {};
     directive.callbacks = {};
     directive.nativeCallbacks = {};
     if (directive.orderMask & TargetDirective) {
@@ -374,283 +377,310 @@ void AIObj::setAutomaticTargets(bool autoTarg) noexcept {
     }
 }
 
+AIObj::Directive* AIObj::findDirectiveIdentity(UInt64 identity) noexcept {
+    const auto found = std::ranges::find(directives_, identity, &Directive::identity);
+    return found == directives_.end() ? nullptr : &*found;
+}
+
+void AIObj::refreshAutomaticTargets() {
+    auto* players = PlayerManager::get(aiManager_ ? aiManager_->getManager() : nullptr);
+    if (!automaticTargets_ || !players || !player_)
+        return;
+    const auto isEnemy = [&](const PlayerManager::BaseRep* rep) {
+        return rep && rep->id != id && (rep->team != team || players->getNumTeams() <= 1);
+    };
+    std::erase_if(directives_, [&](const auto& directive) {
+        return isAutomaticTarget(directive) &&
+               !isEnemy(players->findBaseRep(directive.targetPlayerId));
+    });
+    for (auto* rep = players->getBaseRepList(); rep; rep = rep->nextClient) {
+        const auto order = autoOrderReserve | rep->id;
+        if (isEnemy(rep) && std::ranges::none_of(directives_, [&](const auto& directive) {
+                return directive.order == order;
+            })) {
+            Directive directive;
+            directive.orderMask = TargetDirective;
+            directive.targetMode = PlayerTarget;
+            directive.targetPlayerId = rep->id;
+            directive.order = order;
+            addDirective(directive);
+        }
+    }
+}
+
 void AIObj::findTargets() {
     currentTarget_ = {};
     auto* manager = aiManager_ ? aiManager_->getManager() : nullptr;
     auto* players = PlayerManager::get(manager);
-    if (!players || !player_) {
+    if (!players || !player_)
         return;
-    }
-    const auto resolve = [&](Int32 targetId) -> Player* {
-        auto* rep = players->findBaseRep(targetId);
+    const auto targetId = [](const Directive& directive) {
+        return directive.targetPlayerId >= 0 ? directive.targetPlayerId : directive.playerId;
+    };
+    const auto resolve = [&](Int32 representativeId) -> Player* {
+        const auto* rep = players->findBaseRep(representativeId);
         return rep ? dynamic_cast<Player*>(rep->ownedObject) : nullptr;
     };
-    if (automaticTargets_) {
-        const auto isEnemy = [&](const PlayerManager::BaseRep* rep) {
-            return rep && rep->id != id &&
-                   (rep->team != team || players->getNumTeams() <= 1);
-        };
-        std::erase_if(directives_, [&](const auto& directive) {
-            return isAutomaticTarget(directive) &&
-                   !isEnemy(players->findBaseRep(directive.targetPlayerId));
-        });
-        for (auto* rep = players->getBaseRepList(); rep; rep = rep->nextClient) {
-            const auto order = autoOrderReserve | rep->id;
-            if (isEnemy(rep) && std::ranges::none_of(directives_, [&](const auto& directive) {
-                    return directive.order == order;
-                })) {
-                // Automatic targets are real directives in vanilla, including default
-                // LOS/death callbacks and script-installed directive callbacks.
-                Directive directive;
-                directive.orderMask = TargetDirective;
-                directive.targetMode = PlayerTarget;
-                directive.targetPlayerId = rep->id;
-                directive.order = order;
-                addDirective(directive);
-            }
-        }
-    }
-    std::vector<Int32> ids;
+    // Callback scripts may erase, replace or append directives. Snapshot identities,
+    // then reacquire references after each synchronous callback.
+    std::vector<UInt64> targets;
     for (auto& directive : directives_) {
-        if ((directive.orderMask & TargetDirective) && directive.targetMode == PlayerTarget) {
-            const auto targetId =
-                directive.targetPlayerId >= 0 ? directive.targetPlayerId : directive.playerId;
-            if (std::ranges::find(ids, targetId) == ids.end()) {
-                ids.push_back(targetId);
-            }
-            directive.activeTarget = {};
-        }
+        if (!(directive.orderMask & TargetDirective))
+            continue;
+        targets.push_back(directive.identity);
+        directive.activeTarget = {};
+        auto* candidate =
+            directive.targetMode == PlayerTarget ? resolve(targetId(directive)) : nullptr;
+        directive.validLOS = directive.targetMode != PlayerTarget ||
+                             (candidate && !candidate->isDead() &&
+                              m_distf(player_->getLeadCenter(), candidate->getLeadCenter()) <
+                                  iqVars_.spotDistance());
+        if (!directive.validLOS)
+            directive.haveLOS = directive.hadLOS = false;
     }
-    for (const auto targetId : ids) {
-        if (std::ranges::none_of(targetVisibility_, [targetId](const auto& state) {
-                return state.id == targetId;
-            })) {
-            targetVisibility_.push_back({targetId});
-        }
-    }
-    // Removed targets must not retain LOS state when later enrolled again.
-    std::erase_if(targetVisibility_, [&](const auto& state) {
-        return std::ranges::find(ids, state.id) == ids.end();
-    });
-    const auto callback = [&](Int32 type, Int32 targetId) {
-        bool scripted = false;
-        for (const auto& directive : directives_) {
-            if ((directive.orderMask & TargetDirective) &&
-                (directive.targetPlayerId == targetId || directive.playerId == targetId)) {
-                const std::size_t slot = type == TargetAcquired  ? 0
-                                         : type == TargetKilled  ? 1
-                                         : type == TargetLOSLost ? 2
-                                                                 : 3;
-                const auto& function = directive.nativeCallbacks[slot].empty()
-                                           ? directive.callbacks[type]
-                                           : directive.nativeCallbacks[slot];
-                if (!function.empty()) {
-                    aiManager_->recordCallback(function, name, std::to_string(targetId));
-                    scripted = true;
+    const auto callback = [&](const Directive& directive, Int32 type) {
+        const std::size_t slot = type == TargetAcquired  ? 0
+                                 : type == TargetKilled  ? 1
+                                 : type == TargetLOSLost ? 2
+                                                         : 3;
+        const std::string function = directive.nativeCallbacks[slot].empty()
+                                         ? directive.callbacks[type]
+                                         : directive.nativeCallbacks[slot];
+        const auto representativeId = targetId(directive);
+        if (!function.empty())
+            aiManager_->recordCallback(function, name, std::to_string(representativeId));
+    };
+    if (!targets.empty() && ++losThinkCounter_ >= 5) {
+        losThinkCounter_ = 0;
+        std::size_t next = 0;
+        if (lastLosCheckId_) {
+            for (std::size_t i = 0; i < targets.size(); ++i) {
+                const auto* directive = findDirectiveIdentity(targets[i]);
+                if (directive && targetId(*directive) == lastLosCheckId_) {
+                    next = (i + 1) % targets.size();
+                    break;
                 }
             }
         }
-        if (!scripted) {
-            invokeCallback(type, std::to_string(targetId));
+        lastLosCheckId_ = 0;
+        for (std::size_t count = 0; count < targets.size(); ++count) {
+            auto* directive = findDirectiveIdentity(targets[(next + count) % targets.size()]);
+            if (!directive || !directive->validLOS)
+                continue;
+            const auto identity = directive->identity;
+            const auto representativeId = targetId(*directive);
+            if (directive->targetMode == PlayerTarget) {
+                auto* candidate = resolve(representativeId);
+                auto* root =
+                    dynamic_cast<sim::SimContainer*>(manager->findObject(sim::RootContainerId));
+                bool visible = false;
+                if (candidate && root) {
+                    sim::SimContainerQuery query;
+                    query.id = player_->getId();
+                    query.mask =
+                        ~UInt32(SimProjectileObjectType | SimCameraObjectType | ItemObjectType);
+                    query.box.fMin = player_->getEyeTransform().p;
+                    query.box.fMax = candidate->getEyeTransform().p;
+                    sim::SimCollisionInfo hit;
+                    visible =
+                        !root->findLOS(query, hit) || hit.object.resolve(*manager) == candidate;
+                }
+                if (visible && !directive->haveLOS)
+                    callback(*directive, directive->hadLOS ? TargetLOSRegained : TargetAcquired);
+                else if (!visible && directive->haveLOS)
+                    callback(*directive, TargetLOSLost);
+                if (!player_)
+                    return;
+                directive = findDirectiveIdentity(identity);
+                if (directive) {
+                    directive->haveLOS = visible;
+                    directive->hadLOS = directive->hadLOS || visible;
+                }
+            } else {
+                directive->haveLOS = directive->hadLOS = true;
+            }
+            lastLosCheckId_ = representativeId;
+            break;
         }
-    };
-    std::vector<TargetVisibility*> eligible;
-    for (auto& state : targetVisibility_) {
-        auto* candidate = resolve(state.id);
+    }
+    Flt32 bestDistance = std::numeric_limits<Flt32>::max();
+    for (const auto identity : targets) {
+        auto* directive = findDirectiveIdentity(identity);
+        if (!directive || directive->targetMode != PlayerTarget)
+            continue;
+        const auto representativeId = targetId(*directive);
+        auto* candidate = resolve(representativeId);
         if (!candidate || candidate->isDead()) {
-            if (!state.dead && std::ranges::find(ids, state.id) != ids.end()) {
-                callback(TargetKilled, state.id);
-                state.dead = true;
+            if (!directive->targetWasDead) {
+                directive->targetWasDead = true;
+                callback(*directive, TargetKilled);
+                if (!player_)
+                    return;
             }
-            state.visible = state.seen = false;
             continue;
         }
-        const bool wanted = std::ranges::find(ids, state.id) != ids.end();
-        const bool inRange =
-            (candidate->getBoxCenter() - player_->getBoxCenter()).len() < iqVars_.spotDistance();
-        if (!wanted || !inRange) {
-            state.visible = state.seen = false;
+        if (!directive->haveLOS)
             continue;
-        }
-        eligible.push_back(&state);
-    }
-    // Native LOS work cycles through one eligible target every five ticks.
-    if (++losThinkCounter_ >= 5 && !eligible.empty()) {
-        losThinkCounter_ = 0;
-        auto next = std::ranges::find_if(eligible, [&](const auto* state) {
-            return state->id == lastLosCheckId_;
-        });
-        if (next == eligible.end() || ++next == eligible.end()) {
-            next = eligible.begin();
-        }
-        auto& state = **next;
-        auto* candidate = resolve(state.id);
-        auto* root = dynamic_cast<sim::SimContainer*>(manager->findObject(sim::RootContainerId));
-        bool visible = root != nullptr;
-        if (root) {
-            sim::SimContainerQuery query;
-            query.id = player_->getId();
-            query.mask = ~UInt32(SimProjectileObjectType | SimCameraObjectType | ItemObjectType);
-            query.box.fMin = player_->getEyeTransform().p;
-            query.box.fMax = candidate->getEyeTransform().p;
-            sim::SimCollisionInfo hit;
-            visible = !root->findLOS(query, hit) || hit.object.resolve(*manager) == candidate;
-        }
-        if (visible && !state.visible) {
-            callback(state.seen ? TargetLOSRegained : TargetAcquired, state.id);
-        } else if (!visible && state.visible) {
-            callback(TargetLOSLost, state.id);
-        }
-        state.visible = visible;
-        state.seen = state.seen || visible;
-        lastLosCheckId_ = state.id;
-    }
-    Flt32 distance = std::numeric_limits<Flt32>::max();
-    for (const auto* state : eligible) {
-        if (!state->visible) {
-            continue;
-        }
-        auto* candidate = resolve(state->id);
-        const Flt32 range = (candidate->getBoxCenter() - player_->getBoxCenter()).len();
-        DynamicTarget target{
-            state->id, candidate->getBoxCenter(), candidate->getLeadVelocity(), range, candidate};
-        if (range < distance) {
-            currentTarget_ = target;
-            distance = range;
-        }
-        for (auto& directive : directives_) {
-            if ((directive.orderMask & TargetDirective) &&
-                (directive.targetPlayerId == state->id || directive.playerId == state->id)) {
-                directive.activeTarget = target;
-            }
+        const auto range = m_distf(candidate->getLeadCenter(), player_->getLeadCenter());
+        directive->activeTarget = {representativeId,
+                                   candidate->getLeadCenter(),
+                                   candidate->getLeadVelocity(),
+                                   range,
+                                   candidate};
+        if (range < bestDistance) {
+            currentTarget_ = directive->activeTarget;
+            bestDistance = range;
         }
     }
 }
 
 void AIObj::updateDirectives(SimTime dt, PlayerMove& pm) {
-    const Point3F myPos = player_ ? player_->getBoxCenter() : Point3F{};
+    if (!player_)
+        return;
+    const Point3F myPos = player_->getLeadCenter();
     bool hasMoveTarget = false;
 
     struct RoutePoint {
-        Directive* directive;
-        Int32 point;
+        Int32 order, point;
+        UInt32 mask;
         Point3F position;
+        std::string callback;
     };
 
-    std::vector<RoutePoint> route;
-    for (auto& directive : directives_) {
-        if (directive.orderMask & WaypointDirective) {
-            if (directive.pts.empty()) {
-                route.push_back({&directive, 0, directive.pos});
-            } else {
-                for (auto n :
-                     std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t n) {
-                         return n < directive.pts.size();
-                     })) {
-                    route.push_back({&directive, Int32(n), directive.pts[n]});
+    const auto buildRoute = [&] {
+        std::vector<RoutePoint> route;
+        for (const auto& directive : directives_) {
+            const auto callback = directive.nativeCallbacks[0].empty()
+                                      ? directive.callbacks[WaypointReached]
+                                      : directive.nativeCallbacks[0];
+            if (directive.orderMask & WaypointDirective) {
+                if (directive.pts.empty()) {
+                    route.push_back(
+                        {directive.order, 0, directive.orderMask, directive.pos, callback});
+                } else {
+                    for (std::size_t i = 0; i < directive.pts.size(); ++i)
+                        route.push_back({directive.order,
+                                         Int32(i),
+                                         directive.orderMask,
+                                         directive.pts[i],
+                                         callback});
                 }
+            } else if (directive.orderMask & FollowDirective) {
+                auto* players = PlayerManager::get(aiManager_ ? aiManager_->getManager() : nullptr);
+                const auto* rep = players ? players->findBaseRep(directive.playerId) : nullptr;
+                const auto* follow = rep ? dynamic_cast<Player*>(rep->ownedObject) : nullptr;
+                route.push_back({directive.order,
+                                 0,
+                                 directive.orderMask,
+                                 follow ? follow->getLeadCenter() + seekOff_ : myPos,
+                                 callback});
             }
-        } else if (directive.orderMask & FollowDirective) {
-            Player* follow = nullptr;
-            if (aiManager_) {
-                if (auto* players = PlayerManager::get(aiManager_->getManager())) {
-                    if (auto* rep = players->findBaseRep(directive.playerId)) {
-                        follow = dynamic_cast<Player*>(rep->ownedObject);
-                    }
-                }
-            }
-            route.push_back({&directive, 0, follow ? follow->getBoxCenter() + seekOff_ : myPos});
         }
-    }
-    std::vector<std::pair<std::string, Int32>> reached;
-    if (!route.empty() && !pathDone_) {
-        auto current = std::ranges::find_if(route, [&](const auto& point) {
-            return point.directive->order == pathOrder_ && point.point == pathPoint_;
+        return route;
+    };
+    auto route = buildRoute();
+    const auto currentIndex = [&]() -> Int32 {
+        const auto found = std::ranges::find_if(route, [&](const auto& point) {
+            return point.order == pathOrder_ && point.point == pathPoint_;
         });
-        Int32 index = current != route.end() && pathActive_ ? Int32(current - route.begin()) : -1;
-        const auto begin = [&](Int32 next, const Point3F& from) {
-            index = next;
-            const auto& point = route[std::size_t(index)];
-            pathOrder_ = point.directive->order;
-            pathPoint_ = point.point;
-            pathActive_ = true;
-            lastWaypoint_ = from;
-            jetSkill_.stage = JetSkill::NoNav;
-            if (jetNavigation_ != 0) {
-                jetSkill_.init(*this, point.position);
-                jetSkill_.startPos = from;
-                jetSkill_.midpoint = (from + point.position) * .5f;
-                jetSkill_.midpoint.z += 40.f;
+        return found == route.end() ? -1 : Int32(found - route.begin());
+    };
+    const auto nextIndex = [&](bool advance) -> Int32 {
+        if (route.empty())
+            return -1;
+        const auto index = currentIndex();
+        if (index >= 0) {
+            if (!advance)
+                return index;
+            if (route.size() < 2)
+                return -1;
+            if (pathType_ == TwoWay) {
+                if (index == 0)
+                    pathDirection_ = 1;
+                if (std::size_t(index + 1) == route.size())
+                    pathDirection_ = -1;
+                return index + pathDirection_;
             }
-        };
-        if (index < 0) {
-            auto next = std::ranges::find_if(route, [&](const auto& point) {
-                return point.directive->order > pathOrder_;
-            });
-            if (pathType_ == TwoWay && pathDirection_ < 0) {
-                next = route.end();
-                const auto firstLater = std::ranges::find_if(route, [&](const auto& point) {
-                    return point.directive->order >= pathOrder_;
+            const auto next = index + 1;
+            return std::size_t(next) < route.size() ? next : pathType_ == Circular ? 0 : -1;
+        }
+        auto next = std::ranges::find_if(route, [&](const auto& point) {
+            return point.order > pathOrder_;
+        });
+        if (pathType_ == TwoWay) {
+            if (route.front().order > pathOrder_) {
+                pathDirection_ = 1;
+                return 0;
+            }
+            if (route.back().order < pathOrder_) {
+                pathDirection_ = -1;
+                return Int32(route.size() - 1);
+            }
+            if (pathDirection_ < 0) {
+                next = std::ranges::find_if(route, [&](const auto& point) {
+                    return point.order >= pathOrder_;
                 });
-                if (firstLater != route.begin()) {
-                    next = std::prev(firstLater);
-                }
-            }
-            if (next == route.end() && pathType_ == TwoWay) {
-                next = pathDirection_ > 0 ? std::prev(route.end()) : route.begin();
-                pathDirection_ = -pathDirection_;
-            }
-            if (next != route.end()) {
-                begin(Int32(next - route.begin()), myPos);
-            } else {
-                pathDone_ = true;
-                pathActive_ = false;
+                if (next != route.begin())
+                    --next;
             }
         }
-        for ([[maybe_unused]] auto attempts :
-             std::views::iota(std::size_t{0}) | std::views::take_while([&](std::size_t attempts) {
-                 return index >= 0 && attempts < route.size();
-             })) {
+        return next == route.end() ? -1 : Int32(next - route.begin());
+    };
+    const auto begin = [&](Int32 index, const Point3F& from) {
+        if (index < 0) {
+            pathDone_ = true;
+            pathActive_ = false;
+            jetSkill_.stage = JetSkill::NoNav;
+            return;
+        }
+        const auto& point = route[std::size_t(index)];
+        pathOrder_ = point.order;
+        pathPoint_ = point.point;
+        pathActive_ = true;
+        lastWaypoint_ = from;
+        jetSkill_.stage = JetSkill::NoNav;
+        if (jetNavigation_ != 0) {
+            jetSkill_.init(*this, point.position);
+            jetSkill_.startPos = from;
+            jetSkill_.midpoint = (from + point.position) * .5f;
+            jetSkill_.midpoint.z += 40.f;
+        }
+    };
+    if (!pathDone_) {
+        auto index = currentIndex();
+        if (index < 0 || !pathActive_) {
+            index = nextIndex(false);
+            begin(index, myPos);
+        }
+        const auto budget = directives_.size();
+        for (std::size_t attempts = 0; index >= 0 && attempts < budget; ++attempts) {
             const auto point = route[std::size_t(index)];
-            const auto delta = point.position - myPos;
-            const bool within = jetSkill_.stage != JetSkill::NoNav
-                                    ? delta.len() < .2f
-                                    : std::hypot(delta.x, delta.y) < 1.2f;
-            if ((point.directive->orderMask & FollowDirective) || !within) {
+            const bool within =
+                jetSkill_.stage != JetSkill::NoNav
+                    ? distance3(point.position, myPos) < .2f
+                    : (frameAccurate_ ? m_dist(Point2F{point.position.x, point.position.y},
+                                               Point2F{myPos.x, myPos.y})
+                                      : m_distf(Point2F{point.position.x, point.position.y},
+                                                Point2F{myPos.x, myPos.y})) < 1.2f;
+            if ((point.mask & FollowDirective) || !within) {
                 curDest_ = point.position;
                 hasMoveTarget = true;
                 break;
             }
-            const auto& callback = point.directive->nativeCallbacks[0].empty()
-                                       ? point.directive->callbacks[WaypointReached]
-                                       : point.directive->nativeCallbacks[0];
-            reached.emplace_back(callback.empty() ? callbacks_[WaypointReached] : callback,
-                                 point.directive->order);
-            Int32 next = index + pathDirection_;
-            if (route.size() < 2) {
-                next = -1;
-            } else if (pathType_ == TwoWay) {
-                if (index == 0) {
-                    pathDirection_ = 1;
-                }
-                if (std::size_t(index + 1) == route.size()) {
-                    pathDirection_ = -1;
-                }
-                next = index + pathDirection_;
-            } else {
-                next = index + 1;
-                if (std::size_t(next) == route.size()) {
-                    next = pathType_ == Circular ? 0 : -1;
-                }
-            }
-            if (next < 0) {
-                pathDone_ = true;
-                pathActive_ = false;
-                jetSkill_.stage = JetSkill::NoNav;
-                break;
-            }
-            begin(next, point.position);
+            if (!point.callback.empty() && aiManager_)
+                aiManager_->recordCallback(point.callback, name);
+            if (!player_)
+                return;
+            // A waypoint callback can remove the next waypoint or replace the
+            // whole route. Rebuild before choosing the next destination.
+            route = buildRoute();
+            const auto previous = currentIndex();
+            const auto from = previous >= 0 ? route[std::size_t(previous)].position : myPos;
+            index = nextIndex(true);
+            begin(index, from);
         }
+        if (!hasMoveTarget)
+            pathDone_ = true;
     }
     // Select in directive order. Native player targets compete by distance;
     // point/laser targets replace the current selection without resetting that distance.
@@ -664,9 +694,19 @@ void AIObj::updateDirectives(SimTime dt, PlayerMove& pm) {
             continue;
         }
         if (directive.targetMode == PlayerTarget) {
+            auto* players = PlayerManager::get(aiManager_ ? aiManager_->getManager() : nullptr);
+            const auto* rep = players ? players->findBaseRep(directive.activeTarget.id) : nullptr;
+            auto* target = rep ? dynamic_cast<Player*>(rep->ownedObject) : nullptr;
+            if (!target || target->isDead())
+                continue;
+            const DynamicTarget freshTarget{directive.activeTarget.id,
+                                            target->getLeadCenter(),
+                                            target->getLeadVelocity(),
+                                            m_distf(target->getLeadCenter(), myPos),
+                                            target};
             if (directive.activeTarget.id >= 0 &&
-                (targetMode == NoTarget || directive.activeTarget.dist < bestDistance)) {
-                chosenTarget = directive.activeTarget;
+                (targetMode == NoTarget || freshTarget.dist < bestDistance)) {
+                chosenTarget = freshTarget;
                 bestDistance = chosenTarget.dist;
                 targetMode = PlayerTarget;
             }
@@ -679,6 +719,7 @@ void AIObj::updateDirectives(SimTime dt, PlayerMove& pm) {
     if (player_ && player_->isDead()) {
         targetMode = NoTarget;
     }
+    currentTarget_ = targetMode == PlayerTarget ? chosenTarget : DynamicTarget{};
     const auto timeToThink = [&](bool force) {
         if (force || ++thinkCounter_ >= iqVars_.thinkWait) {
             thinkCounter_ = 0;
@@ -696,7 +737,7 @@ void AIObj::updateDirectives(SimTime dt, PlayerMove& pm) {
         if (!target || target->isDead()) {
             return {};
         }
-        const Flt32 distance = m_distf(target->getBoxCenter(), myPos);
+        const Flt32 distance = m_distf(target->getLeadCenter(), myPos);
         if (distance >= iqVars_.spotDistance()) {
             return {};
         }
@@ -715,13 +756,16 @@ void AIObj::updateDirectives(SimTime dt, PlayerMove& pm) {
         if (root->findLOS(query, hit) && hit.object.resolve(*manager) != target) {
             return {};
         }
-        return {seekFlag_, target->getBoxCenter(), target->getLeadVelocity(), distance, target};
+        return {seekFlag_, target->getLeadCenter(), target->getLeadVelocity(), distance, target};
     };
     const auto attack = [&](const DynamicTarget& target, Int32 mode) {
         if (mode == PlayerTarget) {
             fireAtPlayerTarget(&pm, target);
         } else if (mode == LaserTarget) {
-            fireAtLaserOwner(&pm, laserOwner);
+            const bool aiming = fireAtLaserOwner(&pm, laserOwner);
+            if (!aiming && attackMode_ == 0 && hasMoveTarget)
+                seekLocation(&pm);
+            return;
         } else if (mode == PointTarget) {
             fireAtPointTarget(&pm, targetPoint);
         }
@@ -732,7 +776,7 @@ void AIObj::updateDirectives(SimTime dt, PlayerMove& pm) {
             auto heading = getAngleSeekZ(destination, myPos, player_->getRot().z);
             // Native moveTowardLoc includes the turn just generated by aiming.
             heading.current += pm.turnRot;
-            setMovementAction(pm, heading, getSpeed(m_distf(destination, myPos)));
+            setMovementAction(pm, heading, getSpeed(distance3(destination, myPos)));
         };
         if (attackMode_ == 0 && hasMoveTarget) {
             if (jetSkill_.stage != JetSkill::NoNav) {
@@ -741,7 +785,7 @@ void AIObj::updateDirectives(SimTime dt, PlayerMove& pm) {
                 moveToward(curDest_);
             }
         } else if (attackMode_ == 1 && mode == PlayerTarget) {
-            Point3F destination = target.obj ? target.obj->getBoxCenter() : target.pos;
+            Point3F destination = target.pos;
             if (m_distf(Point2F(destination.x, destination.y), Point2F(myPos.x, myPos.y)) < 17.f) {
                 auto away = destination - myPos;
                 away.normalize();
@@ -793,11 +837,16 @@ void AIObj::updateDirectives(SimTime dt, PlayerMove& pm) {
             break;
     }
     (void)dt;
-    for (const auto& entry : reached) {
-        if (aiManager_ && !entry.first.empty()) {
-            aiManager_->recordCallback(entry.first, name);
-        }
-    }
+}
+
+void AIObj::preProcess() {
+    currentTargetId_ = -1;
+    currentTarget_ = {};
+    trigger_.preLoop();
+    frameAccurate_ = false;
+    if (auto* players = PlayerManager::get(aiManager_ ? aiManager_->getManager() : nullptr))
+        if (const auto* rep = players->findBaseRep(id))
+            team = rep->team;
 }
 
 void AIObj::doServerProcesses(SimTime curTime) {
@@ -806,13 +855,6 @@ void AIObj::doServerProcesses(SimTime curTime) {
                            : 0.032f;
     lastProcessTime_ = curTime;
 
-    currentTargetId_ = -1;
-    trigger_.preLoop();
-    if (auto* players = PlayerManager::get(aiManager_ ? aiManager_->getManager() : nullptr)) {
-        if (const auto* rep = players->findBaseRep(id)) {
-            team = rep->team;
-        }
-    }
     if (player_ && player_->isDead()) {
         seekFlag_ = 0;
         currentTarget_ = {};
@@ -822,6 +864,8 @@ void AIObj::doServerProcesses(SimTime curTime) {
         currentTarget_ = {};
     }
 
+    if (!player_)
+        return;
     PlayerMove pm{};
     pm.reset();
     updateDirectives(dt, pm);

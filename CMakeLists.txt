@@ -634,6 +634,19 @@ endif()
 add_executable(opent1 src/main/main.cpp)
 target_compile_definitions(opent1 PRIVATE OPENT1_STANDALONE_EXECUTABLE=1)
 target_link_libraries(opent1 PRIVATE opent1_game)
+# Source-derived AI parity checks and optional installed-content traces.
+add_executable(opent1_ai_behavior_audit EXCLUDE_FROM_ALL tools/ai_behavior_audit.cpp)
+target_link_libraries(opent1_ai_behavior_audit PRIVATE opent1_game)
+foreach(audit_runtime IN ITEMS OpenAL SDL3::SDL3-shared)
+    if(WIN32 AND TARGET ${audit_runtime})
+        add_custom_command(
+            TARGET opent1_ai_behavior_audit
+            POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:${audit_runtime}>
+                    $<TARGET_FILE_DIR:opent1_ai_behavior_audit>
+        )
+    endif()
+endforeach()
 if(OPENT1_BUILD_PLATFORM)
     add_executable(opent1_render_benchmark EXCLUDE_FROM_ALL tools/render_benchmark.cpp)
     target_link_libraries(opent1_render_benchmark PRIVATE opent1_game opent1_gfx_sdl)

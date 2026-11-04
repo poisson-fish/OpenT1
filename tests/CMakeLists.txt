@@ -50,6 +50,7 @@ add_executable(
     video/video_test.cpp
 )
 target_link_libraries(opent1_tests PRIVATE opent1_game)
+add_dependencies(opent1_tests opent1_ai_behavior_audit)
 target_include_directories(opent1_tests PRIVATE support)
 include(fixtures.cmake)
 
@@ -109,6 +110,15 @@ foreach(suite IN LISTS suites)
                    "SDL_VIDEODRIVER=dummy;ALSOFT_DRIVERS=null"
     )
 endforeach()
+
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/ai_parity")
+add_test(NAME ai_parity COMMAND opent1_ai_behavior_audit)
+set_tests_properties(
+    ai_parity
+    PROPERTIES TIMEOUT 120 LABELS game
+               WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/ai_parity"
+               ENVIRONMENT "SDL_VIDEODRIVER=dummy;ALSOFT_DRIVERS=null"
+)
 
 if(OPENT1_BUILD_PLATFORM AND OPENT1_TEST_GPU)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/gpu")

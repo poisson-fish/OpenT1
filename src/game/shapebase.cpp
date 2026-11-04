@@ -287,7 +287,10 @@ void ShapeBase::setPos(const Point3F& pos) {
 void ShapeBase::setRot(const Point3F& rot) {
     rotation_ = rot;
     RMat3F rmat(EulerF{rotation_.x, rotation_.y, rotation_.z});
-    SimMovement::setRotation(rmat, true);
+    auto transform = getTransform();
+    static_cast<RMat3F&>(transform) = rmat;
+    transform.flags |= RMat3F::Matrix_HasTranslation;
+    SimMovement::setPosition(transform, true);
     setMaskBits(RotationMask);
 }
 

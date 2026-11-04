@@ -197,6 +197,16 @@ bool Player::mountItem(Int32 type, Int32 imageSlot, Int32 team) {
     return true;
 }
 
+bool Player::getWeaponAmmoType(ProjectileDataType& primary, ProjectileDataType& secondary) const {
+    primary = {};
+    secondary = {};
+    const auto* image = getImageData(itemImageList_[0].imageId);
+    if (!image)
+        return false;
+    primary = image->projectile;
+    return true;
+}
+
 void Player::setImageType(Int32 imageSlot, Int32 type, Int32 team) {
     auto& image = itemImageList_[static_cast<std::size_t>(imageSlot)];
     if (image.itemId == type) {

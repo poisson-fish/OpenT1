@@ -24,15 +24,45 @@ float doppler(const Point3F& position, const Point3F& velocity, const Listener& 
 }
 }
 
+Runtime::Runtime(Device device) : device_(std::move(device)) {
+    // Loopback devices advance only when explicitly rendered. Real devices
+    // keep consuming PCM even while mission loading or rendering stalls.
+    if (!device_.loopback()) {
+        worker_ = std::jthread([this](std::stop_token stop) {
+            std::unique_lock lock(mutex_);
+            while (!stop.stop_requested()) {
+                wake_.wait_for(lock, stop, std::chrono::milliseconds(500), [] {
+                    return false;
+                });
+                if (stop.stop_requested())
+                    break;
+                for (auto& [handle, voice] : voices_) {
+                    (void)handle;
+                    if (voice.state.status == Status::Playing &&
+                        (voice.definition.profile.flags & Stream))
+                        (void)serviceStream(voice);
+                }
+            }
+        });
+    }
+}
+
+Runtime::~Runtime() {
+    worker_.request_stop();
+    wake_.notify_all();
+    if (worker_.joinable())
+        worker_.join();
+}
+
 bool Runtime::define(UInt32 id, Resource<Wave> w, Profile p, float priority) {
     if (!w) {
         return false;
     }
-    // Upload copies PCM into the device; no borrowed manager, resource or profile.
-    return define(id, std::make_shared<Wave>(*w), p, priority);
+    return define(id, w.immutable(), p, priority);
 }
 
 bool Runtime::define(UInt32 id, std::shared_ptr<const Wave> w, Profile p, float priority) {
+    std::lock_guard lock(mutex_);
     if (!w || !w->frames() || w->rate < 1000 || w->rate > 192000 ||
         w->samples.size() % (w->channels * (w->bits / 8)) || !valid(p) ||
         !std::isfinite(priority) || priority < 0 || priority > 1 ||
@@ -47,9 +77,13 @@ bool Runtime::define(UInt32 id, std::shared_ptr<const Wave> w, Profile p, float 
             UInt64(w->samples.size()) * 2 < UInt64(w->rate) * w->channels * (w->bits / 8) * 2) {
             p.flags &= ~UInt32(Stream);
         }
-        Definition d{{}, w->frames(), w->rate, p, priority, {}};
+        if (const auto old = definitions_.find(id);
+            old != definitions_.end() && old->second.original.lock() == w &&
+            old->second.profile == p && old->second.priority == priority)
+            return true;
+        Definition d{{}, w->frames(), w->rate, p, priority, {}, w};
         if (p.flags & Stream) {
-            d.wave = std::move(w);
+            d.wave = w;
         } else {
             d.buffer = device_.upload(*w);
         }
@@ -61,6 +95,7 @@ bool Runtime::define(UInt32 id, std::shared_ptr<const Wave> w, Profile p, float 
 }
 
 bool Runtime::removeDefinition(UInt32 id) {
+    std::lock_guard lock(mutex_);
     return definitions_.erase(id) != 0;
 }
 
@@ -106,11 +141,22 @@ SourceParameters Runtime::parametersFor(const Voice& v,
 }
 
 Handle Runtime::play(UInt32 id, const TMat3F& t, bool spatial, const Point3F& velocity) {
+    std::lock_guard lock(mutex_);
     const auto d = definitions_.find(id);
     if (muted_ || d == definitions_.end() || !valid(t) || !finite(velocity) ||
-        voices_.size() >= 128 || next_ == std::numeric_limits<Handle>::max()) {
+        next_ == std::numeric_limits<Handle>::max()) {
         return 0;
     }
+    // A burst can arrive between frame-end priority passes. Leave room below
+    // the 128-source ceiling to restart all 33 admitted voices in a priority
+    // pass, as well as the movie queue, while retaining suspended loop handles.
+    if (std::count_if(voices_.begin(),
+                      voices_.end(),
+                      [](const auto& entry) {
+                          return entry.second.state.status == Status::Playing;
+        }) >= 64 &&
+        !prioritize())
+        return 0;
     const auto& p = d->second.profile;
     if (spatial && (p.flags & (Software3D | Hardware3D)) && !(p.flags & Loop) &&
         (t.p - listener_.transform.p).lenf() > p.maxDistance) {
@@ -123,9 +169,6 @@ Handle Runtime::play(UInt32 id, const TMat3F& t, bool spatial, const Point3F& ve
         v.transform = t;
         v.velocity = velocity;
         v.spatial = spatial;
-        if (!(p.flags & Stream)) {
-            v.source.emplace(device_.source(d->second.buffer));
-        }
         v.state.spatial = spatialFor(v, listener_, twoD_, threeD_);
         v.configure(parametersFor(v, v.state.spatial));
         if (std::abs(v.state.spatial.attenuation - 1.f) >= .000001f) {
@@ -140,8 +183,11 @@ Handle Runtime::play(UInt32 id, const TMat3F& t, bool spatial, const Point3F& ve
 }
 
 void Runtime::startVoice(Voice& voice) {
-    if (voice.source) {
-        voice.source->play();
+    if (!(voice.definition.profile.flags & Stream)) {
+        auto source = device_.source(voice.definition.buffer);
+        source.configure(voice.properties);
+        source.play();
+        voice.source.emplace(std::move(source));
         return;
     }
     const auto& wave = *voice.definition.wave;
@@ -248,6 +294,7 @@ bool Runtime::serviceStream(Voice& voice) {
 }
 
 bool Runtime::stop(Handle h) {
+    std::lock_guard lock(mutex_);
     const auto i = voices_.find(h);
     if (i == voices_.end()) {
         return false;
@@ -258,6 +305,7 @@ bool Runtime::stop(Handle h) {
 }
 
 bool Runtime::suspend(Handle h) {
+    std::lock_guard lock(mutex_);
     const auto i = voices_.find(h);
     if (i == voices_.end()) {
         return false;
@@ -271,6 +319,7 @@ bool Runtime::suspend(Handle h) {
 }
 
 bool Runtime::restart(Handle h) {
+    std::lock_guard lock(mutex_);
     const auto i = voices_.find(h);
     if (i == voices_.end()) {
         return false;
@@ -290,6 +339,7 @@ bool Runtime::restart(Handle h) {
 }
 
 void Runtime::stopAll() {
+    std::lock_guard lock(mutex_);
     for (auto& [h, v] : voices_) {
         (void)h;
         v.stop();
@@ -298,6 +348,7 @@ void Runtime::stopAll() {
 }
 
 void Runtime::mute(bool value) {
+    std::lock_guard lock(mutex_);
     muted_ = value;
     if (value) {
         stopAll();
@@ -357,6 +408,7 @@ bool Runtime::present(const Listener& listener,
 }
 
 bool Runtime::move(Handle h, const TMat3F& t, const Point3F& velocity) {
+    std::lock_guard lock(mutex_);
     const auto i = voices_.find(h);
     if (i == voices_.end() || !valid(t) || !finite(velocity) ||
         !present(listener_, twoD_, threeD_, h, &t, &velocity)) {
@@ -368,10 +420,12 @@ bool Runtime::move(Handle h, const TMat3F& t, const Point3F& velocity) {
 }
 
 bool Runtime::setListener(const Listener& l) {
+    std::lock_guard lock(mutex_);
     return present(l, twoD_, threeD_);
 }
 
 bool Runtime::setMaster(float twoD, float threeD) {
+    std::lock_guard lock(mutex_);
     if (!std::isfinite(twoD) || !std::isfinite(threeD) || twoD < 0 || twoD > 1 || threeD < 0 ||
         threeD > 1) {
         return false;
@@ -380,11 +434,9 @@ bool Runtime::setMaster(float twoD, float threeD) {
 }
 
 bool Runtime::setMaxBuffers(UInt32 n) {
-    if (n > 127) {
-        return false;
-    }
+    std::lock_guard lock(mutex_);
     const auto old = maxBuffers_;
-    maxBuffers_ = n;
+    maxBuffers_ = std::min(n, 32U);
     if (!prioritize()) {
         maxBuffers_ = old;
         return false;
@@ -392,7 +444,13 @@ bool Runtime::setMaxBuffers(UInt32 n) {
     return true;
 }
 
+UInt32 Runtime::maxBuffers() const {
+    std::lock_guard lock(mutex_);
+    return maxBuffers_;
+}
+
 bool Runtime::prioritize() {
+    std::lock_guard lock(mutex_);
     struct Change {
         Voice* voice;
         Status status;
@@ -460,6 +518,7 @@ bool Runtime::prioritize() {
 }
 
 bool Runtime::advance(double seconds) {
+    std::lock_guard lock(mutex_);
     if (!std::isfinite(seconds) || seconds < 0 || seconds > 86400) {
         return false;
     }
@@ -496,6 +555,7 @@ bool Runtime::advance(double seconds) {
 }
 
 bool Runtime::queue(Int32 channel, UInt32 id, const TMat3F& t, bool spatial) {
+    std::lock_guard lock(mutex_);
     if (channel < -1 || channel >= 32 || !valid(t)) {
         return false;
     }
@@ -511,6 +571,7 @@ bool Runtime::queue(Int32 channel, UInt32 id, const TMat3F& t, bool spatial) {
 }
 
 bool Runtime::pollSequences() {
+    std::lock_guard lock(mutex_);
     bool success = true;
     for (auto& c : channels_) {
         if (c.current && snapshot(c.current).status == Status::Stopped) {
@@ -539,6 +600,7 @@ bool Runtime::pollSequences() {
 }
 
 void Runtime::clearSequences() {
+    std::lock_guard lock(mutex_);
     for (auto& c : channels_) {
         c.current = 0;
         c.queue.clear();
@@ -546,6 +608,7 @@ void Runtime::clearSequences() {
 }
 
 std::size_t Runtime::purge() {
+    std::lock_guard lock(mutex_);
     const auto n = voices_.size();
     std::erase_if(voices_, [](const auto& e) {
         return e.second.state.status == Status::Stopped;
@@ -554,20 +617,24 @@ std::size_t Runtime::purge() {
 }
 
 VoiceSnapshot Runtime::snapshot(Handle h) const {
+    std::lock_guard lock(mutex_);
     const auto i = voices_.find(h);
     return i == voices_.end() ? VoiceSnapshot{} : i->second.state;
 }
 
 std::optional<SourceParameters> Runtime::backendParameters(Handle h) const {
+    std::lock_guard lock(mutex_);
     const auto i = voices_.find(h);
     return i == voices_.end() ? std::nullopt : std::optional(i->second.parameters());
 }
 
 Handle Runtime::current(std::size_t c) const {
+    std::lock_guard lock(mutex_);
     return c < channels_.size() ? channels_[c].current : 0;
 }
 
 std::size_t Runtime::queued(std::size_t c) const {
+    std::lock_guard lock(mutex_);
     return c < channels_.size() ? channels_[c].queue.size() : 0;
 }
 } // namespace opent1::audio

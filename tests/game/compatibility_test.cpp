@@ -238,10 +238,16 @@ void compatibility() {
         sfxAddPair(42,100,"UI.wav",0.3);
         $SoundHandle = sfxPlay(42);
         $SoundStopped = sfxStop($SoundHandle);
+        sfxSetMaxBuffers(999);
+        $SoundMaxBuffers = sfxGetMaxBuffers();
+        $InvalidSoundLimit = sfxSetMaxBuffers(-1);
     )")
               .ok());
     CHECK(played == 1 && app.console().getVariable("SoundHandle") == "99" &&
           app.console().getVariable("SoundStopped") == "True");
+    CHECK(app.legacySound.maxBuffers() == 32 &&
+          app.console().getVariable("SoundMaxBuffers") == "32" &&
+          app.console().getVariable("InvalidSoundLimit") == "False");
     app.shutdown();
     CHECK(!app.resources().contains("server.cs"));
 }

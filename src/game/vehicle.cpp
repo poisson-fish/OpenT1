@@ -3,6 +3,7 @@
 #include <opent1/game/player.hpp>
 #include <opent1/game/projectile_factory.hpp>
 #include <opent1/game/vehicle.hpp>
+#include <opent1/game/sound.hpp>
 
 #include <algorithm>
 #include <array>
@@ -132,11 +133,26 @@ bool Vehicle::onAdd() {
     }
 
     initCollisionInfo();
+    updateVehicleSound();
     return true;
 }
 
 void Vehicle::onRemove() {
+    TSFX::Stop(currentSound_, getManager());
     Parent::onRemove();
+}
+
+void Vehicle::updateVehicleSound() {
+    if (!isGhost() || !data_)
+        return;
+    if (oldSoundState_ != soundState_) {
+        TSFX::Stop(currentSound_, getManager());
+        oldSoundState_ = soundState_;
+    }
+    // Vanilla's IDLE_SOUND playback is commented out; only RUN_SOUND emits PCM.
+    if (soundState_ == RUN_SOUND && !currentSound_ && data_->moveSound >= 0)
+        currentSound_ = TSFX::PlayAt(UInt32(data_->moveSound), getTransform(), {}, getManager());
+    TSFX::Move(currentSound_, getTransform(), getLinearVelocity(), getManager());
 }
 
 void Vehicle::onCollisionNotify(GameBase* object) {
@@ -441,6 +457,12 @@ void Vehicle::serverProcess(UInt32 curTime) {
     if (curTime - getLastProcessTime() < 32u) {
         return;
     }
+    const auto nextSound =
+        getControlClient() ? (desiredSpeed_ != 0.f ? RUN_SOUND : IDLE_SOUND) : NO_SOUND;
+    if (soundState_ != nextSound) {
+        soundState_ = nextSound;
+        setMaskBits(SoundMask);
+    }
     if (getControlClient() != 0 && updateDebt_ > -5) {
         updateDebt_--;
         updateSkip_++;
@@ -500,6 +522,7 @@ void Vehicle::clientProcess(UInt32 curTime) {
     updateEnergy(animStep);
     updateShieldThread(animStep);
     updateScriptThreads(animStep);
+    updateVehicleSound();
 }
 
 void Vehicle::writePacketData(BitStream& bstream) const {
@@ -562,6 +585,7 @@ bool Vehicle::readPacketData(BitStream& bstream) {
     damageLevel_ = static_cast<Flt32>(dlevel) / 63.0f;
     fireCount_ = fc;
     soundState_ = ss;
+    updateVehicleSound();
 
     guard.committed = true;
     return true;
@@ -753,6 +777,7 @@ bool Vehicle::unpackUpdate(sim::network::GhostManager& g, BitStream& stream) {
     if (!stream.isValid()) {
         return rollback();
     }
+    updateVehicleSound();
     guard.committed = true;
     return true;
 }

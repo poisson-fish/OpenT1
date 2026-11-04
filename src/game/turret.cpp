@@ -3,6 +3,7 @@
 #include <opent1/game/projectile_factory.hpp>
 #include <opent1/game/turret.hpp>
 #include <opent1/game/vehicle.hpp>
+#include <opent1/game/sound.hpp>
 #include <opent1/world/world_scene.hpp>
 
 #include <algorithm>
@@ -188,10 +189,13 @@ bool Turret::onAdd() {
     } else {
         addToSet(PlayerSetId);
     }
+    updateTurretFireSound();
     return true;
 }
 
 void Turret::onRemove() {
+    TSFX::Stop(fireSound_, getManager());
+    TSFX::Stop(moveSound_, getManager());
     if (currentTarget_) {
         clearNotify(*currentTarget_);
         currentTarget_ = nullptr;
@@ -859,6 +863,36 @@ void Turret::clientProcess(UInt32 curTime) {
     if (ghostFireCount_ != fireCount_) {
         ghostFireCount_ = fireCount_;
         playFireAnimation();
+        if (turretData_ && !isSustained_ && turretData_->fireSound >= 0)
+            (void)TSFX::PlayAt(UInt32(turretData_->fireSound), getTransform(), {}, getManager());
+    }
+    updateTurretFireSound();
+    TSFX::Move(moveSound_, getTransform(), {}, getManager());
+    TSFX::Move(fireSound_, getTransform(), {}, getManager());
+}
+
+void Turret::updateTurretSounds(bool turning) {
+    if (!isGhost() || !turretData_)
+        return;
+    if (turning && turretData_->whirSound >= 0) {
+        if (TSFX::IsDone(moveSound_, getManager()))
+            moveSound_ =
+                TSFX::PlayAt(UInt32(turretData_->whirSound), getTransform(), {}, getManager());
+    } else {
+        TSFX::Stop(moveSound_, getManager());
+    }
+    updateTurretFireSound();
+}
+
+void Turret::updateTurretFireSound() {
+    if (!isGhost() || !turretData_)
+        return;
+    if (isSustained_ && m_fireState_ == Firing && turretData_->fireSound >= 0) {
+        if (!fireSound_)
+            fireSound_ =
+                TSFX::PlayAt(UInt32(turretData_->fireSound), getTransform(), {}, getManager());
+    } else {
+        TSFX::Stop(fireSound_, getManager());
     }
 }
 
@@ -1104,6 +1138,9 @@ bool Turret::readPacketData(BitStream& bstream) {
         setAnimationState(newState);
     }
     energy_ = newEnergy;
+    updateTurretSounds(newRot != desiredRotation_ || newElev != desiredElevation_);
+    desiredRotation_ = newRot;
+    desiredElevation_ = newElev;
 
     guard.committed = true;
     return true;
@@ -1238,6 +1275,7 @@ bool Turret::unpackUpdate(sim::network::GhostManager& g, BitStream& stream) {
     if (!isProperlyAdded()) {
         ghostFireCount_ = fireCount_;
     }
+    updateTurretSounds(desiredRotation_ != savedDesRot || desiredElevation_ != savedDesElev);
 
     guard.committed = true;
     return true;

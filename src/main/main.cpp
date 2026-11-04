@@ -489,6 +489,10 @@ protected:
                     dev.emplace(devOpts);
                 }
                 audioRuntime_ = std::make_unique<audio::Runtime>(std::move(*dev));
+                (void)audioRuntime_->setMaxBuffers(app_.legacySound.maxBuffers());
+                app_.legacySound.setMaxBuffers = [this](UInt32 count) {
+                    return audioRuntime_ && audioRuntime_->setMaxBuffers(count);
+                };
                 app_.legacySound.play = [this](UInt32 id,
                                                std::string_view file,
                                                const audio::Profile& profile,
@@ -639,6 +643,10 @@ protected:
                 if (audioRuntime_) {
                     (void)audioRuntime_->stop(handle);
                 }
+            };
+            playback->done = [this](SoundHandle handle) {
+                return !audioRuntime_ ||
+                       audioRuntime_->snapshot(handle).status == audio::Status::Stopped;
             };
             playback->playRelative =
                 [this, play = playback->play](UInt32 id, const Point3F& relative) -> SoundHandle {

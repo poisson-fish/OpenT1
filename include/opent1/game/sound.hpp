@@ -29,6 +29,7 @@ public:
     std::function<SoundHandle(UInt32, const Point3F&)> playRelative;
     Move move;
     Stop stop;
+    std::function<bool(SoundHandle)> done;
     bool processEvent(const sim::SimEvent&) override;
 };
 
@@ -56,6 +57,9 @@ struct LocSoundEvent : public sim::SimEvent {
 
 class TSFX {
 public:
+    static void Stop(SoundHandle&, sim::SimManager*);
+    static void Move(SoundHandle, const TMat3F&, const Point3F&, sim::SimManager*);
+    static bool IsDone(SoundHandle, sim::SimManager*);
     static SoundHandle PlayTaggedAt(UInt32 tag, const TMat3F& transform, sim::SimManager* manager);
     static SoundHandle PlayAt(UInt32 id,
                               const TMat3F& transform,

@@ -197,6 +197,7 @@ protected:
     Int32 soundState_{NO_SOUND};
     Int32 oldSoundState_{NO_SOUND};
     UInt32 currentSound_{0};
+    void updateVehicleSound();
 
     Int32 pilotNode_{-1};
     Int32 exitNode_{-1};

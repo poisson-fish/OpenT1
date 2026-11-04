@@ -290,6 +290,14 @@ bool Player::initResources(GameBaseData* inData) {
         }
     }
     updateAnimation(0);
+    // Initial ghost packets restore the state before resources and a manager
+    // exist. Replay Fire now so an already firing weapon starts its loop.
+    if (isGhost()) {
+        for (Int32 slot = 0; slot < MaxImageSlots; ++slot) {
+            if (itemImageList_[slot].state == ItemImageEntry::Fire)
+                setImageState(slot, ItemImageEntry::Fire);
+        }
+    }
     return true;
 }
 

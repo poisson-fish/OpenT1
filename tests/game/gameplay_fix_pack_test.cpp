@@ -4,6 +4,7 @@
 #include "ts_collision_test_support.hpp"
 #include <opent1/game/game_app.hpp>
 #include <opent1/game/flier.hpp>
+#include <opent1/game/moveable.hpp>
 #include <opent1/game/proj_bullet.hpp>
 #include <opent1/game/proj_rocket.hpp>
 #include <opent1/game/sensor_manager.hpp>
@@ -361,6 +362,177 @@ void installedGameplay() {
 }
 }
 
+namespace {
+void soundLoopEmitters() {
+    FearGameApp app;
+    CHECK(app.init() && app.fearPlugin().createServerWorld("SoundLoops"));
+    auto& globals = app.fearPlugin().serverGlobals();
+    auto& manager = *globals.manager;
+    auto& dbm = *globals.dbm;
+    auto shape = opent1::test::ts_collision::cube();
+    shape->names.push_back("root");
+    shape->sequences = {{2, 1, 1.f, 0}};
+    CHECK(app.resources().add<world::TsShape>("sound-loops.dts", std::move(shape)));
+    const auto model = app.resources().load<world::TsShape>("sound-loops.dts");
+    auto& profile =
+        block<SoundProfileData>(dbm, DataBlockManager::SoundProfileDataType, "LoopProfile");
+    profile.profile.flags = audio::Loop | audio::Software3D;
+    const auto sound = [&](const char* name) {
+        auto& data = block<SoundData>(dbm, DataBlockManager::SoundDataType, name);
+        data.wavFileName = "synthetic.wav";
+        data.profileIndex = profile.dbmIndex;
+        return data.dbmIndex;
+    };
+    const auto run = sound("LoopRun"), blocked = sound("LoopBlocked"), start = sound("LoopStart"),
+               stop = sound("LoopStop"), fire = sound("LoopFire"), whir = sound("LoopWhir");
+    std::vector<UInt32> played;
+    std::vector<SoundHandle> stopped;
+    std::map<SoundHandle, Point3F> positions;
+    auto playback =
+        std::make_unique<SoundPlayback>([&](UInt32 id, const TMat3F& t, const Point3F&) {
+            played.push_back(id);
+            const auto handle = SoundHandle(played.size());
+            positions[handle] = t.p;
+            return handle;
+        });
+    playback->stop = [&](auto handle) {
+        stopped.push_back(handle);
+        positions.erase(handle);
+    };
+    playback->move = [&](auto handle, const TMat3F& t, const Point3F&) {
+        positions[handle] = t.p;
+    };
+    playback->done = [&](auto handle) {
+        return !positions.contains(handle);
+    };
+    CHECK(manager.addObject(std::move(playback)));
+
+    auto& armor = block<PlayerData>(dbm, DataBlockManager::PlayerDataType, "LoopArmor");
+    armor.shape = model;
+    armor.maxDamage = 1;
+    armor.animData[Player::ANIM_STAND] = {"root", -1, 1, 7};
+    auto& image = block<ItemImageData>(dbm, DataBlockManager::ItemImageDataType, "LoopImage");
+    image.weaponType = Player::Spinning;
+    image.sfxFireTag = fire;
+    image.fireTime = .1f;
+    auto& item = block<ItemData>(dbm, DataBlockManager::ItemDataType, "LoopItem");
+    item.imageId = image.dbmIndex;
+    Player source;
+    auto& mounted = source.getItemImageEntry(0);
+    mounted.itemId = item.dbmIndex;
+    mounted.imageId = image.dbmIndex;
+    mounted.state = Player::ItemImageEntry::Fire;
+    mounted.ammo = mounted.triggerDown = true;
+    mounted.fireCount = 3;
+    std::array<std::byte, 256> bytes{};
+    BitStream output{std::span<std::byte>(bytes)};
+    source.packItemImages(output,
+                          UInt32(Player::InitialUpdate) | UInt32(Player::VisItemMask) |
+                              (1u << Player::ItemImageMaskBits));
+    auto ghost = std::make_unique<Player>();
+    auto* body = ghost.get();
+    CHECK(body->setNetFlags(body->netFlags() | sim::SimNetObject::IsGhost));
+    body->bindDataBlockManager(&dbm);
+    body->setDatFileName("LoopArmor");
+    BitStream input{std::span<const std::byte>(bytes)};
+    CHECK(body->unpackItemImages(input, true) && manager.addObject(std::move(ghost)));
+    CHECK(played.size() == 1 && played.back() == UInt32(fire));
+    for (int i = 0; i < 40; ++i)
+        body->updateItemImages(.032f);
+    CHECK(played.size() == 1 && body->getItemImageEntry(0).animSound == 1);
+    CHECK(body->deleteObject() && stopped.back() == 1);
+
+    auto& liftData = block<MoveableData>(dbm, DataBlockManager::MoveableDataType, "LoopLift");
+    liftData.shape = model;
+    liftData.sfxStart = start;
+    liftData.sfxStop = stop;
+    liftData.sfxRun = run;
+    liftData.sfxBlocked = blocked;
+    auto* lift = add<Moveable>(manager, dbm, "LoopLift", true);
+    lift->setState(StaticBase::Enabled);
+    lift->updateMoveState(Moveable::StopState);
+    lift->updateMoveState(Moveable::ForwardState);
+    CHECK(played[played.size() - 2] == UInt32(start) && played.back() == UInt32(run));
+    const auto runHandle = SoundHandle(played.size());
+    const auto count = played.size();
+    lift->clientProcess(0);
+    CHECK(played.size() == count);
+    lift->setBlockedFlag(true);
+    lift->clientProcess(0);
+    CHECK(stopped.back() == runHandle && played.back() == UInt32(blocked));
+    lift->setBlockedFlag(false);
+    lift->clientProcess(0);
+    CHECK(played.back() == UInt32(run));
+    lift->updateMoveState(Moveable::StopState);
+    CHECK(played.back() == UInt32(stop));
+    lift->updateMoveState(Moveable::ForwardState);
+    const auto liftHandle = SoundHandle(played.size());
+    CHECK(lift->deleteObject() && stopped.back() == liftHandle);
+
+    auto& vehicleData = block<VehicleData>(dbm, DataBlockManager::VehicleDataType, "LoopVehicle");
+    vehicleData.shape = model;
+    vehicleData.maxDamage = 1;
+    vehicleData.maxEnergy = 100;
+    vehicleData.maxSpeed = 10;
+    vehicleData.moveSound = run;
+    vehicleData.idleSound = start; // Native idle playback is intentionally absent.
+    auto* vehicle = add<Vehicle>(manager, dbm, "LoopVehicle", true);
+    Vehicle vehicleSource;
+    const auto vehiclePacket = [&](Int32 state) {
+        bytes.fill({});
+        vehicleSource.setSoundState(state);
+        BitStream out{std::span<std::byte>(bytes)};
+        vehicleSource.writePacketData(out);
+        BitStream in{std::span<const std::byte>(bytes)};
+        CHECK(vehicle->readPacketData(in));
+    };
+    vehiclePacket(Vehicle::RUN_SOUND);
+    CHECK(played.back() == UInt32(run));
+    const auto engineHandle = SoundHandle(played.size());
+    vehicle->setPos({10, 0, 0});
+    vehicle->clientProcess(0);
+    CHECK(positions[engineHandle] == Point3F(10, 0, 0));
+    const auto engineCount = played.size();
+    vehiclePacket(Vehicle::IDLE_SOUND);
+    CHECK(stopped.back() == engineHandle && played.size() == engineCount);
+    vehiclePacket(Vehicle::RUN_SOUND);
+    const auto engineAgain = SoundHandle(played.size());
+    CHECK(vehicle->deleteObject() && stopped.back() == engineAgain);
+
+    auto& turretData = block<TurretData>(dbm, DataBlockManager::TurretDataType, "LoopTurret");
+    turretData.shape = model;
+    turretData.isSustained = true;
+    turretData.fireSound = fire;
+    turretData.whirSound = whir;
+    auto* turret = add<Turret>(manager, dbm, "LoopTurret", true);
+    Turret turretSource;
+    const auto turretPacket = [&](Flt32 rotation, bool firing) {
+        bytes.fill({});
+        turretSource.setTurretRotation(rotation);
+        turretSource.setFireState(firing ? Turret::Firing : Turret::Waiting);
+        BitStream out{std::span<std::byte>(bytes)};
+        turretSource.writePacketData(out);
+        BitStream in{std::span<const std::byte>(bytes)};
+        CHECK(turret->readPacketData(in));
+    };
+    turretPacket(1.f, true);
+    CHECK(played[played.size() - 2] == UInt32(whir) && played.back() == UInt32(fire));
+    const auto fireHandle = SoundHandle(played.size()), whirHandle = fireHandle - 1;
+    const auto firingCount = played.size();
+    turretPacket(1.f, true);
+    CHECK(played.size() == firingCount && stopped.back() == whirHandle);
+    turretPacket(2.f, false);
+    CHECK(played.back() == UInt32(whir) && stopped.back() == fireHandle);
+    const auto finalWhir = SoundHandle(played.size());
+    CHECK(turret->deleteObject() && stopped.back() == finalWhir);
+    app.shutdown();
+}
+}
+
+int opent1_test_sound_loop_emitters() {
+    return opent1::test::run(soundLoopEmitters);
+}
+
 int opent1_test_gameplay_regressions() {
     return opent1::test::run(gameplayRegressions);
 }
@@ -374,5 +546,6 @@ int opent1_test_installed_gameplay() {
 }
 
 OPENT1_REGISTER_TEST("game", "gameplay_regressions", opent1_test_gameplay_regressions);
+OPENT1_REGISTER_TEST("game", "sound_loop_emitters", opent1_test_sound_loop_emitters);
 OPENT1_REGISTER_TEST("game", "scheduled_mission_clock", opent1_test_scheduled_mission_clock);
 OPENT1_REGISTER_TEST("fixpack", "installed_gameplay", opent1_test_installed_gameplay);

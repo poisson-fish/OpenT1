@@ -136,6 +136,30 @@ bool LocSoundEvent::unpack(sim::SimManager& manager,
     return true;
 }
 
+void TSFX::Stop(SoundHandle& handle, sim::SimManager* manager) {
+    auto* playback =
+        manager ? dynamic_cast<SoundPlayback*>(manager->findObject("GameSoundPlayback")) : nullptr;
+    if (handle && playback && playback->stop)
+        playback->stop(handle);
+    handle = 0;
+}
+
+void TSFX::Move(SoundHandle handle,
+                const TMat3F& transform,
+                const Point3F& velocity,
+                sim::SimManager* manager) {
+    auto* playback =
+        manager ? dynamic_cast<SoundPlayback*>(manager->findObject("GameSoundPlayback")) : nullptr;
+    if (handle && playback && playback->move)
+        playback->move(handle, transform, velocity);
+}
+
+bool TSFX::IsDone(SoundHandle handle, sim::SimManager* manager) {
+    auto* playback =
+        manager ? dynamic_cast<SoundPlayback*>(manager->findObject("GameSoundPlayback")) : nullptr;
+    return !handle || (playback && playback->done && playback->done(handle));
+}
+
 SoundHandle TSFX::PlayTaggedAt(UInt32 tag, const TMat3F& transform, sim::SimManager* manager) {
     auto* playback =
         manager ? dynamic_cast<SoundPlayback*>(manager->findObject("GameSoundPlayback")) : nullptr;

@@ -156,6 +156,7 @@ private:
     MoveableData* moveableData_{nullptr};
     world::SimPathManager* boundPathMgr_{nullptr};
     UInt32 runSound_{0};
+    bool runSoundIsRun_{};
     State moveState_{Undefined};
     Int32 pathId_{UndefinedPathId};
     Int32 waypointCount_{0};

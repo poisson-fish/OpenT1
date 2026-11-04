@@ -880,7 +880,10 @@ bool Player::unpackItemImages(BitStream& stream, bool initialUpdate) {
                 } else {
                     itemImage.fireCount = count;
                     if (initFire) {
-                        itemImage.state = ItemImageEntry::Fire;
+                        if (getManager())
+                            setImageState(i, ItemImageEntry::Fire);
+                        else
+                            itemImage.state = ItemImageEntry::Fire;
                     }
                 }
             }

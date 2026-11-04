@@ -1,5 +1,6 @@
 #include <opent1/game/moveable.hpp>
 #include <opent1/game/sim_move_obj.hpp>
+#include <opent1/game/sound.hpp>
 #include <algorithm>
 #include <cmath>
 
@@ -57,11 +58,13 @@ bool Moveable::onAdd() {
         buildMovementVector(currentWaypoint_, moveState_ == BackwardState);
         updatePosition(true);
     }
+    if (isGhost())
+        updateMoveState(moveState_);
     return true;
 }
 
 void Moveable::onRemove() {
-    runSound_ = 0;
+    TSFX::Stop(runSound_, getManager());
     Parent::onRemove();
 }
 
@@ -225,12 +228,34 @@ bool Moveable::processBlocker(sim::SimObject& obj) {
 }
 
 void Moveable::updateMoveState(State newState) {
+    const auto previous = moveState_;
     if (newState != moveState_) {
         moveState_ = newState;
         if (!isGhost()) {
             setMaskBits(StateMask);
         }
     }
+    if (!isGhost() || !moveableData_)
+        return;
+    if (previous != newState && previous != Undefined) {
+        const auto tag = newState == StopState ? (state_ == Enabled ? moveableData_->sfxStop : -1)
+                                               : moveableData_->sfxStart;
+        if (tag >= 0)
+            (void)TSFX::PlayAt(UInt32(tag), getTransform(), {}, getManager());
+    }
+    if (newState == StopState || newState == Undefined) {
+        TSFX::Stop(runSound_, getManager());
+        return;
+    }
+    const bool running = !isBlocked();
+    if (runSound_ && running != runSoundIsRun_)
+        TSFX::Stop(runSound_, getManager());
+    const auto tag = running ? moveableData_->sfxRun : moveableData_->sfxBlocked;
+    if (!runSound_ && tag >= 0) {
+        runSound_ = TSFX::PlayAt(UInt32(tag), getTransform(), {}, getManager());
+        runSoundIsRun_ = running;
+    }
+    TSFX::Move(runSound_, getTransform(), {}, getManager());
 }
 
 bool Moveable::setWaypoint(Flt32 wp) {
@@ -514,6 +539,7 @@ void Moveable::clientProcess(UInt32 curTime) {
             stop();
         }
     }
+    updateMoveState(moveState_);
 }
 
 bool Moveable::processEvent(const sim::SimEvent& event) {
@@ -652,7 +678,7 @@ bool Moveable::unpackMoveableUpdate(BitStream& stream, UInt32 currentTime) {
         if (getManager() || boundPathMgr_) {
             buildMovementVector(currentWaypoint_, ms == BackwardState);
             updatePosition(true);
-            updateMoveState(ms);
+            moveState_ = ms;
         } else {
             moveState_ = ms;
         }
@@ -663,6 +689,11 @@ bool Moveable::unpackMoveableUpdate(BitStream& stream, UInt32 currentTime) {
     }
 
     hasUnpackedInitialMoveable_ = true;
+    if (getManager()) {
+        const auto nextState = moveState_;
+        moveState_ = savedMoveState;
+        updateMoveState(nextState);
+    }
     streamGuard.committed = true;
     return true;
 }

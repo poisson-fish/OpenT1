@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iterator>
+#include <limits>
 #include <ranges>
 
 namespace opent1::sim::environment_detail {
@@ -233,8 +234,9 @@ std::optional<std::vector<gfx::PolygonVertex>> project(const Input& input,
         return output;
     });
     // Remove boundary contacts and float-rounding-sized turns before passing a
-    // convex polygon to the exact software scanner. The tolerance is measured
-    // relative to the adjacent edges (2e-6), not world coordinates.
+    // convex polygon to the exact software scanner. Account for both angular
+    // error and the precision of the stored screen coordinates: a very short
+    // clipped edge can otherwise retain a concave turn after float rounding.
     bool changed = true;
     while (changed && result.size() >= 3) {
         changed = false;
@@ -245,7 +247,18 @@ std::optional<std::vector<gfx::PolygonVertex>> project(const Input& input,
             const auto b = result[i].position, d = result[(i + 1) % result.size()].position;
             const double ax = double(b.x) - a.x, ay = double(b.y) - a.y, bx = double(d.x) - b.x,
                          by = double(d.y) - b.y;
-            if (std::abs(ax * by - ay * bx) <= 2e-6 * std::hypot(ax, ay) * std::hypot(bx, by)) {
+            const auto precision = std::numeric_limits<Flt32>::epsilon() *
+                                   std::max({1.,
+                                             std::abs(double(a.x)),
+                                             std::abs(double(a.y)),
+                                             std::abs(double(b.x)),
+                                             std::abs(double(b.y)),
+                                             std::abs(double(d.x)),
+                                             std::abs(double(d.y))});
+            const auto tolerance =
+                std::max(2e-6 * std::hypot(ax, ay) * std::hypot(bx, by),
+                         4 * precision * (std::abs(ax) + std::abs(ay) + std::abs(bx) + std::abs(by)));
+            if (std::abs(ax * by - ay * bx) <= tolerance) {
                 result.erase(result.begin() + std::ptrdiff_t(i));
                 changed = true;
                 break;

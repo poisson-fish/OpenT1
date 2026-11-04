@@ -1185,6 +1185,20 @@ std::optional<std::vector<WorldShadow>> WorldSceneFrame::shadows(Point3F directi
                     vertex.position += image.shapeToWorld.p;
                 }
             }
+            // Local clipping can produce slivers narrower than one world-space
+            // float step. Translation can collapse them to a line or a point;
+            // discard those empty triangles before either renderer validates them.
+            std::erase_if(geometry->polygons, [](const auto& polygon) {
+                Point3F normal;
+                m_normal(polygon.vertices[0].position,
+                         polygon.vertices[1].position,
+                         polygon.vertices[2].position,
+                         normal);
+                return normal.len() < 1e-8f;
+            });
+            if (geometry->polygons.empty()) {
+                continue;
+            }
             result.push_back({std::move(*geometry),
                               sim::filterShadowBitmap(
                                   pixels, 66, 64, sim::ShadowBlur::Box2, opacity * image.opacity)});

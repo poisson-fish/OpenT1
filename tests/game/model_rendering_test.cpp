@@ -410,6 +410,36 @@ void playerShadows() {
         const auto shadows = scene->shadows({.6f, .45f, -.7f});
         CHECK(shadows && shadows->size() == 1 && !shadows->front().geometry.polygons.empty());
     }
+    // A narrow receiver clips a valid local shadow fragment that collapses
+    // when translated to RPG world coordinates. Keep the other fragments and
+    // render the complete frame through both backends.
+    sim::SimWorld sliverWorld(nullptr, resources);
+    auto sliverActor = std::make_unique<ShadowActor>();
+    sliverActor->image = body;
+    sliverActor->image.shapeToWorld.p += offset;
+    CHECK(sliverWorld.manager().addObject(std::move(sliverActor)));
+    CHECK(sliverWorld.manager().addObject(std::make_unique<world::SimWorldSurface>(
+        world::WorldSurfaceInstance{floor, TMat3F(EulerF{}, offset)})));
+    auto sliver = std::make_shared<world::WorldSurfaceMesh>(*floor);
+    for (auto& triangle : sliver->triangles) {
+        for (auto& vertex : triangle.vertices) {
+            vertex.position.y = 8 + vertex.position.y * 1e-7f;
+            vertex.position.z = 1;
+        }
+    }
+    CHECK(sliverWorld.manager().addObject(std::make_unique<world::SimWorldSurface>(
+        world::WorldSurfaceInstance{sliver, TMat3F(EulerF{}, offset)})));
+    const auto sliverScene = world::WorldSceneFrame::capture(sliverWorld, shiftedCamera, {}, false);
+    CHECK(sliverScene);
+    const auto sliverShadows = sliverScene->shadows({0, 0, -1});
+    CHECK(sliverShadows && sliverShadows->size() == 1);
+    CHECK(!sliverShadows->front().geometry.polygons.empty());
+    const std::array<sim::EnvironmentShadow, 1> sliverInputs{
+        {{sliverShadows->front().geometry, sliverShadows->front().bitmap}}};
+    CHECK(sliverScene->hardware(palette, sliverInputs));
+    auto sliverSurface = gfx::SoftwareSurface::create(64, 64);
+    CHECK(sliverSurface && sliverSurface->setPalette(palette));
+    CHECK(sliverScene->draw(*sliverSurface, sliverInputs));
     auto unsupported = std::make_unique<ShadowActor>();
     unsupported->image = movingActor->image;
     unsupported->image.pose = {}; // Hidden caster can fail silhouette preparation independently.

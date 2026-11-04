@@ -116,6 +116,39 @@ int environmentScratchOwnership() {
     });
 }
 
+int clippedShadowPrecision() {
+    return test::run([] {
+        // Captured from a moving rpgmap5 shadow: clipping this thin triangle
+        // at the right viewport edge rounds one corner into a concave turn.
+        sim::EnvironmentCamera camera;
+        camera.viewport = {0, 0, 799, 599};
+        camera.focal = {400, 400};
+        camera.center = {400, 300};
+        camera.nearDistance = .5f;
+        camera.farDistance = 1000;
+        camera.worldToCamera.setRow(0, {.987688363f, -.154677883f, -.0233772751f});
+        camera.worldToCamera.setRow(1, {.156434476f, .976597667f, .147598311f});
+        camera.worldToCamera.setRow(2, {0, -.149438143f, .988771081f});
+        camera.worldToCamera.p = {2707.25879f, 2048.98682f, 242.573746f};
+        sim::ShadowPolygon thin;
+        thin.vertices = {{{-2349.40332f, -2455.99561f, 64.6873856f}, {0, .41559571f}},
+                         {{-2348.84692f, -2457.13647f, 65.0206375f}, {0, .14491123f}},
+                         {{-2348.54883f, -2457.74731f, 65.1990433f}, {0, 0}}};
+        auto broad = thin;
+        broad.vertices[2].position.z += .25f;
+        sim::ShadowGeometry geometry{{thin, broad}, 1};
+        sim::ShadowBitmap bitmap{16, std::vector<UInt8>(16 * 16, 128), true};
+        const std::array<sim::EnvironmentShadow, 1> shadows{{{geometry, bitmap}}};
+        gfx::Palette palette;
+        const auto hardware = sim::prepareHardwareEnvironment(camera, {}, {}, palette, shadows);
+        CHECK(hardware && hardware->draws().size() == 1);
+        const auto software = sim::SoftwareEnvironment::prepare(camera, {}, shadows);
+        CHECK(software && software->polygonCount() == 1);
+        auto surface = gfx::SoftwareSurface::create(800, 600);
+        CHECK(surface && surface->setPalette(palette) && software->draw(*surface));
+    });
+}
+
 int retainedInteriorLighting() {
     return test::run([] {
         ResourceManager manager;
@@ -456,3 +489,4 @@ OPENT1_REGISTER_TEST("world", "retained_terrain_patches", retainedTerrainPatches
 OPENT1_REGISTER_TEST("world", "shared_render_inputs", sharedRenderInputs);
 OPENT1_REGISTER_TEST("world", "render_scratch_lifetimes", renderScratchLifetimes);
 OPENT1_REGISTER_TEST("world", "environment_scratch_ownership", environmentScratchOwnership);
+OPENT1_REGISTER_TEST("world", "clipped_shadow_precision", clippedShadowPrecision);

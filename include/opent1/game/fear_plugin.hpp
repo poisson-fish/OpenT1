@@ -104,6 +104,7 @@ public:
     void endFrame() override;
 
     bool createServerWorld(std::string_view missionName = {}, bool dedicated = false);
+    bool bindServerPort(UInt16 port);
 
     void setWriteRoot(std::filesystem::path root) {
         writeRoot_ = std::move(root);

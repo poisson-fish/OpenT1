@@ -71,34 +71,30 @@ set(suites
     game
     video
 )
-if(OPENT1_BUILD_AUDIO)
-    target_sources(opent1_tests PRIVATE audio/audio_test.cpp)
-    target_link_libraries(opent1_tests PRIVATE opent1_audio_sim)
+target_sources(opent1_tests PRIVATE audio/audio_test.cpp)
+target_link_libraries(opent1_tests PRIVATE opent1_audio_sim)
+add_custom_command(
+    TARGET opent1_tests
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:OpenAL>
+            $<TARGET_FILE_DIR:opent1_tests>
+)
+list(APPEND suites audio)
+target_compile_definitions(opent1_tests PRIVATE OPENT1_SHELL_GPU=1)
+option(OPENT1_TEST_GPU "Register real-device GPU tests (requires a native video driver)" OFF)
+set(OPENT1_TEST_GPU_DRIVER
+    "" CACHE STRING "SDL GPU backend for real-device tests (empty selects automatically)"
+)
+target_sources(opent1_tests PRIVATE platform/window_test.cpp platform/gpu_cache_test.cpp)
+if(WIN32 AND TARGET SDL3::SDL3-shared)
     add_custom_command(
         TARGET opent1_tests
         POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:OpenAL>
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared>
                 $<TARGET_FILE_DIR:opent1_tests>
     )
-    list(APPEND suites audio)
 endif()
-if(OPENT1_BUILD_PLATFORM)
-    target_compile_definitions(opent1_tests PRIVATE OPENT1_SHELL_GPU=1)
-    option(OPENT1_TEST_GPU "Register real-device GPU tests (requires a native video driver)" OFF)
-    set(OPENT1_TEST_GPU_DRIVER
-        "" CACHE STRING "SDL GPU backend for real-device tests (empty selects automatically)"
-    )
-    target_sources(opent1_tests PRIVATE platform/window_test.cpp platform/gpu_cache_test.cpp)
-    if(WIN32 AND TARGET SDL3::SDL3-shared)
-        add_custom_command(
-            TARGET opent1_tests
-            POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared>
-                    $<TARGET_FILE_DIR:opent1_tests>
-        )
-    endif()
-    list(APPEND suites platform)
-endif()
+list(APPEND suites platform)
 
 foreach(suite IN LISTS suites)
     # Separate working directories keep temporary files isolated under parallel CTest.
@@ -126,7 +122,14 @@ set_tests_properties(
                ENVIRONMENT "SDL_VIDEODRIVER=dummy;ALSOFT_DRIVERS=null"
 )
 
-if(OPENT1_BUILD_PLATFORM AND OPENT1_TEST_GPU)
+add_test(NAME runtime_dedicated COMMAND opent1 --no-assets --no-audio -dedicated --frames 4)
+set_tests_properties(
+    runtime_dedicated
+    PROPERTIES TIMEOUT 30 LABELS integration
+               ENVIRONMENT "SDL_VIDEODRIVER=opent1-invalid-driver;ALSOFT_DRIVERS=null"
+)
+
+if(OPENT1_TEST_GPU)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/gpu")
     add_test(NAME gpu COMMAND opent1_tests --suite gpu)
     set_tests_properties(
@@ -157,5 +160,5 @@ set_tests_properties(
                LABELS
                integration
                ENVIRONMENT
-               "SDL_VIDEODRIVER=dummy;ALSOFT_DRIVERS=null"
+               "SDL_VIDEODRIVER=opent1-invalid-driver;ALSOFT_DRIVERS=null"
 )

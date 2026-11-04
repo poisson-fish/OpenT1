@@ -336,13 +336,13 @@ adds a normal-frame RPG hunt trace. Exit 0 means all checks match, 1 means a
 comparison failed, and 2 means setup failed.
 
 ```powershell
-cmake --build --preset headless --target opent1 opent1_tests --parallel 8
-.\build\headless\opent1_ai_behavior_audit.exe
-.\build\headless\opent1_ai_behavior_audit.exe ..\TribesRE\PCRPG
-ctest --preset headless --output-on-failure
+cmake --build --preset x64-release --target opent1 opent1_tests --parallel 8
+.\build\x64-release\opent1_ai_behavior_audit.exe
+.\build\x64-release\opent1_ai_behavior_audit.exe ..\TribesRE\PCRPG
+ctest --preset x64-release --output-on-failure
 $env:OPENT1_TEST_ASSETS = (Resolve-Path ..\TribesRE\PCRPG).Path
-.\build\headless\tests\opent1_tests.exe --suite trpg
-.\build\headless\tests\opent1_tests.exe --suite fixpack
+.\build\x64-release\tests\opent1_tests.exe --suite trpg
+.\build\x64-release\tests\opent1_tests.exe --suite fixpack
 ```
 
 A third argument after the asset root limits the trace's frame count for diagnosis;

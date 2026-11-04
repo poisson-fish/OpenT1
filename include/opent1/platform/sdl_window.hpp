@@ -107,6 +107,11 @@ public:
                   std::function<bool()> frame);
 
 protected:
+    // Windowless hosts can request events without initializing a video driver.
+    virtual SDL_InitFlags requiredSubsystems(std::span<const std::string_view>) const {
+        return SDL_INIT_VIDEO | SDL_INIT_GAMEPAD;
+    }
+
     virtual bool onInit(std::span<const std::string_view>) {
         return true;
     }

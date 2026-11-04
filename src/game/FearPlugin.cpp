@@ -840,18 +840,19 @@ bool FearPlugin::createServerWorld(std::string_view missionName, bool dedicated)
     auto pm = std::make_unique<world::SimPathManager>();
     mgr.addObject(std::move(pm));
 
-    const auto port = console_ && resources_->contains("console.cs")
+    const auto port = console_ && parseBoolSv(console_->getVariable("OpenT1::ConsoleCSExecuted"))
                           ? parseIntSv(console_->getVariable("Server::Port"))
                           : 0;
     auto transport =
         net::makeGameTransport({{0, 0, 0, 0}, static_cast<UInt16>(port > 0 ? port : 0)});
     auto csd = std::make_unique<FearCSDelegate>(true, banList_, netRegistry_, std::move(transport));
+    csd->config().dedicated = dedicated;
+    game_.console().setVariable("Server::Dedicated", dedicated ? "true" : "false");
     csd->configureGameStream = [this](auto& stream) {
         return configureRemoteStream(stream);
     };
     auto* rawCsd = dynamic_cast<FearCSDelegate*>(mgr.addObject(std::move(csd)));
     if (rawCsd) {
-        rawCsd->config().dedicated = dedicated;
         rawCsd->bindConsole(game_.console());
     }
 
@@ -914,6 +915,35 @@ bool FearPlugin::createServerWorld(std::string_view missionName, bool dedicated)
     game_.focus(sim::WorldType::Server);
     refreshActiveGlobals();
     return true;
+}
+
+bool FearPlugin::bindServerPort(UInt16 port) {
+    if (!sg_.manager || !sg_.csDelegate || !sg_.csDelegate->delegate()) {
+        return false;
+    }
+    const auto address = net::parseIPv4Address(sg_.csDelegate->delegate()->localAddress());
+    if (port == 0 || (address && address->port == port)) {
+        return true;
+    }
+    if (!sg_.csDelegate->connectedPeers().empty()) {
+        return false;
+    }
+    // console.cs creates the world before it reads server preferences. Replace
+    // only its unused listener after startup, preserving the mission and bots.
+    auto transport = net::makeGameTransport({{0, 0, 0, 0}, port});
+    auto replacement =
+        std::make_unique<FearCSDelegate>(true, banList_, netRegistry_, std::move(transport));
+    replacement->configureGameStream = [this](auto& stream) {
+        return configureRemoteStream(stream);
+    };
+    replacement->config() = sg_.csDelegate->config();
+    replacement->bindConsole(game_.console());
+    auto* previous = sg_.csDelegate;
+    sg_.csDelegate = nullptr;
+    previous->deleteObject();
+    sg_.csDelegate =
+        dynamic_cast<FearCSDelegate*>(sg_.manager->addObject(std::move(replacement)));
+    return sg_.csDelegate != nullptr;
 }
 
 bool FearPlugin::createClientWorld() {
@@ -2092,11 +2122,12 @@ void FearPlugin::init(Console& console, sim::SimManager* manager) {
         });
 
     console.addCommand(
-        0, "newServer", [this](Console&, Int32, std::span<const std::string> argv) -> std::string {
+        0, "newServer", [this](Console& con, Int32, std::span<const std::string> argv) -> std::string {
             const std::string_view mission =
                 (argv.size() >= 2) ? std::string_view(argv[1]) : std::string_view{};
-            const bool dedicated =
-                (argv.size() >= 3) && (argv[2] == "true" || argv[2] == "True" || argv[2] == "1");
+            const bool dedicated = argv.size() >= 3
+                                       ? parseBoolSv(argv[2])
+                                       : parseBoolSv(con.getVariable("dedicated"));
             return createServerWorld(mission, dedicated) ? "True" : "False";
         });
 
@@ -4765,6 +4796,24 @@ bool FearGameApp::executeConsoleCS() {
         console.print(error);
         std::cerr << error << '\n';
         return false;
+    }
+    if (fearPlugin_->serverGlobals().manager) {
+        const auto port = parseIntSv(console.getVariable("Server::Port"));
+        std::string error;
+        try {
+            if (port < 0 || port > 65535 || !fearPlugin_->bindServerPort(static_cast<UInt16>(port))) {
+                error = "Cannot bind game server port " + std::to_string(port);
+            }
+        } catch (const std::runtime_error& exception) {
+            error = "Cannot bind game server port " + std::to_string(port) + ": " + exception.what();
+        }
+        if (!error.empty()) {
+            console.setVariable("OpenT1::LastNetworkError", error);
+            console.setVariable("OpenT1::StartupError", error);
+            console.print(error);
+            std::cerr << error << '\n';
+            return false;
+        }
     }
     console.setVariable("OpenT1::ConsoleCSExecuted", "true");
     if (auto font = resources_->load<gfx::BitmapFont>("interface.pft")) {

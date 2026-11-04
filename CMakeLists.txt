@@ -12,10 +12,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(CTest)
-option(OPENT1_BUILD_PLATFORM "Build SDL3 windowing and events" ON)
 option(OPENT1_FETCH_SDL "Fetch pinned SDL3 if no installed package is available" ON)
 option(OPENT1_BUILD_EXAMPLES "Build native OpenT1 demonstration applications" OFF)
-option(OPENT1_BUILD_AUDIO "Build OpenAL Soft audio and client simulation adapter" ON)
 option(OPENT1_BUILD_TERRAIN2 "Build the optional native Terrain2 authoring/render branch" ON)
 
 # -----------------------------------------------------------------------------
@@ -145,48 +143,46 @@ target_link_libraries(opent1_net PUBLIC opent1_core)
 if(WIN32)
     target_link_libraries(opent1_net PRIVATE ws2_32)
 endif()
-if(OPENT1_BUILD_PLATFORM)
-    find_package(SDL3 3.2 CONFIG QUIET)
-    if(NOT SDL3_FOUND)
-        if(NOT OPENT1_FETCH_SDL)
-            message(FATAL_ERROR "Install SDL3 >= 3.2, set SDL3_DIR, or enable OPENT1_FETCH_SDL")
-        endif()
-        include(FetchContent)
-        set(SDL_SHARED
-            OFF
-            CACHE BOOL "" FORCE
-        )
-        set(SDL_STATIC
-            ON
-            CACHE BOOL "" FORCE
-        )
-        set(SDL_TEST_LIBRARY
-            OFF
-            CACHE BOOL "" FORCE
-        )
-        set(SDL_TESTS
-            OFF
-            CACHE BOOL "" FORCE
-        )
-        set(SDL_EXAMPLES
-            OFF
-            CACHE BOOL "" FORCE
-        )
-        fetchcontent_declare(
-            SDL3
-            URL https://github.com/libsdl-org/SDL/releases/download/release-3.4.2/SDL3-3.4.2.tar.gz
-            URL_HASH SHA256=ef39a2e3f9a8a78296c40da701967dd1b0d0d6e267e483863ce70f8a03b4050c
-            DOWNLOAD_DIR "${CMAKE_BINARY_DIR}/downloads"
-            DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-            TIMEOUT 120
-            INACTIVITY_TIMEOUT 30
-        )
-        fetchcontent_makeavailable(SDL3)
-        include(cmake/SDL3EventWatch.cmake)
+find_package(SDL3 3.2 CONFIG QUIET)
+if(NOT SDL3_FOUND)
+    if(NOT OPENT1_FETCH_SDL)
+        message(FATAL_ERROR "Install SDL3 >= 3.2, set SDL3_DIR, or enable OPENT1_FETCH_SDL")
     endif()
-    add_library(opent1_platform STATIC src/platform/sdl_window.cpp)
-    target_link_libraries(opent1_platform PUBLIC opent1_core opent1_net SDL3::SDL3)
+    include(FetchContent)
+    set(SDL_SHARED
+        OFF
+        CACHE BOOL "" FORCE
+    )
+    set(SDL_STATIC
+        ON
+        CACHE BOOL "" FORCE
+    )
+    set(SDL_TEST_LIBRARY
+        OFF
+        CACHE BOOL "" FORCE
+    )
+    set(SDL_TESTS
+        OFF
+        CACHE BOOL "" FORCE
+    )
+    set(SDL_EXAMPLES
+        OFF
+        CACHE BOOL "" FORCE
+    )
+    fetchcontent_declare(
+        SDL3
+        URL https://github.com/libsdl-org/SDL/releases/download/release-3.4.2/SDL3-3.4.2.tar.gz
+        URL_HASH SHA256=ef39a2e3f9a8a78296c40da701967dd1b0d0d6e267e483863ce70f8a03b4050c
+        DOWNLOAD_DIR "${CMAKE_BINARY_DIR}/downloads"
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        TIMEOUT 120
+        INACTIVITY_TIMEOUT 30
+    )
+    fetchcontent_makeavailable(SDL3)
+    include(cmake/SDL3EventWatch.cmake)
 endif()
+add_library(opent1_platform STATIC src/platform/sdl_window.cpp)
+target_link_libraries(opent1_platform PUBLIC opent1_core opent1_net SDL3::SDL3)
 
 # -----------------------------------------------------------------------------
 # Layer 4: simulation object graph, event scheduling and services
@@ -228,13 +224,9 @@ target_link_libraries(opent1_sim PUBLIC opent1_console opent1_math opent1_net op
 if(WIN32)
     target_link_libraries(opent1_sim PRIVATE winmm ole32 oleaut32 strmiids)
 endif()
-if(OPENT1_BUILD_AUDIO)
-    include(cmake/OpenALSoft.cmake)
-endif()
-if(OPENT1_BUILD_PLATFORM)
-    add_library(opent1_sim_sdl STATIC src/sim/sim_sdl_input.cpp src/sim/sim_sdl_canvas.cpp)
-    target_link_libraries(opent1_sim_sdl PUBLIC opent1_sim opent1_platform)
-endif()
+include(cmake/OpenALSoft.cmake)
+add_library(opent1_sim_sdl STATIC src/sim/sim_sdl_input.cpp src/sim/sim_sdl_canvas.cpp)
+target_link_libraries(opent1_sim_sdl PUBLIC opent1_sim opent1_platform)
 
 # -----------------------------------------------------------------------------
 # Layer 5: graphics assets and portable indexed drawing (independent of SDL/sim)
@@ -256,28 +248,26 @@ add_library(
                           src/sim/sim_inspector.cpp
 )
 target_link_libraries(opent1_sim_gfx PUBLIC opent1_sim opent1_gfx)
-if(OPENT1_BUILD_PLATFORM)
-    include(cmake/embed_gpu_shaders.cmake)
-    add_library(opent1_gfx_sdl STATIC src/gfx/sdl_gpu_surface.cpp src/gfx/sdl_gpu_material.cpp)
-    target_include_directories(opent1_gfx_sdl PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
-    target_link_libraries(opent1_gfx_sdl PUBLIC opent1_gfx opent1_platform)
-    add_library(opent1_sim_gfx_sdl STATIC src/sim/sim_gpu_canvas.cpp src/sim/sim_sdl_inspector.cpp)
-    target_link_libraries(opent1_sim_gfx_sdl PUBLIC opent1_sim_sdl opent1_gfx_sdl opent1_sim_gfx)
-    if(OPENT1_BUILD_EXAMPLES)
-        add_executable(opent1_inspector_demo examples/inspector_demo.cpp)
-        target_link_libraries(opent1_inspector_demo PRIVATE opent1_sim_gfx_sdl)
-        add_executable(opent1_renderer_demo WIN32 examples/renderer_demo.cpp)
-        target_link_libraries(opent1_renderer_demo PRIVATE opent1_gfx_sdl)
-        if(WIN32 AND TARGET SDL3::SDL3-shared)
-            foreach(example IN ITEMS opent1_inspector_demo opent1_renderer_demo)
-                add_custom_command(
-                    TARGET ${example}
-                    POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared>
-                            $<TARGET_FILE_DIR:${example}>
-                )
-            endforeach()
-        endif()
+include(cmake/embed_gpu_shaders.cmake)
+add_library(opent1_gfx_sdl STATIC src/gfx/sdl_gpu_surface.cpp src/gfx/sdl_gpu_material.cpp)
+target_include_directories(opent1_gfx_sdl PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+target_link_libraries(opent1_gfx_sdl PUBLIC opent1_gfx opent1_platform)
+add_library(opent1_sim_gfx_sdl STATIC src/sim/sim_gpu_canvas.cpp src/sim/sim_sdl_inspector.cpp)
+target_link_libraries(opent1_sim_gfx_sdl PUBLIC opent1_sim_sdl opent1_gfx_sdl opent1_sim_gfx)
+if(OPENT1_BUILD_EXAMPLES)
+    add_executable(opent1_inspector_demo examples/inspector_demo.cpp)
+    target_link_libraries(opent1_inspector_demo PRIVATE opent1_sim_gfx_sdl)
+    add_executable(opent1_renderer_demo WIN32 examples/renderer_demo.cpp)
+    target_link_libraries(opent1_renderer_demo PRIVATE opent1_gfx_sdl)
+    if(WIN32 AND TARGET SDL3::SDL3-shared)
+        foreach(example IN ITEMS opent1_inspector_demo opent1_renderer_demo)
+            add_custom_command(
+                TARGET ${example}
+                POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared>
+                        $<TARGET_FILE_DIR:${example}>
+            )
+        endforeach()
     endif()
 endif()
 
@@ -345,10 +335,8 @@ target_sources(
                              src/world/object_plugins.cpp
 )
 target_sources(opent1_world_sim PRIVATE src/world/terrain_editor.cpp)
-if(OPENT1_BUILD_AUDIO)
-    add_library(opent1_world_audio STATIC src/world/sound_marker.cpp)
-    target_link_libraries(opent1_world_audio PUBLIC opent1_world_sim opent1_audio_sim)
-endif()
+add_library(opent1_world_audio STATIC src/world/sound_marker.cpp)
+target_link_libraries(opent1_world_audio PUBLIC opent1_world_sim opent1_audio_sim)
 add_library(
     opent1_gui STATIC
     src/gui/gui.cpp
@@ -570,69 +558,51 @@ add_library(
     src/main/main.cpp
 )
 target_link_libraries(opent1_game PUBLIC opent1_gui_world opent1_video)
-if(OPENT1_BUILD_PLATFORM AND OPENT1_BUILD_AUDIO)
-    add_library(opent1_video_sdl STATIC src/video/sdl_player.cpp src/video/audio_player.cpp)
-    target_link_libraries(opent1_video_sdl PUBLIC opent1_video opent1_gfx_sdl opent1_audio)
-    if(OPENT1_BUILD_EXAMPLES)
-        add_executable(opent1_smacker_player examples/smacker_player.cpp)
-        target_link_libraries(opent1_smacker_player PRIVATE opent1_video_sdl)
+add_library(opent1_video_sdl STATIC src/video/sdl_player.cpp src/video/audio_player.cpp)
+target_link_libraries(opent1_video_sdl PUBLIC opent1_video opent1_gfx_sdl opent1_audio)
+if(OPENT1_BUILD_EXAMPLES)
+    add_executable(opent1_smacker_player examples/smacker_player.cpp)
+    target_link_libraries(opent1_smacker_player PRIVATE opent1_video_sdl)
+    add_custom_command(
+        TARGET opent1_smacker_player
+        POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:OpenAL>
+                $<TARGET_FILE_DIR:opent1_smacker_player>
+    )
+    if(WIN32 AND TARGET SDL3::SDL3-shared)
         add_custom_command(
             TARGET opent1_smacker_player
             POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:OpenAL>
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared>
                     $<TARGET_FILE_DIR:opent1_smacker_player>
         )
-        if(WIN32 AND TARGET SDL3::SDL3-shared)
-            add_custom_command(
-                TARGET opent1_smacker_player
-                POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared>
-                        $<TARGET_FILE_DIR:opent1_smacker_player>
-            )
-        endif()
     endif()
 endif()
-if(OPENT1_BUILD_PLATFORM)
-    add_library(opent1_gui_sdl STATIC src/gui/sdl_gui.cpp)
-    target_link_libraries(opent1_gui_sdl PUBLIC opent1_gui opent1_platform)
-    add_library(
-        opent1_gui_tools_sdl STATIC
-        src/gui/sdl_presentation.cpp
-        src/gui/sdl_terrain_tools.cpp
-        src/gui/native_object_hosts.cpp
-        src/gui/native_input_host.cpp
-        src/gui/native_tree_host.cpp
-        src/gui/native_editor_host.cpp
-        src/gui/native_tool_host.cpp
-        src/gui/sdl_modal.cpp
-    )
-    target_link_libraries(
-        opent1_gui_tools_sdl PUBLIC opent1_gui_world opent1_gui_sdl opent1_sim_gfx_sdl
-    )
-    if(WIN32)
-        target_link_libraries(opent1_gui_tools_sdl PRIVATE shell32)
-    endif()
-    target_link_libraries(opent1_game INTERFACE opent1_gui_tools_sdl opent1_sim_gfx_sdl)
-    # The runtime source in this library includes SDL directly. Package aliases
-    # may forward their headers through SDL3::Headers rather than expose paths.
-    target_link_libraries(opent1_game PRIVATE SDL3::SDL3)
-    set_property(
-        SOURCE src/main/main.cpp
-        APPEND
-        PROPERTY COMPILE_DEFINITIONS OPENT1_HAS_SDL3_MAIN=1
-    )
+add_library(opent1_gui_sdl STATIC src/gui/sdl_gui.cpp)
+target_link_libraries(opent1_gui_sdl PUBLIC opent1_gui opent1_platform)
+add_library(
+    opent1_gui_tools_sdl STATIC
+    src/gui/sdl_presentation.cpp
+    src/gui/sdl_terrain_tools.cpp
+    src/gui/native_object_hosts.cpp
+    src/gui/native_input_host.cpp
+    src/gui/native_tree_host.cpp
+    src/gui/native_editor_host.cpp
+    src/gui/native_tool_host.cpp
+    src/gui/sdl_modal.cpp
+)
+target_link_libraries(
+    opent1_gui_tools_sdl PUBLIC opent1_gui_world opent1_gui_sdl opent1_sim_gfx_sdl
+)
+if(WIN32)
+    target_link_libraries(opent1_gui_tools_sdl PRIVATE shell32)
 endif()
-if(OPENT1_BUILD_AUDIO)
-    target_link_libraries(opent1_game INTERFACE opent1_world_audio)
-    set_property(
-        SOURCE src/main/main.cpp
-        APPEND
-        PROPERTY COMPILE_DEFINITIONS OPENT1_HAS_AUDIO=1
-    )
-endif()
-if(TARGET opent1_video_sdl)
-    target_link_libraries(opent1_game INTERFACE opent1_video_sdl)
-endif()
+target_link_libraries(opent1_game INTERFACE opent1_gui_tools_sdl opent1_sim_gfx_sdl)
+# The runtime source in this library includes SDL directly. Package aliases
+# may forward their headers through SDL3::Headers rather than expose paths.
+target_link_libraries(opent1_game PRIVATE SDL3::SDL3)
+target_link_libraries(opent1_game INTERFACE opent1_world_audio)
+target_link_libraries(opent1_game INTERFACE opent1_video_sdl)
 add_executable(opent1 src/main/main.cpp)
 target_compile_definitions(opent1 PRIVATE OPENT1_STANDALONE_EXECUTABLE=1)
 target_link_libraries(opent1 PRIVATE opent1_game)
@@ -655,17 +625,15 @@ foreach(audit_runtime IN ITEMS OpenAL SDL3::SDL3-shared)
         )
     endif()
 endforeach()
-if(OPENT1_BUILD_PLATFORM)
-    add_executable(opent1_render_benchmark EXCLUDE_FROM_ALL tools/render_benchmark.cpp)
-    target_link_libraries(opent1_render_benchmark PRIVATE opent1_game opent1_gfx_sdl)
-    if(WIN32 AND TARGET SDL3::SDL3-shared)
-        add_custom_command(
-            TARGET opent1_render_benchmark
-            POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared>
-                    $<TARGET_FILE_DIR:opent1_render_benchmark>
-        )
-    endif()
+add_executable(opent1_render_benchmark EXCLUDE_FROM_ALL tools/render_benchmark.cpp)
+target_link_libraries(opent1_render_benchmark PRIVATE opent1_game opent1_gfx_sdl)
+if(WIN32 AND TARGET SDL3::SDL3-shared)
+    add_custom_command(
+        TARGET opent1_render_benchmark
+        POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared>
+                $<TARGET_FILE_DIR:opent1_render_benchmark>
+    )
 endif()
 # Explicit diagnostic target: allocation tracking is confined to this executable.
 add_executable(opent1_memory_audit EXCLUDE_FROM_ALL tools/memory_audit.cpp src/audio/wave.cpp)
@@ -673,19 +641,15 @@ target_link_libraries(opent1_memory_audit PRIVATE opent1_game)
 if(WIN32)
     target_link_libraries(opent1_memory_audit PRIVATE psapi dxgi)
 endif()
-if(OPENT1_BUILD_PLATFORM)
-    target_compile_definitions(opent1_memory_audit PRIVATE OPENT1_MEMORY_GPU=1)
-    target_include_directories(opent1_memory_audit PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/gfx")
-    target_link_libraries(opent1_memory_audit PRIVATE opent1_gfx_sdl)
-endif()
-if(OPENT1_BUILD_AUDIO)
-    add_custom_command(
-        TARGET opent1_memory_audit
-        POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:OpenAL>
-                $<TARGET_FILE_DIR:opent1_memory_audit>
-    )
-endif()
+target_compile_definitions(opent1_memory_audit PRIVATE OPENT1_MEMORY_GPU=1)
+target_include_directories(opent1_memory_audit PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/gfx")
+target_link_libraries(opent1_memory_audit PRIVATE opent1_gfx_sdl)
+add_custom_command(
+    TARGET opent1_memory_audit
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:OpenAL>
+            $<TARGET_FILE_DIR:opent1_memory_audit>
+)
 if(WIN32 AND TARGET SDL3::SDL3-shared)
     add_custom_command(
         TARGET opent1_memory_audit
@@ -694,14 +658,12 @@ if(WIN32 AND TARGET SDL3::SDL3-shared)
                 $<TARGET_FILE_DIR:opent1_memory_audit>
     )
 endif()
-if(OPENT1_BUILD_AUDIO)
-    add_custom_command(
-        TARGET opent1
-        POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:OpenAL>
-                $<TARGET_FILE_DIR:opent1>
-    )
-endif()
+add_custom_command(
+    TARGET opent1
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:OpenAL>
+            $<TARGET_FILE_DIR:opent1>
+)
 if(WIN32 AND TARGET SDL3::SDL3-shared)
     add_custom_command(
         TARGET opent1
@@ -713,7 +675,7 @@ endif()
 if(TARGET opent1_renderer_demo)
     target_link_libraries(opent1_renderer_demo PRIVATE opent1_world opent1_sim_gfx)
 endif()
-if(OPENT1_BUILD_PLATFORM AND OPENT1_BUILD_EXAMPLES)
+if(OPENT1_BUILD_EXAMPLES)
     add_executable(opent1_ts_shape_demo examples/ts_shape_demo.cpp)
     target_link_libraries(opent1_ts_shape_demo PRIVATE opent1_world_sim opent1_gfx_sdl)
     add_executable(opent1_world_surface_demo examples/world_surface_demo.cpp)

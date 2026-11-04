@@ -140,7 +140,7 @@ normal zone-based spawning and an isolated writable profile. The optional
 it does not edit the installation.
 
 ```powershell
-cmake --preset headless -B build/ai-waypoint-audit -DCMAKE_BUILD_TYPE=Release
+cmake --preset x64-release -B build/ai-waypoint-audit
 cmake --build build/ai-waypoint-audit --target opent1 opent1_tests --parallel 8
 ctest --test-dir build/ai-waypoint-audit --output-on-failure
 .\build\ai-waypoint-audit\opent1_ai_behavior_audit.exe --mayor ..\Wasteland 4000

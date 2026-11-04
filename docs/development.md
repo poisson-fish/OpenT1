@@ -10,7 +10,6 @@ SDK, so a developer command prompt is not required.
 | --- | --- |
 | `x64-debug` | Debug, SDL3, OpenAL Soft, tests |
 | `x64-release` | Release, SDL3, OpenAL Soft, tests |
-| `headless` | Debug, tests, no SDL3 or OpenAL dependency |
 
 Each preset supports the same three commands:
 
@@ -50,8 +49,7 @@ cmake --build --preset linux-debug --parallel 3
 ctest --preset linux-debug
 ```
 
-Use `linux-release` for an optimized desktop build or `linux-headless` for a
-Debug build without SDL3 or OpenAL. On distributions with different executable
+Use `linux-release` for an optimized build. On distributions with different executable
 names, override `CMAKE_C_COMPILER` and `CMAKE_CXX_COMPILER` at configuration time
 with a compiler supporting the C++20 facilities listed below.
 
@@ -67,8 +65,7 @@ cmake --build --preset macos-debug --parallel 3
 ctest --preset macos-debug
 ```
 
-Use `macos-release` for an optimized desktop build or `macos-headless` for a
-Debug build without SDL3 or OpenAL. A custom LLVM installation can be selected
+Use `macos-release` for an optimized build. A custom LLVM installation can be selected
 with `-DOPENT1_LLVM_ROOT=/path/to/llvm` in a fresh build directory. The toolchain
 prefers the current `llvm` formula and falls back to `llvm@20` if installed.
 After upgrading or switching compilers, run `cmake --fresh --preset <name>` to
@@ -80,11 +77,11 @@ With CMake Tools, run **CMake: Select Configure Preset**, choose a preset for
 your platform, then run **CMake: Configure**. Configure presets are filtered by
 host operating system. All platforms have configure, build, and test presets:
 
-| Platform | Debug | Release | Headless |
-| --- | --- | --- | --- |
-| Windows (MSVC) | `x64-debug` | `x64-release` | `headless` |
-| macOS (Homebrew LLVM) | `macos-debug` | `macos-release` | `macos-headless` |
-| Linux (GCC 14) | `linux-debug` | `linux-release` | `linux-headless` |
+| Platform | Debug | Release |
+| --- | --- | --- |
+| Windows (MSVC) | `x64-debug` | `x64-release` |
+| macOS (Homebrew LLVM) | `macos-debug` | `macos-release` |
+| Linux (GCC 14) | `linux-debug` | `linux-release` |
 
 Each preset uses its own build directory, avoiding cached compiler selections
 from a different platform.
@@ -93,11 +90,11 @@ from a different platform.
 
 On Linux or macOS, use an out-of-tree build with a compiler and standard
 library supporting C++20, including `std::format`, `std::jthread`, and
-`std::stop_token` (GCC 14 or newer, or LLVM 20 or newer with matching libc++). For a full desktop
-build, install SDL's platform development dependencies first; CI's Linux
+`std::stop_token` (GCC 14 or newer, or LLVM 20 or newer with matching libc++).
+Install SDL's platform development dependencies first; CI's Linux
 installation step lists the packages used on Ubuntu 24.04. Configuration fetches
 SDL3 if an installed package is unavailable
-and always fetches OpenAL Soft when audio is enabled.
+and always fetches OpenAL Soft.
 
 ```sh
 cmake -S . -B build/desktop -G Ninja -DCMAKE_BUILD_TYPE=Debug \
@@ -122,27 +119,21 @@ export LDFLAGS="-L$llvm_prefix/lib/c++ -Wl,-rpath,$llvm_prefix/lib/c++"
 export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
 ```
 
-Then run the desktop or headless CMake commands in this section. The runtime
+Then run the CMake commands in this section. The runtime
 search path keeps tests and executables using the same Homebrew libc++ that
 they were built against.
 
-For the dependency-free subset:
-
-```sh
-cmake -S . -B build/headless -G Ninja -DCMAKE_BUILD_TYPE=Debug \
-  -DOPENT1_BUILD_PLATFORM=OFF -DOPENT1_BUILD_AUDIO=OFF
-cmake --build build/headless --parallel 8
-ctest --test-dir build/headless --output-on-failure --no-tests=error
-```
+Every build includes SDL3 and OpenAL support. Use the same executable for
+interactive play and dedicated servers; `--headless --no-audio` skips video,
+GPU, gamepad, and playback-device initialization. There are no separate
+headless build presets or dependency-free runtime variants.
 
 ## Options
 
 | Option | Default | Effect |
 | --- | --- | --- |
 | `BUILD_TESTING` | `ON` | Build and register the unified test runner |
-| `OPENT1_BUILD_PLATFORM` | `ON` | Build SDL3 window/input/GPU adapters |
 | `OPENT1_FETCH_SDL` | `ON` | Fetch SDL3 if an installed package is unavailable |
-| `OPENT1_BUILD_AUDIO` | `ON` | Build OpenAL audio and simulation adapters |
 | `OPENT1_BUILD_EXAMPLES` | `OFF` | Build native demonstration applications |
 | `OPENT1_BUILD_TERRAIN2` | `ON` | Include the additional Terrain2 authoring/render branch |
 | `OPENT1_TEST_GPU` | `OFF` | Register the optional real-device GPU test |
@@ -171,12 +162,12 @@ exercise the affected GPU backends before distributing a shader change.
 
 ## Test suite
 
-The full build registers 50 standard C++ cases in one executable and 12 subsystem suites:
+The build registers standard C++ cases in one executable and 12 subsystem suites:
 core, math, console, network, simulation, graphics, world, GUI, game, video,
-and optional audio/platform.
-CTest also runs an application smoke check, for 13 CTest checks in total.
-Headless builds register 47 standard C++ cases in 10 subsystem suites plus the smoke
-check, for 11 CTest checks. They omit the audio and platform cases. Default
+audio, and platform.
+CTest also runs the AI parity audit and application startup checks. The headless
+smoke test and dedicated startup test select an invalid SDL video driver to
+verify that these modes do not initialize video. Default
 checks use the bundled fixtures and do not need a game installation, Python,
 or an external reference executable.
 
@@ -295,12 +286,13 @@ zoom notifications triggered by input, and ferry waypoint arrival and reset.
 ## Continuous integration and validation limits
 
 The [CI workflow](../.github/workflows/build.yml) is configured to build and test
-desktop and headless Debug configurations on Linux x64 (`ubuntu-24.04`, GCC 14), macOS
+the Debug configuration on Linux x64 (`ubuntu-24.04`, GCC 14), macOS
 ARM64 (`macos-15`, Homebrew LLVM 20 and libc++ 20), and Windows x64 (`windows-2025`, MSVC).
-Desktop jobs enable all optional libraries, Terrain2, and all five demos, and
+Jobs enable Terrain2 and all five demos, and
 build the default all-targets graph. Every job runs all applicable CTest suites
-and the application smoke test without an external installation, using SDL's dummy
-video and OpenAL's null audio drivers. CI fetches the pinned SDL source even
+and the application startup tests without an external installation. Windowed
+tests use SDL's dummy video driver and OpenAL's null audio driver; headless
+startup tests run with an invalid video driver. CI fetches the pinned SDL source even
 if a system SDL package is installed, so the nested-dispatch fix is exercised.
 The workflow runs on pushes and pull requests and can be started manually.
 The matrix describes configured coverage; successful workflow runs and the

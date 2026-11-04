@@ -31,17 +31,17 @@ cmake --build --preset x64-debug --parallel 8
 ctest --preset x64-debug
 ```
 
-Use `x64-release` for an optimized build. For a build without SDL3, audio, or
-dependency downloads, use the `headless` preset. See [building and testing](docs/development.md)
+Use `x64-release` for an optimized build. The same executable supports windowed
+play and headless dedicated servers. See [building and testing](docs/development.md)
 for portable configuration, build options, and the test suite.
 
 On macOS, install CMake, Ninja, and Homebrew LLVM (`brew install cmake ninja llvm`),
-then use `macos-debug`, `macos-release`, or `macos-headless`. In VS Code, run
+then use `macos-debug` or `macos-release`. In VS Code, run
 **CMake: Select Configure Preset** and choose the corresponding macOS preset.
 These presets select the compiler and matching C++ library automatically.
 
 On Linux, install GCC 14, CMake, Ninja, and SDL's platform development dependencies,
-then use `linux-debug`, `linux-release`, or `linux-headless`.
+then use `linux-debug` or `linux-release`.
 
 ## Run
 
@@ -59,8 +59,9 @@ A short demonstration can also run without any game data:
 ```
 
 See the [runtime reference](docs/runtime.md) for asset lookup, rendering options,
-startup scripts, output files, and the differences between SDL and headless
-execution.
+startup scripts, output files, and dedicated-server execution with
+`-dedicated MISSION --headless --no-audio`. Headless startup requires neither
+a GPU nor a display server.
 
 ## Code and documentation
 

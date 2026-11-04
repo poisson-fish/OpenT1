@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   build:
-    name: ${{ matrix.platform.name }} / ${{ matrix.configuration }}
+    name: ${{ matrix.platform.name }}
     runs-on: ${{ matrix.platform.runner }}
     timeout-minutes: 45
     strategy:
@@ -31,14 +31,12 @@ jobs:
           - name: Windows x64
             runner: windows-2025
             cmake_args: -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/msvc-x64.cmake
-        configuration: [desktop, headless]
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@v6
       - name: Restore dependency downloads
-        if: matrix.configuration == 'desktop'
         id: dependency-downloads
         uses: actions/cache/restore@v6
         with:
@@ -77,20 +75,15 @@ jobs:
       - name: Configure
         env:
           PLATFORM_CMAKE_ARGS: ${{ matrix.platform.cmake_args }}
-          CONFIGURATION: ${{ matrix.configuration }}
         run: |
-          options=(-DOPENT1_BUILD_PLATFORM=ON -DOPENT1_BUILD_AUDIO=ON -DOPENT1_BUILD_EXAMPLES=ON
-                   -DCMAKE_DISABLE_FIND_PACKAGE_SDL3=ON)
-          if [[ "$CONFIGURATION" == headless ]]; then
-            options=(-DOPENT1_BUILD_PLATFORM=OFF -DOPENT1_BUILD_AUDIO=OFF -DOPENT1_BUILD_EXAMPLES=OFF)
-          fi
           # All platform arguments are fixed values from the matrix above.
           read -r -a platform_options <<< "$PLATFORM_CMAKE_ARGS"
           cmake -S . -B build/ci -G Ninja -DCMAKE_BUILD_TYPE=Debug \
             -DBUILD_TESTING=ON -DOPENT1_BUILD_TERRAIN2=ON -DFETCHCONTENT_QUIET=OFF \
-            "${platform_options[@]}" "${options[@]}"
+            -DOPENT1_BUILD_EXAMPLES=ON -DCMAKE_DISABLE_FIND_PACKAGE_SDL3=ON \
+            "${platform_options[@]}"
       - name: Save dependency downloads
-        if: matrix.configuration == 'desktop' && steps.dependency-downloads.outputs.cache-hit != 'true'
+        if: steps.dependency-downloads.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: build/ci/downloads

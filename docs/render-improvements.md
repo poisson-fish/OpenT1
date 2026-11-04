@@ -756,9 +756,9 @@ python tools/run_memory_audit.py --executable build/x64-release/opent1_memory_au
 python tools/summarize_memory_audit.py build/profiles/memory-audit docs/data/render-memory-baseline.json --date 2026-11-01
 ```
 
-The target is excluded from the normal build. A headless configuration supports
-catalog/load-only measurement without SDL/OpenAL; `--gpu` requires a platform
-build. Omit `--all-missions` or `--gpu` to skip those groups. Every run includes
+The target is excluded from the normal build. The same build supports
+catalog/load-only measurement and GPU measurement. Omit `--all-missions` or
+`--gpu` to skip those groups. Every run includes
 fresh-process logs and isolated runtime outputs under the chosen directory.
 Failed missions and non-world GPU captures are recorded without aborting the
 remaining cases. `ResourceManager` permits explicit same-type loader decoration

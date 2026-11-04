@@ -481,7 +481,7 @@ SDL_AppResult SdlApplication::initialize(std::span<const std::string_view> argum
     impl_->attempted = true;
     impl_->mainCallbacks = mainCallbacks;
     try {
-        impl_->subsystems = std::make_unique<Subsystem>(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD);
+        impl_->subsystems = std::make_unique<Subsystem>(requiredSubsystems(arguments));
         if (const auto* previous = SDL_GetHint(SDL_HINT_MAIN_CALLBACK_RATE)) {
             impl_->previousRate = previous;
         }

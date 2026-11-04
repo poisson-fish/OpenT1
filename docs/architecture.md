@@ -55,9 +55,9 @@ flowchart BT
     Game --> App[OpenT1 application]
 ```
 
-Arrows point from a dependency to its consumer. The diagram omits optional
+Arrows point from a dependency to its consumer. The diagram omits
 presentation/media adapters. Core formats, script execution, transports,
-simulation and software rendering can build without SDL3 or OpenAL.
+simulation and software rendering remain independent of SDL3 and OpenAL.
 
 ## Application flow
 
@@ -70,18 +70,18 @@ small built-in simulation instead. Required startup-script failures stop
 initialization. See the [runtime reference](runtime.md) for the launch options
 and data paths.
 
-The standalone SDL executable runs through SDL application callbacks, including
-when `--headless` suppresses window creation. The build without SDL uses a
-bounded fallback loop. Embedded callers of `runFearMain` also use that fallback
-when they pass `--headless`. These are distinct execution paths.
+The standalone executable runs through SDL application callbacks. Embedded
+callers of `runFearMain` drive the same application. Headless and dedicated
+launches without a window initialize only SDL events, avoiding any video-driver
+or GPU requirement. The same binary supports every runtime mode.
 
 A frame processes input and transport events, advances the simulation and
 player prediction, updates world state, gathers visible scene objects, and
 draws the world and GUI. Presentation and audio update through the enabled
 adapters. SDL interactive frames use elapsed wall time; smoke and explicitly
-bounded runs supply 32 ms frame times. The fallback loop always supplies 32 ms
-frame times. `FearGameApp::stepFrame` delegates simulation advancement to
-`SimGame`. The SDL host disables its automatic canvas pass and renders once
+bounded runs supply 32 ms frame times. `FearGameApp::stepFrame` delegates
+simulation advancement to `SimGame`. The SDL host disables its automatic
+canvas pass and renders once
 after simulation, GUI and audio updates; explicit script redraws still execute.
 Rendering consumes the resulting state. Shutdown disconnects
 sessions, unregisters services, and releases world and native resources.
@@ -143,7 +143,8 @@ control/prediction, and game-specific updates. See
 Most code is C++20. MSVC x64 additionally builds `src/math/x87_x64.asm` to
 preserve selected x87 floating-point behavior; other configurations use
 the portable implementations. The CI workflow configures Windows x64, Linux
-x64, and macOS ARM64 desktop and headless builds. This configuration is distinct
+x64, and macOS ARM64 builds, including runtime headless startup checks. This
+configuration is distinct
 from interactive graphics, audio-device, or live-server validation.
 
 ## Tests and extension points

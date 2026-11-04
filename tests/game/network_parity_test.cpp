@@ -28,6 +28,79 @@ using namespace opent1::game;
 using namespace sim_net_test;
 
 namespace {
+void dedicatedStartupPort() {
+    const auto root = std::filesystem::temp_directory_path() /
+                      std::format("opent1-dedicated-{}",
+                                  std::chrono::steady_clock::now().time_since_epoch().count());
+    struct Cleanup {
+        std::filesystem::path root;
+        ~Cleanup() {
+            std::error_code ec;
+            std::filesystem::remove_all(root, ec);
+        }
+    } cleanup{root};
+    std::filesystem::create_directories(root / "base");
+    std::filesystem::create_directories(root / "config");
+    auto reservation = net::makeUdpTransport({{0, 0, 0, 0}, 0});
+    const auto port = net::parseIPv4Address(reservation->localAddress())->port;
+    {
+        std::ofstream bootstrap(root / "console.cs");
+        bootstrap << R"(
+            $dedicated = true;
+            newServer(); focusServer();
+            newObject(StartupObject, SimObject);
+            $ConsoleWorld::DefaultSearchPath = "config;base";
+            exec("ServerPrefs.cs");
+            $MissionName = "StartupMission";
+        )";
+        std::ofstream preferences(root / "config/ServerPrefs.cs");
+        preferences << "$Server::Port = " << port << ";"
+                    << "$Server::HostName = \"Dedicated startup test\";";
+        CHECK(bool(bootstrap) && bool(preferences));
+    }
+    FearGameApp::Config config;
+    config.assetRoot = root;
+    {
+        // A port conflict must fail startup instead of leaving an ephemeral
+        // listener running behind a successful dedicated-server message.
+        FearGameApp occupied(config);
+        CHECK(!occupied.init());
+        CHECK(occupied.console().getVariable("OpenT1::StartupError").find(std::to_string(port)) !=
+              std::string::npos);
+    }
+    reservation.reset();
+    FearGameApp app(config);
+    CHECK(app.init());
+    auto& globals = app.fearPlugin().serverGlobals();
+    CHECK(globals.manager && globals.manager->findObject("StartupObject"));
+    CHECK(!app.fearPlugin().clientGlobals().manager);
+    CHECK(app.console().getVariable("Server::Dedicated") == "true");
+    CHECK(app.console().getVariable("MissionName") == "StartupMission");
+    CHECK(net::parseIPv4Address(globals.csDelegate->delegate()->localAddress())->port == port);
+    auto client = net::makeUdpTransport({{127, 0, 0, 1}, 0});
+    ServerBrowser browser(*client, false);
+    bool replied{};
+    browser.gotPingInfo = [&](const auto& info) {
+        replied = info.name == "Dedicated startup test" && info.players == 0;
+    };
+    CHECK(browser.ping("IP:127.0.0.1:" + std::to_string(port)));
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    for (UInt32 frame = 0; !replied; ++frame) {
+        CHECK(std::chrono::steady_clock::now() < deadline);
+        CHECK(app.stepFrame(frame * .032, false));
+        browser.process(frame * 32);
+        net::Datagram packet;
+        while (client->receive(packet) == net::Result::Ok) {
+            CHECK(browser.receive(packet.address, packet.data(), frame * 32));
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    // Later hosted worlds also honor the selected installation's port even
+    // though console.cs is outside the active resource search directories.
+    CHECK(app.fearPlugin().createServerWorld({}, true));
+    CHECK(net::parseIPv4Address(globals.csDelegate->delegate()->localAddress())->port == port);
+}
+
 void localProfileDelivery() {
     FearGameApp app;
     CHECK(app.init());
@@ -1415,6 +1488,7 @@ void hostnameConnection() {
 }
 
 int opent1_test_game_network_parity() {
+    dedicatedStartupPort();
     localProfileDelivery();
     localObserverMenuState();
     scriptObserverTransforms();

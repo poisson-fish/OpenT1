@@ -41,24 +41,6 @@
       }
     },
     {
-      "name": "headless",
-      "displayName": "OpenT1 headless",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
-      },
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/headless",
-      "toolchainFile": "${sourceDir}/cmake/toolchains/msvc-x64.cmake",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "BUILD_TESTING": "ON",
-        "OPENT1_BUILD_PLATFORM": "OFF",
-        "OPENT1_BUILD_AUDIO": "OFF"
-      }
-    },
-    {
       "name": "macos-base",
       "hidden": true,
       "condition": {
@@ -89,16 +71,6 @@
       "inherits": "macos-base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
-      }
-    },
-    {
-      "name": "macos-headless",
-      "displayName": "OpenT1 macOS headless",
-      "inherits": "macos-debug",
-      "cacheVariables": {
-        "FETCHCONTENT_QUIET": null,
-        "OPENT1_BUILD_PLATFORM": "OFF",
-        "OPENT1_BUILD_AUDIO": "OFF"
       }
     },
     {
@@ -134,16 +106,6 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
-    },
-    {
-      "name": "linux-headless",
-      "displayName": "OpenT1 Linux headless",
-      "inherits": "linux-debug",
-      "cacheVariables": {
-        "FETCHCONTENT_QUIET": null,
-        "OPENT1_BUILD_PLATFORM": "OFF",
-        "OPENT1_BUILD_AUDIO": "OFF"
-      }
     }
   ],
   "buildPresets": [
@@ -156,10 +118,6 @@
       "configurePreset": "x64-release"
     },
     {
-      "name": "headless",
-      "configurePreset": "headless"
-    },
-    {
       "name": "macos-debug",
       "configurePreset": "macos-debug"
     },
@@ -168,20 +126,12 @@
       "configurePreset": "macos-release"
     },
     {
-      "name": "macos-headless",
-      "configurePreset": "macos-headless"
-    },
-    {
       "name": "linux-debug",
       "configurePreset": "linux-debug"
     },
     {
       "name": "linux-release",
       "configurePreset": "linux-release"
-    },
-    {
-      "name": "linux-headless",
-      "configurePreset": "linux-headless"
     }
   ],
   "testPresets": [
@@ -206,16 +156,6 @@
       }
     },
     {
-      "name": "headless",
-      "configurePreset": "headless",
-      "output": {
-        "outputOnFailure": true
-      },
-      "execution": {
-        "noTestsAction": "error"
-      }
-    },
-    {
       "name": "macos-debug",
       "configurePreset": "macos-debug",
       "output": {
@@ -231,11 +171,6 @@
       "inherits": "macos-debug"
     },
     {
-      "name": "macos-headless",
-      "configurePreset": "macos-headless",
-      "inherits": "macos-debug"
-    },
-    {
       "name": "linux-debug",
       "configurePreset": "linux-debug",
       "output": {
@@ -248,11 +183,6 @@
     {
       "name": "linux-release",
       "configurePreset": "linux-release",
-      "inherits": "linux-debug"
-    },
-    {
-      "name": "linux-headless",
-      "configurePreset": "linux-headless",
       "inherits": "linux-debug"
     }
   ]

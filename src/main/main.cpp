@@ -6,26 +6,22 @@
 #include <opent1/game/player.hpp>
 #include <opent1/gfx/software_rasterizer.hpp>
 
-#if defined(OPENT1_HAS_SDL3_MAIN) && defined(OPENT1_STANDALONE_EXECUTABLE)
+#if defined(OPENT1_STANDALONE_EXECUTABLE)
 #define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
-#elif defined(OPENT1_HAS_SDL3_MAIN)
+#else
 #include <SDL3/SDL.h>
 #endif
 
-#if defined(OPENT1_HAS_SDL3_MAIN)
 #include <opent1/gfx/sdl_gpu_surface.hpp>
 #include <opent1/platform/sdl_window.hpp>
 #include <opent1/gui/sdl_gui.hpp>
 #include <opent1/sim/sim_sdl_input.hpp>
-#endif
 
-#if defined(OPENT1_HAS_AUDIO)
 #include <opent1/audio/audio.hpp>
 #include <opent1/video/audio_player.hpp>
 #include <opent1/game/shell_controls.hpp>
-#endif
 
 #include <algorithm>
 #include <array>
@@ -64,6 +60,10 @@ struct RuntimeOptions {
     bool execConsoleCs{false};
     bool spawnDemo{false};
     bool dedicated{false};
+
+    [[nodiscard]] bool createsWindow() const noexcept {
+        return !headless && (!dedicated || sdlLoop || smoke);
+    }
 };
 
 [[nodiscard]] Int32 parsePositiveIntSv(std::string_view sv, Int32 fallback) noexcept {
@@ -152,7 +152,6 @@ countNonZeroSurfaceBytes(const gfx::SoftwareSurface& surface) noexcept {
     return count;
 }
 
-#if defined(OPENT1_HAS_AUDIO)
 [[maybe_unused]] [[nodiscard]] std::shared_ptr<const audio::Wave> makeFallbackWave() {
     auto wave = std::make_shared<audio::Wave>();
     wave->channels = 1;
@@ -170,11 +169,8 @@ countNonZeroSurfaceBytes(const gfx::SoftwareSurface& surface) noexcept {
     }
     return wave;
 }
-#endif
 
-#if defined(OPENT1_HAS_SDL3_MAIN)
 
-#if defined(OPENT1_HAS_AUDIO)
 class MovieAudioService : public std::enable_shared_from_this<MovieAudioService> {
     struct Binding {
         std::unique_ptr<video::AudioPlayer> player;
@@ -231,7 +227,6 @@ public:
         device_ = nullptr;
     }
 };
-#endif
 
 class FearMainApplication final : public platform::SdlApplication {
 public:
@@ -245,6 +240,12 @@ public:
           includesProgramName_(includesProgramName) {}
 
 protected:
+    SDL_InitFlags requiredSubsystems(std::span<const std::string_view> args) const override {
+        return parseRuntimeOptions(args, includesProgramName_).createsWindow()
+                   ? SDL_INIT_VIDEO | SDL_INIT_GAMEPAD
+                   : SDL_INIT_EVENTS;
+    }
+
     bool onInit(std::span<const std::string_view> rawArgs) override {
         std::span<const std::string_view> userArgs = rawArgs;
         std::filesystem::path exeDir{};
@@ -256,12 +257,10 @@ protected:
         opts_ = parseRuntimeOptions(userArgs, includesProgramName_);
         opts_.exePath = exeDir;
 
-#if defined(OPENT1_HAS_AUDIO)
         (void)audio::registerWaveLoader(app_.resources());
         app_.bindMovieAudio = [service = movieAudio_](SmackerCtrl& control) {
             service->bind(control);
         };
-#endif
 
         if (!opts_.noAssets && (opts_.mountAssets || includesProgramName_)) {
             const auto discovered =
@@ -278,9 +277,7 @@ protected:
             return false;
         }
 
-        const bool createSdlWindow =
-            !opts_.headless && (!opts_.dedicated || opts_.sdlLoop || opts_.smoke);
-        if (createSdlWindow) {
+        if (opts_.createsWindow()) {
             platform::WindowConfig winCfg{};
             winCfg.title = "Starsiege: Tribes (OpenT1)";
             winCfg.width = 640;
@@ -469,7 +466,6 @@ protected:
             (void)console.execute("setFSResolution", args);
         }
 
-#if defined(OPENT1_HAS_AUDIO)
         if (!opts_.noAudio) {
             try {
                 audio::DeviceOptions devOpts{};
@@ -546,7 +542,6 @@ protected:
                 audioRuntime_.reset();
             }
         }
-#endif
 
         if (app_.guiRuntime()) {
             app_.guiRuntime()->canvas.onFrame = [this] {
@@ -557,7 +552,6 @@ protected:
         return true;
     }
 
-#if defined(OPENT1_HAS_AUDIO)
     void bindGameplayAudio() {
         if (!audioRuntime_) {
             return;
@@ -681,7 +675,6 @@ protected:
             manager->addObject(std::move(playback));
         }
     }
-#endif
 
     bool commanderInputActive() const {
         const auto* runtime = app_.guiRuntime().get();
@@ -795,9 +788,7 @@ protected:
             loadingPresented_ = false;
         }
         bindInput();
-#if defined(OPENT1_HAS_AUDIO)
         bindGameplayAudio();
-#endif
         auto& cg = app_.fearPlugin().clientGlobals();
         const bool capture = app_.gameplayInputActive() && (foreground() || opts_.verifyInput);
         const bool actionCapture =
@@ -887,7 +878,6 @@ protected:
             return;
         }
 
-#if defined(OPENT1_HAS_AUDIO)
         if (audioRuntime_) {
             movieAudio_->update();
             const auto volume = [this](std::string_view name) {
@@ -915,7 +905,6 @@ protected:
                 mixedAudioSamples_ += mixed.size();
             }
         }
-#endif
 
         if (!renderCurrentFrame()) {
             return;
@@ -1139,13 +1128,11 @@ protected:
         guiInput_.reset();
         gpuSurface_.reset();
         softwareSurface_.reset();
-#if defined(OPENT1_HAS_AUDIO)
         movieAudio_->close();
         if (audioRuntime_) {
             audioRuntime_->stopAll();
             audioRuntime_.reset();
         }
-#endif
         app_.shutdown();
     }
 
@@ -1167,85 +1154,21 @@ private:
     FearGameApp app_{};
     std::unique_ptr<gfx::SdlGpuSurface> gpuSurface_{};
     std::unique_ptr<gfx::SoftwareSurface> softwareSurface_{};
-#if defined(OPENT1_HAS_AUDIO)
     std::unique_ptr<audio::Runtime> audioRuntime_{};
     std::shared_ptr<MovieAudioService> movieAudio_{std::make_shared<MovieAudioService>()};
     audio::Handle activeVoice_{0};
     std::size_t mixedAudioSamples_{0};
     bool audioLoopback_{false};
-#endif
     UInt64 startTicksMs_{0};
     UInt32 framesRun_{0};
     std::size_t firstFrameNonZeroPixels_{0};
 };
-
-#endif // OPENT1_HAS_SDL3_MAIN
-
-[[maybe_unused]] [[nodiscard]] int runHeadlessFallback(std::span<const std::string_view> userArgs,
-                                                       bool standaloneDefault) {
-    const RuntimeOptions opts = parseRuntimeOptions(userArgs, standaloneDefault);
-    FearGameApp app;
-#if defined(OPENT1_HAS_AUDIO)
-    (void)audio::registerWaveLoader(app.resources());
-#endif
-    if (!opts.noAssets && (opts.mountAssets || standaloneDefault)) {
-        const auto discovered =
-            !opts.assetRoot.empty() ? opts.assetRoot : FearGameApp::discoverAssetRoot();
-        if (!discovered.empty()) {
-            (void)app.mountAssetRoot(discovered);
-        }
-    }
-    if (!app.init(userArgs)) {
-        return 1;
-    }
-
-    auto surface = gfx::SoftwareSurface::create(640, 480);
-    if (!surface) {
-        app.shutdown();
-        return 1;
-    }
-
-    const Int32 targetFrames = (opts.maxFrames > 0) ? opts.maxFrames : 2;
-    std::size_t nonZeroPixels = 0;
-    for (auto f : std::views::iota(Int32{0}) | std::views::take_while([&](Int32 f) {
-                      return f < targetFrames;
-                  })) {
-        auto& cg = app.fearPlugin().clientGlobals();
-        if (opts.spawnDemo && cg.playerPSC) {
-            PlayerMove mv{};
-            mv.forwardAction = 1.0f;
-            mv.jetting = (f % 2) == 0;
-            mv.jumpAction = (f == 0);
-            mv.turnRot = 0.03f;
-            mv.trigger = (f >= 1);
-            mv.useItem = -1;
-            cg.playerPSC->pushMove(mv);
-        }
-        const bool keepGoing = app.stepFrame(static_cast<double>(f + 1) * 0.032);
-        if (app.renderFrame(*surface) && nonZeroPixels == 0) {
-            nonZeroPixels = countNonZeroSurfaceBytes(*surface);
-        }
-        if (!keepGoing || app.fearPlugin().quitRequested()) {
-            break;
-        }
-    }
-
-    const bool ok = !opts.smoke ||
-                    (app.steppedFrames() > 0u && app.renderedFrames() > 0u && nonZeroPixels > 0u);
-    app.shutdown();
-    return ok ? 0 : 1;
-}
 
 } // namespace
 
 #if !defined(OPENT1_STANDALONE_EXECUTABLE)
 
 int runFearMain(std::span<const std::string_view> commandLineArgs) {
-#if defined(OPENT1_HAS_SDL3_MAIN)
-    const RuntimeOptions opts = parseRuntimeOptions(commandLineArgs, false);
-    if (opts.headless) {
-        return runHeadlessFallback(commandLineArgs, false);
-    }
     FearMainApplication app(false);
     SDL_AppResult status = app.initialize(commandLineArgs, false);
     while (status == SDL_APP_CONTINUE) {
@@ -1262,9 +1185,6 @@ int runFearMain(std::span<const std::string_view> commandLineArgs) {
     }
     app.shutdown(status);
     return (status == SDL_APP_SUCCESS && app.exitCode() == 0) ? 0 : 1;
-#else
-    return runHeadlessFallback(commandLineArgs, false);
-#endif
 }
 
 #endif // !OPENT1_STANDALONE_EXECUTABLE
@@ -1273,7 +1193,6 @@ int runFearMain(std::span<const std::string_view> commandLineArgs) {
 
 #if defined(OPENT1_STANDALONE_EXECUTABLE)
 
-#if defined(OPENT1_HAS_SDL3_MAIN)
 SDL_AppResult SDL_AppInit(void** state, int argc, char** argv) {
     return opent1::platform::initApplication<opent1::game::FearMainApplication>(state, argc, argv);
 }
@@ -1289,21 +1208,5 @@ SDL_AppResult SDL_AppEvent(void* state, SDL_Event* event) {
 void SDL_AppQuit(void* state, SDL_AppResult result) {
     opent1::platform::quitApplication(state, result);
 }
-#else
-int main(int argc, char** argv) {
-    std::vector<std::string_view> args;
-    if (argc > 1 && argv != nullptr) {
-        args.reserve(static_cast<std::size_t>(argc - 1));
-        for (auto i : std::views::iota(1) | std::views::take_while([&](int i) {
-                          return i < argc;
-                      })) {
-            if (argv[i] != nullptr) {
-                args.emplace_back(argv[i]);
-            }
-        }
-    }
-    return opent1::game::runFearMain(args);
-}
-#endif
 
 #endif // OPENT1_STANDALONE_EXECUTABLE

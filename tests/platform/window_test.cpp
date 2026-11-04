@@ -241,6 +241,29 @@ void translation() {
     }
 }
 
+void eventsOnlyApplication() {
+    struct EventsOnlyApp : SdlApplication {
+        SDL_InitFlags requiredSubsystems(std::span<const std::string_view>) const override {
+            return SDL_INIT_EVENTS;
+        }
+
+        bool onInit(std::span<const std::string_view>) override {
+            CHECK(SDL_WasInit(SDL_INIT_EVENTS));
+            CHECK(!SDL_WasInit(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD));
+            CHECK(!SDL_GetCurrentVideoDriver());
+            return true;
+        }
+
+        void onIdle() override {
+            requestQuit();
+        }
+    } app;
+    CHECK(app.initialize({}) == SDL_APP_CONTINUE);
+    CHECK(app.iterate() == SDL_APP_SUCCESS);
+    app.shutdown(SDL_APP_SUCCESS);
+    CHECK(!SDL_WasInit(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_EVENTS));
+}
+
 void lifecycle() {
     SDL_SetHint(SDL_HINT_MAIN_CALLBACK_RATE, "77");
     App a;
@@ -565,6 +588,7 @@ int opent1_test_platform_window(int argc, char**) {
         windowOwnership();
         canvasCursorOwnership();
         translation();
+        eventsOnlyApplication();
         lifecycle();
         failurePaths();
         fullscreenShortcut();

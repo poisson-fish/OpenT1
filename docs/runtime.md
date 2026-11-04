@@ -23,6 +23,26 @@ The small built-in demo can run independently of an installation:
 The built-in demo exercises simulation and rendering; it is not a full game
 content replacement or an installation compatibility test.
 
+### Dedicated servers
+
+Use the normal SDL build in dedicated mode to run a continuous server without
+a game window or audio playback:
+
+```powershell
+.\build\x64-release\opent1.exe --assets "C:\Games\Tribes" -mod RPG -dedicated rpgmap5 --headless --no-audio
+```
+
+The installation's `console.cs` handles `-mod` and `-dedicated`. Put the mission
+name immediately after `-dedicated`; a following option can otherwise be
+interpreted as the mission name. Dedicated startup creates a server world
+without a local player. After startup scripts load the server preferences,
+OpenT1 binds the final `$Server::Port` and fails initialization if it cannot
+bind that port. Server preferences also control the hostname, player limit,
+and public-hosting setting. Headless and dedicated launches without a window
+initialize SDL's event subsystem only, so they require neither a GPU nor a
+display server. SDL and OpenAL runtime libraries are still part of the normal
+binary distribution; `--no-audio` disables playback-device initialization.
+
 ## Data paths and startup
 
 `--assets PATH` explicitly selects the installation and requests mounting.
@@ -40,8 +60,8 @@ this same namespace; their declarations initialize in declaration order.
 Without an explicit path, discovery searches a starting directory and up to
 six parents, checking each directory itself and its `TRIBES/` and `PCRPG/`
 children. Detection looks for `base/entities.vol`, `base/Entities.vol`, or
-`base/darkstar.vol`. The standalone SDL host starts this lookup beside the
-executable; the fallback host starts in the process working directory.
+`base/darkstar.vol`. The standalone host starts this lookup beside the
+executable; embedded callers start in the process working directory.
 Detection alone does not establish that an installation has all required files.
 
 `--no-assets` suppresses automatic host mounting, even when mounting flags are
@@ -82,8 +102,8 @@ archive share one reference-counted entry set.
 | `--exec-console-cs` | Request mounting and execution of `console.cs` |
 | `--mission NAME_OR_FILE` | Request mounting and load the selected mission |
 | `--spawn-demo` | Create the built-in test session |
-| `--headless` | Suppress native window creation; execution-loop behavior depends on the host, as described below |
-| `--frames N` | Limit execution to a positive number of frames; zero has host-dependent behavior |
+| `--headless` | Skip native window, video-driver, gamepad, and GPU-device initialization while keeping the normal execution loop |
+| `--frames N` | Limit execution to a positive number of frames; zero runs until quit |
 | `--smoke` | Select hidden presentation and loopback audio, default to four frames, and check that simulation renders nonzero output |
 | `--hidden` | Create the SDL window hidden |
 | `--renderer software` or `--renderer hardware` | Select the rendering path in the SDL host; explicitly requested hardware fails initialization if no GPU surface is available |
@@ -96,9 +116,9 @@ archive share one reference-counted entry set.
 | `--sdl-loop` | Keep an embedded SDL invocation running without its default frame limit; also permits window creation in dedicated mode |
 | `-dedicated` | Set dedicated-server mode; the SDL host normally omits the window |
 
-Presentation options require a build with `OPENT1_BUILD_PLATFORM=ON`. An audio
-runtime also requires `OPENT1_BUILD_AUDIO=ON`. The fallback loop does not create
-a native window, GPU surface, or OpenAL playback runtime.
+All builds include SDL3 presentation and OpenAL audio support. The runtime
+switches select which services to initialize. `--headless --no-audio` starts
+without a native window, video driver, GPU device, or audio playback device.
 
 ## Rendering and execution loops
 
@@ -115,16 +135,12 @@ interactive GPU backend.
 
 | Host | Default loop | `--headless` behavior |
 | --- | --- | --- |
-| Standalone executable built with SDL | Runs until quit, unless smoke mode or a positive frame limit bounds it | Keeps the SDL callback loop and omits the window |
-| Standalone executable built without SDL | Runs the fallback loop for two frames, or a positive requested limit; smoke defaults to four | Uses the same bounded fallback loop |
-| Embedded `runFearMain` with SDL | Defaults to two frames; `--sdl-loop` removes that default limit | Selects the bounded fallback loop |
-| Embedded `runFearMain` without SDL | Uses the bounded fallback loop | Uses the same bounded fallback loop |
+| Standalone executable | Runs until quit, unless smoke mode or a positive frame limit bounds it | Keeps the SDL callback loop and omits video initialization and the window |
+| Embedded `runFearMain` | Defaults to two frames; `--sdl-loop` removes that default limit | Uses the same execution loop without video initialization or a window |
 
-`--frames 0` removes the positive frame limit in the SDL loop, but the fallback
-still runs two frames. All fallback frames use a 32 ms simulation step. SDL
-smoke and positive-frame-limit runs also use 32 ms frame times; interactive SDL
-runs use elapsed wall time. Consequently, the build without SDL is currently a
-bounded execution/test host, not a continuous dedicated-server loop.
+`--frames 0` removes the frame limit. Smoke and positive-frame-limit runs use
+32 ms frame times; continuous runs use elapsed wall time. There is one runtime
+implementation for windowed, headless, and dedicated execution.
 
 Player and bot shadows are enabled by default in both renderers, including the
 local player's shadow in first person. Set `$pref::playerShadows = "FALSE";` to

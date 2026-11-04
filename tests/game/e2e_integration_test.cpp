@@ -1326,6 +1326,11 @@ void verifyFullStackEndToEndIntegration() {
     }};
     CHECK(opent1::game::runFearMain(smokeRuntimeArgs) == 0);
 
+    constexpr std::array<std::string_view, 7> headlessRuntimeArgs{{
+        "--smoke", "--headless", "--no-audio", "--no-assets", "--spawn-demo", "--frames", "4",
+    }};
+    CHECK(opent1::game::runFearMain(headlessRuntimeArgs) == 0);
+
     std::filesystem::remove_all(tempRoot, ec);
 }
 

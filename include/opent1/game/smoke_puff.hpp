@@ -18,6 +18,7 @@ namespace opent1::game {
 struct SmokePuff {
     std::string shapeName;
     Resource<world::TsShape> shape;
+    std::optional<world::TsShapeResources> resources;
     std::shared_ptr<world::TsShapeInstance> shapeInstance;
     std::optional<UInt32> threadIndex;
     FearRenderImage renderImage{};

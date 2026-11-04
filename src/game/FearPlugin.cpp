@@ -50,6 +50,7 @@
 #include <opent1/game/server_irc_controls.hpp>
 #include <opent1/game/sky.hpp>
 #include <opent1/game/snowfall.hpp>
+#include <opent1/game/smoke_puff.hpp>
 #include <opent1/game/sound.hpp>
 #include <opent1/game/star_field.hpp>
 #include <opent1/game/static_base.hpp>
@@ -985,6 +986,8 @@ bool FearPlugin::createClientWorld() {
     auto decalMgr = std::make_unique<DecalManager>();
     auto* rawDecalMgr = dynamic_cast<DecalManager*>(mgr.addObject(std::move(decalMgr)));
 
+    mgr.addObject(std::make_unique<SmokeManager>());
+
     auto cliPsc = std::make_unique<PlayerPSC>(false);
     auto* rawCliPsc = dynamic_cast<PlayerPSC*>(mgr.addObject(std::move(cliPsc)));
 
@@ -1696,6 +1699,8 @@ void FearPlugin::stepClientSimulation() {
             is->clientProcess(cg_.currentTime);
         } else if (auto* ex = dynamic_cast<Explosion*>(obj)) {
             ex->clientProcess(cg_.currentTime);
+        } else if (auto* smoke = dynamic_cast<SmokeManager*>(obj)) {
+            smoke->clientProcess(cg_.currentTime);
         } else if (auto* sn = dynamic_cast<Snowfall*>(obj)) {
             if (auto* control = cg_.playerPSC ? cg_.playerPSC->getControlObject() : nullptr) {
                 TMat3F camera;

@@ -151,7 +151,11 @@ bool StaticBase::initResources(GameBaseData* inDat) {
     }
 
     if (isGhost()) {
-        setState(state_, true);
+        // Native resource initialization reapplies the pose from None so an
+        // already destroyed ghost does not create another explosion.
+        const auto state = state_;
+        state_ = None;
+        setState(state, true);
     } else {
         state_ = None;
         updateState();

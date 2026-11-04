@@ -26,6 +26,7 @@ bool SmokeManager::onAdd() {
             root->addObject(*this);
         }
         addToSet(PlayerSetId);
+        addToSet(sim::RenderSetId);
     }
     setBoundingBox(Box3F{Point3F{-1.0f, -1.0f, -1.0f}, Point3F{1.0f, 1.0f, 1.0f}});
     return true;
@@ -39,6 +40,7 @@ void SmokeManager::onRemove() {
         puff.renderImage.clearShapeInstance();
         puff.shapeInstance.reset();
         puff.shape.reset();
+        puff.resources.reset();
         puff.inUse = false;
     }
     Parent::onRemove();
@@ -84,6 +86,7 @@ void SmokeManager::addPuff(const Resource<world::TsShape>& in_rShape,
     SmokePuff* puff = allocatePuff(now);
     puff->shapeName.clear();
     puff->shape = in_rShape;
+    puff->resources.reset();
     puff->shapeInstance.reset();
     puff->threadIndex.reset();
     puff->renderImage.clearShapeInstance();
@@ -144,6 +147,7 @@ void SmokeManager::removeAllInBounds(const Box3F& in_rBox) noexcept {
             puff.renderImage.clearShapeInstance();
             puff.shapeInstance.reset();
             puff.shape.reset();
+            puff.resources.reset();
             puff.inUse = false;
         }
     }
@@ -161,6 +165,7 @@ void SmokeManager::removeAllInRadius(const Point3F& in_rPosition, Flt32 in_radiu
             puff.renderImage.clearShapeInstance();
             puff.shapeInstance.reset();
             puff.shape.reset();
+            puff.resources.reset();
             puff.inUse = false;
         }
     }
@@ -177,6 +182,7 @@ void SmokeManager::clientProcess(UInt32 in_currTime) {
             puff.renderImage.clearShapeInstance();
             puff.shapeInstance.reset();
             puff.shape.reset();
+            puff.resources.reset();
             puff.inUse = false;
             continue;
         }
@@ -224,21 +230,60 @@ std::size_t SmokeManager::activePuffCount() const noexcept {
 
 bool SmokeManager::processQuery(sim::SimQuery& query) {
     if (auto* shapeQ = dynamic_cast<world::WorldShapeQuery*>(&query)) {
-        for (const auto& puff : puffs_) {
+        bool provided = false;
+        for (auto& puff : puffs_) {
             if (!puff.inUse || !puff.shapeInstance) {
                 continue;
             }
+            if (!puff.resources) {
+                world::TsShapeResources resources;
+                resources.shape = puff.shape;
+                if (puff.shape->materials) {
+                    auto* sr = getManager() ? sim::SimResource::find(*getManager()) : nullptr;
+                    if (!sr) {
+                        continue;
+                    }
+                    auto materials =
+                        world::TsMaterialResources::load(sr->get(), *puff.shape->materials);
+                    if (!materials) {
+                        continue;
+                    }
+                    resources.materials = std::move(*materials);
+                }
+                puff.resources = std::move(resources);
+            }
             if (const auto poseOpt = puff.shapeInstance->pose()) {
                 world::WorldShapeImage img{};
+                img.resources = *puff.resources;
                 img.pose = *poseOpt;
                 img.shapeToWorld = puff.renderImage.transform;
+                if (shapeQ->cameraPosition) {
+                    auto direction = puff.position - *shapeQ->cameraPosition;
+                    if (direction.len() > 0) {
+                        direction.normalize();
+                        if (const auto facing =
+                                world::faceDirection(direction, std::nullopt, puff.spin)) {
+                            img.shapeToWorld = *facing;
+                        }
+                    }
+                }
+                img.shapeToWorld.p = puff.position;
+                img.shapeToWorld.flags |= RMat3F::Matrix_HasTranslation;
+                const auto& root = puff.shape->transforms[puff.shape->nodes[0].defaultTransform];
+                TMat3F placed;
+                m_mul(TMat3F(root.rotation, root.translation), img.shapeToWorld, placed);
+                img.shapeToWorld = placed;
                 img.detail = 0;
                 img.automaticDetail = true;
-                shapeQ->image = std::move(img);
-                return true;
+                if (!shapeQ->image) {
+                    shapeQ->image = std::move(img);
+                } else {
+                    shapeQ->attachments.push_back(std::move(img));
+                }
+                provided = true;
             }
         }
-        return false;
+        return provided;
     }
     return Parent::processQuery(query);
 }

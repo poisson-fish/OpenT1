@@ -3,6 +3,7 @@
 #include <opent1/core/text.hpp>
 #include <opent1/world/scene_objects.hpp>
 #include <opent1/game/sound.hpp>
+#include <opent1/game/explosion.hpp>
 #include <opent1/game/player_manager.hpp>
 #include <algorithm>
 #include <bit>
@@ -742,6 +743,15 @@ void ShapeBase::updateShieldThread(SimTime t) {
 }
 
 void ShapeBase::blowUp() {
+    if (shapeData_ && shapeData_->explosionId != -1 && getManager()) {
+        auto explosion = std::make_unique<Explosion>(shapeData_->explosionId);
+        explosion->bindDataBlockManager(resolveDataBlockManager());
+        explosion->setPosition(getBoxCenter());
+        Point3F axis;
+        getTransform().getRow(2, axis);
+        explosion->setAxis(axis);
+        getManager()->addObject(std::move(explosion));
+    }
     if (shapeData_ && shapeData_->debrisId != -1 && shapeInstance_ && shapeInstance_->shape()) {
         bool foundDebrisDetail = false;
         const auto& shape = *shapeInstance_->shape();

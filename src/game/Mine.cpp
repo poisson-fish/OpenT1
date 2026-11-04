@@ -24,6 +24,11 @@ Mine::Mine() {
                      ~RotateBoundingBox);
 }
 
+bool Mine::processArguments(std::span<const std::string> args) {
+    // Native Mine takes only a datablock, bypassing Item's count/pop arguments.
+    return args.size() == 1 && StaticBase::processArguments(args);
+}
+
 bool Mine::initResources(GameBaseData* in_data) {
     if (!Parent::initResources(in_data)) {
         return false;

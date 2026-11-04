@@ -34,6 +34,7 @@ add_executable(
     game/player_test.cpp
     game/player_collision_test.cpp
     game/weapons_test.cpp
+    game/effects_test.cpp
     game/network_parity_test.cpp
     game/mission_editor_test.cpp
     game/e2e_integration_test.cpp

@@ -22,6 +22,7 @@ public:
         return DataBlockManager::MineDataType;
     }
 
+    bool processArguments(std::span<const std::string> args) override;
     bool initResources(GameBaseData* in_data) override;
     bool onAdd() override;
     bool processEvent(const sim::SimEvent& event) override;

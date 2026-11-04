@@ -384,6 +384,15 @@ bool Item::processCollision(MovementInfo& info) {
     return Parent::processCollision(info);
 }
 
+bool Item::processSurface(Point3F normal, const CollisionSurface& surface, UInt32 flags) {
+    const bool supported = didContact();
+    const bool hit = Parent::processSurface(normal, surface, flags);
+    // Rest requires support from below. A wall or ceiling can stop a throw,
+    // but must not put the item to sleep while gravity should make it fall.
+    setContact(supported || (hit && normal.z > .5f));
+    return hit;
+}
+
 bool Item::onSimLightQuery(sim::SimLightQuery& query) const {
     if (!itemData_ || itemData_->lightType == NoLight) {
         return false;

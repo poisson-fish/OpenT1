@@ -28,6 +28,52 @@ void checkSkyMaterials(const WorldGlobals& globals, std::string_view name, std::
         CHECK(texture);
 }
 
+void checkUberPackCollision(const WorldGlobals& globals, std::string_view data) {
+    auto* root =
+        dynamic_cast<sim::SimContainer*>(globals.manager->findObject(sim::RootContainerId));
+    CHECK(root);
+    sim::SimContainerQuery ray;
+    ray.mask = sim::InteriorObjectType;
+    ray.box.fMin = {-800, -1140, 660};
+    ray.box.fMax = {-800, -1230, 660};
+    sim::SimCollisionInfo hit;
+    CHECK(root->findLOS(ray, hit));
+    const auto& surface = hit.surfaces.surfaces.front();
+    Point3F point, normal;
+    m_mul(surface.position, hit.surfaces.tWorld, point);
+    m_mul(surface.normal, static_cast<const RMat3F&>(hit.surfaces.tWorld), normal);
+    CHECK(std::abs(normal.z) < .1f);
+
+    for (const bool ghost : {false, true}) {
+        auto owned = std::make_unique<Item>();
+        owned->bindDataBlockManager(globals.dbm);
+        owned->setDatFileName(data);
+        if (ghost)
+            CHECK(owned->setNetFlags(owned->netFlags() | sim::SimNetObject::IsGhost));
+        auto* pack = owned.get();
+        CHECK(globals.manager->addObject(std::move(owned)));
+        const auto start = point + normal * .8f;
+        pack->setPos(start);
+        pack->setLinearVelocity(normal * -50.f);
+        CHECK(pack->addForce(sim::MovementGravityForce, {0, 0, -20}, true));
+        sim::SimMovement::MovementInfo initial;
+        CHECK(pack->testPosition(pack->getTransform(), initial));
+        for (UInt32 time = 32; time <= 512; time += 32) {
+            if (ghost)
+                pack->clientProcess(time);
+            else
+                pack->serverProcess(time);
+            CHECK(m_dot(pack->getPos() - point, normal) > 0);
+            sim::SimMovement::MovementInfo afterImpact;
+            CHECK(pack->testPosition(pack->getTransform(), afterImpact));
+            CHECK(!pack->isAtRest());
+        }
+        CHECK(pack->getPos().z < start.z - .5f);
+        pack->deleteObject();
+    }
+    std::printf("RPG lootbags hit the Uber Zone wall and fell on server and client.\n");
+}
+
 void itemWorldCollision() {
     const std::array<float, 4> heights{};
     const std::array<world::TerrainCollisionCell, 1> cells{};
@@ -385,6 +431,7 @@ void installedRpgRegressions() {
     const auto packId = std::atoi(console.getVariable("RegressionPackList").c_str());
     auto* pack = dynamic_cast<Item*>(globals.manager->findObject(packId));
     CHECK(pack && pack->throwSource() == player);
+    checkUberPackCollision(globals, pack->getDatFileName());
     const auto packStart = pack->getPos();
     for (auto tick : std::views::iota(97) | std::views::take_while([&](int tick) {
                          return tick <= 160;

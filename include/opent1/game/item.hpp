@@ -165,6 +165,7 @@ public:
 
 protected:
     bool processCollision(MovementInfo& info) override;
+    bool processSurface(Point3F normal, const CollisionSurface&, UInt32 flags) override;
     bool onSimLightQuery(sim::SimLightQuery& query) const;
 
     ItemData* itemData_{nullptr};

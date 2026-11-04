@@ -1,0 +1,521 @@
+{
+  "date": "2026-11-04",
+  "baseline_commit": "d5bc5e75b01064356e3372283c96dc8041602233",
+  "methodology": [
+    "Windows x64 Release /O2. Original interactive game remained running during serial benchmark runs.",
+    "Receiver-only cases: 16 queries/frame, four warm-up frames, no window/audio/simulation.",
+    "Baseline executable retained before the receiver rewrite; paired repeat has 12 measured frames each.",
+    "Allocation audit is separate and its timing results are excluded from performance claims.",
+    "RPG crowd: 32 render-only casters, unchanged poses, moving positions, 800x600, 120 warm-up frames.",
+    "RPG crowd is a separate fixture, not the live player session."
+  ],
+  "receiver_before": {
+    "frames": 12,
+    "cases": [
+      {
+        "name": "sparse",
+        "actors": 16,
+        "triangles": 8192,
+        "mean_ms": 11.3371,
+        "p95_ms": 11.4251,
+        "p99_ms": 11.4251,
+        "failures": 0,
+        "polygons": 10440,
+        "triangle_tests_per_frame": 18560,
+        "candidates_per_frame": 589,
+        "pair_tests_per_frame": 21126,
+        "clip_calls_per_frame": 133193
+      },
+      {
+        "name": "dense",
+        "actors": 16,
+        "triangles": 512,
+        "mean_ms": 45.7215,
+        "p95_ms": 47.1895,
+        "p99_ms": 47.1895,
+        "failures": 192,
+        "polygons": 0,
+        "triangle_tests_per_frame": 8192,
+        "candidates_per_frame": 4955,
+        "pair_tests_per_frame": 498839,
+        "clip_calls_per_frame": 198194
+      },
+      {
+        "name": "stacked",
+        "actors": 16,
+        "triangles": 1536,
+        "mean_ms": 2043.67,
+        "p95_ms": 2068.28,
+        "p99_ms": 2068.28,
+        "failures": 192,
+        "polygons": 0,
+        "triangle_tests_per_frame": 24576,
+        "candidates_per_frame": 15556,
+        "pair_tests_per_frame": 8094820,
+        "clip_calls_per_frame": 13100963
+      }
+    ]
+  },
+  "receiver_after": {
+    "frames": 12,
+    "allocation_audit": false,
+    "cases": [
+      {
+        "name": "sparse",
+        "actors": 16,
+        "triangles": 8192,
+        "mean_ms": 2.0689,
+        "p50_ms": 2.0346,
+        "p95_ms": 2.206,
+        "p99_ms": 2.206,
+        "failures": 0,
+        "polygons": 5592,
+        "allocations_per_frame": null,
+        "triangle_tests_per_frame": 18560,
+        "candidates_per_frame": 589,
+        "pair_tests_per_frame": 1006,
+        "clip_calls_per_frame": 4237
+      },
+      {
+        "name": "dense",
+        "actors": 16,
+        "triangles": 512,
+        "mean_ms": 3.53412,
+        "p50_ms": 3.4942,
+        "p95_ms": 3.6495,
+        "p99_ms": 3.6495,
+        "failures": 0,
+        "polygons": 6180,
+        "allocations_per_frame": null,
+        "triangle_tests_per_frame": 8192,
+        "candidates_per_frame": 4955,
+        "pair_tests_per_frame": 1388,
+        "clip_calls_per_frame": 30257
+      },
+      {
+        "name": "stacked",
+        "actors": 16,
+        "triangles": 1536,
+        "mean_ms": 13.9492,
+        "p50_ms": 13.8883,
+        "p95_ms": 14.1954,
+        "p99_ms": 14.1954,
+        "failures": 0,
+        "polygons": 8376,
+        "allocations_per_frame": null,
+        "triangle_tests_per_frame": 24576,
+        "candidates_per_frame": 15556,
+        "pair_tests_per_frame": 17846,
+        "clip_calls_per_frame": 151959
+      }
+    ]
+  },
+  "receiver_allocation_audit": {
+    "frames": 8,
+    "allocation_audit": true,
+    "cases": [
+      {
+        "name": "sparse",
+        "actors": 16,
+        "triangles": 8192,
+        "failures": 0,
+        "polygons": 3728,
+        "allocations_per_frame": 2530,
+        "triangle_tests_per_frame": 18560,
+        "candidates_per_frame": 589,
+        "pair_tests_per_frame": 1006,
+        "clip_calls_per_frame": 4237
+      },
+      {
+        "name": "dense",
+        "actors": 16,
+        "triangles": 512,
+        "failures": 0,
+        "polygons": 4120,
+        "allocations_per_frame": 2670,
+        "triangle_tests_per_frame": 8192,
+        "candidates_per_frame": 4955,
+        "pair_tests_per_frame": 1388,
+        "clip_calls_per_frame": 30257
+      },
+      {
+        "name": "stacked",
+        "actors": 16,
+        "triangles": 1536,
+        "failures": 0,
+        "polygons": 5584,
+        "allocations_per_frame": 3508,
+        "triangle_tests_per_frame": 24576,
+        "candidates_per_frame": 15556,
+        "pair_tests_per_frame": 17846,
+        "clip_calls_per_frame": 151959
+      }
+    ]
+  },
+  "installed_d3d12": {
+    "mission": "rpgmap5",
+    "mode": "stationary",
+    "driver": "direct3d12",
+    "frames": 120,
+    "load_ms": 1995.82,
+    "benchmark_shadow_casters": 32,
+    "benchmark_shadow_moving": true,
+    "frame_ms": {
+      "mean": 23.7487,
+      "p50": 23.7209,
+      "p95": 24.8823,
+      "p99": 25.1576
+    },
+    "prepare_ms": {
+      "mean": 12.8248,
+      "p50": 12.7678,
+      "p95": 13.6262,
+      "p99": 13.826
+    },
+    "capture_ms": {
+      "mean": 4.47332,
+      "p50": 4.4587,
+      "p95": 4.6194,
+      "p99": 4.7019
+    },
+    "submit_ms": {
+      "mean": 0.932298,
+      "p50": 0.9159,
+      "p95": 1.0487,
+      "p99": 1.1022
+    },
+    "simulation_ms": {
+      "mean": 9.9912,
+      "p50": 9.9541,
+      "p95": 10.5369,
+      "p99": 10.6794
+    },
+    "shadow_index_ms": {
+      "mean": 0.004275,
+      "p50": 0.0042,
+      "p95": 0.0054,
+      "p99": 0.0059
+    },
+    "shadow_receivers_ms": {
+      "mean": 2.91043,
+      "p50": 2.8965,
+      "p95": 3.267,
+      "p99": 3.3257
+    },
+    "shadow_silhouette_ms": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "shadow_filter_ms": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "mean_shadow_casters": 32,
+    "mean_shadow_rendered": 24.4083,
+    "mean_shadow_candidates": 249.625,
+    "mean_shadow_pairs": 1602.79,
+    "mean_shadow_clips": 6121.65,
+    "mean_shadow_index_hits": 13,
+    "mean_shadow_geometry_hits": 0.266667,
+    "mean_shadow_silhouette_hits": 32,
+    "shadow_budget_exhaustions": 0,
+    "terrain_lod_ms": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "terrain_visibility_ms": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "terrain_select_ms": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "terrain_edges_ms": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "terrain_emit_ms": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "mean_terrain_nodes": 0,
+    "mean_terrain_validated_heights": 0,
+    "mean_terrain_material_checks": 0,
+    "mean_terrain_point_requests": 0,
+    "mean_terrain_points": 0,
+    "mean_terrain_edge_points": 0,
+    "mean_terrain_scratch_allocations": 0,
+    "mean_terrain_scratch_bytes": 0,
+    "mean_terrain_scratch_buffer_bytes": 0,
+    "light_samples_ms": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "mean_polygons": 13610.3,
+    "mean_draws": 3829.39,
+    "mean_input_draws": 8459.39,
+    "mean_pipeline_binds": 4,
+    "mean_vertex_uniform_pushes": 467,
+    "mean_fragment_uniform_pushes": 1621,
+    "mean_binds": 47,
+    "textures": 397,
+    "texture_bytes": 3739156,
+    "physical_textures": 28,
+    "texture_arrays": 21,
+    "texture_array_bytes": 12490048,
+    "allocated_texture_payload_bytes": 15584000,
+    "lightmap_pages": 2,
+    "lightmap_page_bytes": 2097152,
+    "texture_uploads": 398,
+    "texture_evictions": 0,
+    "vertex_capacity": 131072,
+    "staging_capacity": 8388608,
+    "instance_capacity": 262144,
+    "ts_mesh_cache_entries": 26,
+    "ts_mesh_cache_bytes": 140716,
+    "ts_mesh_cache_hits": 106054,
+    "ts_mesh_cache_builds": 26,
+    "retained_meshes": 28,
+    "retained_mesh_bytes": 1405152,
+    "peak_retained_mesh_bytes": 1405152,
+    "mesh_uploads": 28,
+    "mean_vertex_upload_bytes": 72450,
+    "mean_mesh_upload_bytes": 0,
+    "mean_instance_upload_bytes": 195776,
+    "mean_texture_upload_bytes": 0,
+    "geometry_builds": 0,
+    "map_builds": 0,
+    "terrain_selection_cache_hits": 120,
+    "archive_mapped_bytes": 138649917,
+    "archive_owned_bytes": 0,
+    "archive_decode_staging_bytes": 0,
+    "decoded_source_bytes": 46136169,
+    "live_source_bytes": 45472337,
+    "unused_source_bytes": 663832,
+    "source_budget_bytes": 268435456,
+    "source_budget_debt_bytes": 0,
+    "source_incomplete_entries": 0,
+    "peak_decode_staging_bytes": 1879448,
+    "conversion_cache_bytes": 9601914,
+    "batch_owned_bytes": 1163724,
+    "batch_mesh_snapshot_bytes": 1685780,
+    "batch_texture_snapshot_bytes": 4433088
+  },
+  "installed_vulkan": {
+    "mission": "rpgmap5",
+    "mode": "stationary",
+    "driver": "vulkan",
+    "frames": 60,
+    "load_ms": 760.494,
+    "benchmark_shadow_casters": 32,
+    "benchmark_shadow_moving": true,
+    "frame_ms": {
+      "mean": 24.3091,
+      "p50": 24.1652,
+      "p95": 25.7482,
+      "p99": 26.3124
+    },
+    "prepare_ms": {
+      "mean": 13.1342,
+      "p50": 13.0907,
+      "p95": 13.9107,
+      "p99": 13.9746
+    },
+    "capture_ms": {
+      "mean": 4.53047,
+      "p50": 4.4676,
+      "p95": 4.9044,
+      "p99": 4.9889
+    },
+    "submit_ms": {
+      "mean": 0.954107,
+      "p50": 0.9371,
+      "p95": 1.0527,
+      "p99": 1.2188
+    },
+    "simulation_ms": {
+      "mean": 10.2204,
+      "p50": 10.1103,
+      "p95": 11.1788,
+      "p99": 11.2836
+    },
+    "shadow_index_ms": {
+      "mean": 0.00437167,
+      "p50": 0.0042,
+      "p95": 0.0057,
+      "p99": 0.007
+    },
+    "shadow_receivers_ms": {
+      "mean": 3.03638,
+      "p50": 3.0061,
+      "p95": 3.3202,
+      "p99": 3.3735
+    },
+    "shadow_silhouette_ms": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "shadow_filter_ms": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "mean_shadow_casters": 32,
+    "mean_shadow_rendered": 24.95,
+    "mean_shadow_candidates": 264.1,
+    "mean_shadow_pairs": 1722.4,
+    "mean_shadow_clips": 6910.35,
+    "mean_shadow_index_hits": 13,
+    "mean_shadow_geometry_hits": 0,
+    "mean_shadow_silhouette_hits": 32,
+    "shadow_budget_exhaustions": 0,
+    "terrain_lod_ms": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "terrain_visibility_ms": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "terrain_select_ms": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "terrain_edges_ms": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "terrain_emit_ms": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "mean_terrain_nodes": 0,
+    "mean_terrain_validated_heights": 0,
+    "mean_terrain_material_checks": 0,
+    "mean_terrain_point_requests": 0,
+    "mean_terrain_points": 0,
+    "mean_terrain_edge_points": 0,
+    "mean_terrain_scratch_allocations": 0,
+    "mean_terrain_scratch_bytes": 0,
+    "mean_terrain_scratch_buffer_bytes": 0,
+    "light_samples_ms": {
+      "mean": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "mean_polygons": 13611.5,
+    "mean_draws": 3826.4,
+    "mean_input_draws": 8483.82,
+    "mean_pipeline_binds": 4,
+    "mean_vertex_uniform_pushes": 467,
+    "mean_fragment_uniform_pushes": 1621,
+    "mean_binds": 47,
+    "textures": 397,
+    "texture_bytes": 3739156,
+    "physical_textures": 28,
+    "texture_arrays": 21,
+    "texture_array_bytes": 12490048,
+    "allocated_texture_payload_bytes": 15584000,
+    "lightmap_pages": 2,
+    "lightmap_page_bytes": 2097152,
+    "texture_uploads": 398,
+    "texture_evictions": 0,
+    "vertex_capacity": 131072,
+    "staging_capacity": 8388608,
+    "instance_capacity": 262144,
+    "ts_mesh_cache_entries": 26,
+    "ts_mesh_cache_bytes": 140716,
+    "ts_mesh_cache_hits": 79534,
+    "ts_mesh_cache_builds": 26,
+    "retained_meshes": 28,
+    "retained_mesh_bytes": 1405152,
+    "peak_retained_mesh_bytes": 1405152,
+    "mesh_uploads": 28,
+    "mean_vertex_upload_bytes": 75784.8,
+    "mean_mesh_upload_bytes": 0,
+    "mean_instance_upload_bytes": 195776,
+    "mean_texture_upload_bytes": 0,
+    "geometry_builds": 0,
+    "map_builds": 0,
+    "terrain_selection_cache_hits": 60,
+    "archive_mapped_bytes": 138649917,
+    "archive_owned_bytes": 0,
+    "archive_decode_staging_bytes": 0,
+    "decoded_source_bytes": 46136169,
+    "live_source_bytes": 45472337,
+    "unused_source_bytes": 663832,
+    "source_budget_bytes": 268435456,
+    "source_budget_debt_bytes": 0,
+    "source_incomplete_entries": 0,
+    "peak_decode_staging_bytes": 1879448,
+    "conversion_cache_bytes": 9601914,
+    "batch_owned_bytes": 1142004,
+    "batch_mesh_snapshot_bytes": 1685780,
+    "batch_texture_snapshot_bytes": 4383720
+  },
+  "acceptance": {
+    "release_ctest_suites": 14,
+    "release_ctest_failed": 0,
+    "new_standalone_smoke_exit": 0,
+    "native_d3d12_gpu_test_failed": 0,
+    "native_vulkan_gpu_test_failed": 0,
+    "d3d12": {
+      "trim_preserved_frame": true,
+      "batch_survived_trim": true,
+      "software_rendered": true,
+      "transition_rendered": true,
+      "trim_max_channel_error": 0
+    },
+    "vulkan": {
+      "trim_preserved_frame": true,
+      "batch_survived_trim": true,
+      "software_rendered": true,
+      "transition_rendered": false,
+      "trim_max_channel_error": 0
+    }
+  },
+  "executable_sha256": {
+    "receiver_baseline": "51e37333179711c976ff006f50f6ee50211681279ef1a0038d5486e833348667",
+    "receiver_after": "48922e835f58f157ae338a235e54d979a119a8f307ee91b18bcbf36cfba4bbba",
+    "installed_after": "02ea4d606285b8491512f12eeced6bffa9e019bb004611daa58591765f25d70f",
+    "standalone_after": "655f9d47be9b86e39b3d891fca773400c80b99108caa321d2a296104835d2746"
+  },
+  "source_sha256": {
+    "include/opent1/world/shadow_receivers.hpp": "f2d6c05e543f52a31b0b3a10303e08515380fdad311983267385f139658dfadc",
+    "src/world/shadow_receivers.cpp": "41d1c472e55999c32107f5e427190ee7b80640d26d986882d3c15cd1814c1d37",
+    "src/world/world_shadows.cpp": "9baa62478d023196bf60cca095d033f2138b8e6ae56b1612c2ad6edee107dfc8",
+    "tools/shadow_benchmark.cpp": "cbea14c4aed1f6ff6b5613801977984b841d1d683e23a53b71641ce4d5a1b5e7",
+    "tools/render_benchmark.cpp": "33c3732dacebf7546f16afd6e7f6aef737ab63d59fa8c8cc618170ec20595bc6"
+  }
+}

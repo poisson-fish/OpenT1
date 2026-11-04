@@ -795,3 +795,83 @@ runner with `--gpu --frames 240`, then:
 ```powershell
 python tools/summarize_render_memory.py build/profiles/render-memory-current docs/data/render-memory-after.json
 ```
+
+### Projected player shadows
+
+The November 4 live investigation measured 17.9 FPS (55.8 ms/frame). Two
+1,200-stack captures attributed 48.6-50.0% of sampled main-thread time to shadow
+receiver generation and 15.7-17.3% to interior movement collision. The shadow
+rework leaves simulation/collision behavior unchanged.
+
+`ShadowReceiverScene` prepares one local-space BVH per immutable interior mesh,
+terrain patch set, or explicit mesh, shared by every caster in a pass. The
+session cache weakly identifies geometry and retains at most 64 indexes / 16 MiB
+of derived index storage. PVS selection and instance placement are applied at
+query time. First-input coplanar ties remain deterministic despite BVH traversal.
+
+Receiver projection uses double-precision transforms, planes and light-space coordinates, convex unions
+of coplanar polygons sharing exact edges, and an 8x8 projected-bounds index.
+Depth and separating-edge tests reject unrelated occluders before clipping.
+Polygons use fixed vertex storage; a reentrant thread-local workspace retains
+query vectors and uses a 128 KiB arena for the edge table. Exceptional arena
+spill allocations are released after each query. Output owns its vertices.
+Overlapping geometry can still require quadratic work; candidate, fragment,
+vertex and output limits remain enforced, with one 4,194,304-unit work budget
+shared across the pass rather than renewed for every caster.
+
+`WorldShadowContext`, owned by the game rendering session, independently caches
+receiver geometry and silhouettes using object generations/image slots, resource
+and pose revisions, transforms, light direction, receiver selection and occupied
+mask bounds. Mission changes and explicit cache trimming clear the context.
+Projected size selects 16/32/64-pixel silhouettes and the existing update cadence;
+visibility and resolution have hysteresis. The existing box filter is retained.
+The receiver footprint is cropped to the filtered silhouette's occupied bounds
+plus a zero-texel sampling border. UVs map back into the full bitmap, preserving
+the shadow and its blur fringe. The stateless snapshot API retains full-footprint,
+64-pixel rendering for exact comparisons.
+
+The asset-free Release benchmark measures 16 receiver queries per frame. A paired
+12-frame repeat, after four warm-up frames, gives:
+
+| Receiver workload | Before mean, ms | After mean, ms | Reduction | Failed shadows, before / after |
+| --- | ---: | ---: | ---: | ---: |
+| Sparse, 8,192 source triangles | 11.34 | 2.07 | 81.8% | 0 / 0 |
+| Dense, 512 source triangles | 45.72 | 3.53 | 92.3% | 192 / 0 |
+| Stacked, 1,536 source triangles | 2,043.67 | 13.95 | 99.3% | 192 / 0 |
+
+The old dense/stacked path spent its time clipping before rejecting the result.
+The new output uses a different triangulation; correctness is checked against an
+independent nearest-ray oracle, including holes, crossing slopes, rotated receivers and large world
+coordinates, rather than requiring identical triangle lists. A separate allocation
+audit records about 2,530 / 2,670 / 3,508 allocations per 16-query frame, including
+owned receiver/output publication. Its timings are not performance measurements.
+
+A separate `rpgmap5` roof test adds 32 render-only casters with unchanged poses
+and moves them laterally, at 800x600 after 120 warm-up frames. The final D3D12
+120-frame capture measures 23.75 ms full-frame mean / 24.88 ms p95 / 25.16 ms p99,
+including simulation, preparation, submission and the preceding fence wait.
+Receiver work averages 2.91 ms, with 24.41 emitted shadows/frame and no limit
+exhaustions. The 60-frame Vulkan capture measures 24.31 / 25.75 / 26.31 ms and
+3.04 ms receiver work, also without limit exhaustion. This fixture is distinct
+from the live player's session; these numbers do not establish its new FPS.
+Raw numeric results and provenance are in [render-shadow-rework.json](data/render-shadow-rework.json).
+
+Validation includes all 14 Release CTest suites, a newly linked standalone smoke
+run, native D3D12/Vulkan GPU tests, cropped/full-footprint software image comparison,
+cache invalidation/update-cadence checks, and native crowd readback/trim/software
+acceptance. Cache trimming preserved both backend readbacks exactly; D3D12 also
+completed a transition to `rpgmap1`.
+
+```powershell
+cmake --build --preset x64-release --target opent1_shadow_benchmark opent1_shadow_allocation_audit opent1_render_benchmark
+./build/x64-release/opent1_shadow_benchmark.exe build/profiles/shadow-current.json 60
+./build/x64-release/opent1_shadow_allocation_audit.exe build/profiles/shadow-allocations.json 8
+```
+
+For installed-content crowd runs, set `OPENT1_SHADOW_BENCHMARK_ORIGIN` to three
+space-separated world coordinates and `OPENT1_SHADOW_BENCHMARK_SHAPE` to an
+installed DTS filename. `OPENT1_SHADOW_BENCHMARK_MOVING=1` moves the casters while
+the stationary camera remains fixed. The ordinary benchmark reports full-frame
+p50/p95/p99, shadow stage timings, attempted/emitted casters, cache hits and limit
+exhaustions. Allocation fields are null in the timing executable. `--render-stats`
+exposes corresponding counters in interactive gameplay.

@@ -3,6 +3,7 @@
 #include "ts_test_support.hpp"
 #include <opent1/core/filename.hpp>
 #include <opent1/gfx/render_limits.hpp>
+#include <opent1/gfx/render_stats.hpp>
 #include <opent1/game/player.hpp>
 #include <opent1/game/player_manager.hpp>
 #include <opent1/world/ts_static_shape.hpp>
@@ -468,13 +469,94 @@ void playerShadows() {
     CHECK(old);
     const auto oldShadows = old->shadows({0, 0, -1});
     CHECK(oldShadows && oldShadows->size() == 1);
+    auto cacheCamera = camera;
+    cacheCamera.focal = {640, 640};
+    const auto cachedScene = world::WorldSceneFrame::capture(world, cacheCamera, {}, false);
+    CHECK(cachedScene);
+    world::WorldShadowContext context;
+    const auto firstCached = cachedScene->shadows({0, 0, -1}, .5f, &context, 1);
+    CHECK(firstCached && firstCached->size() == 1);
+    const auto fullFootprint = cachedScene->shadows({0, 0, -1});
+    CHECK(fullFootprint && fullFootprint->size() == 1);
+    const std::array<sim::EnvironmentShadow, 1> fullInput{
+        {{fullFootprint->front().geometry, fullFootprint->front().bitmap}}};
+    const std::array<sim::EnvironmentShadow, 1> croppedInput{
+        {{firstCached->front().geometry, firstCached->front().bitmap}}};
+    auto fullSurface = gfx::SoftwareSurface::create(64, 64);
+    auto croppedSurface = gfx::SoftwareSurface::create(64, 64);
+    CHECK(fullSurface && croppedSurface && fullSurface->setPalette(palette) &&
+          croppedSurface->setPalette(palette));
+    CHECK(cachedScene->draw(*fullSurface, fullInput) &&
+          cachedScene->draw(*croppedSurface, croppedInput));
+    // Cropping transparent support must preserve the original silhouette UVs.
+    for (Int32 y = 0; y < 64; ++y)
+        for (Int32 x = 0; x < 64; ++x)
+            CHECK(std::abs(int(fullSurface->bitmap().row(y)[x]) -
+                           int(croppedSurface->bitmap().row(y)[x])) <= 1);
+    gfx::RenderWorkStats cacheStats;
+    {
+        gfx::ScopedRenderWorkStats record(cacheStats);
+        const auto repeated = cachedScene->shadows({0, 0, -1}, .5f, &context, 1.016);
+        CHECK(repeated && repeated->size() == 1);
+        CHECK(repeated->front().bitmap.pixels == firstCached->front().bitmap.pixels);
+    }
+    CHECK(cacheStats.shadowGeometryHits == 1 && cacheStats.shadowSilhouetteHits == 1);
+    {
+        gfx::ScopedRenderWorkStats record(cacheStats);
+        const auto changedLight = cachedScene->shadows({.1f, 0, -1}, .5f, &context, 1.032);
+        CHECK(changedLight && changedLight->size() == 1);
+    }
+    CHECK(cacheStats.shadowGeometryHits == 1 && cacheStats.shadowSilhouetteHits == 1);
+    CHECK(cachedScene->shadows({0, 0, -1}, .5f, &context, 1.04)->size() == 1);
     CHECK(animated->image.pose.overrideParentTransform(1, TMat3F(EulerF{0, 0, .7f}, {})));
     const auto next = world::WorldSceneFrame::capture(world, camera, {}, false);
     CHECK(next);
     const auto nextShadows = next->shadows({0, 0, -1});
     CHECK(nextShadows && nextShadows->size() == 1);
+    const auto animatedScene = world::WorldSceneFrame::capture(world, cacheCamera, {}, false);
+    CHECK(animatedScene);
+    cacheStats = {};
+    std::optional<std::vector<world::WorldShadow>> animatedCached;
+    {
+        gfx::ScopedRenderWorkStats record(cacheStats);
+        animatedCached = animatedScene->shadows({0, 0, -1}, .5f, &context, 1.064);
+    }
+    CHECK(animatedCached && animatedCached->size() == 1);
+    // The animated mask changed its occupied bounds, invalidating its cropped
+    // receiver footprint as well as the silhouette.
+    CHECK(cacheStats.shadowGeometryHits == 0 && cacheStats.shadowSilhouetteHits == 0);
+    CHECK(animatedCached->front().bitmap.pixels != firstCached->front().bitmap.pixels);
     CHECK(nextShadows->front().bitmap.pixels != oldShadows->front().bitmap.pixels);
     CHECK(old->shadows({0, 0, -1})->front().bitmap.pixels == oldShadows->front().bitmap.pixels);
+    auto distantCamera = camera;
+    const auto distance = (animated->image.shapeToWorld.p - Point3F{0, 8, 15}).len();
+    const auto focal = 20 * distance / (2 * animated->image.resources.shape->radius);
+    distantCamera.focal = {focal, focal};
+    const auto distant = world::WorldSceneFrame::capture(world, distantCamera, {}, false);
+    CHECK(distant);
+    world::WorldShadowContext distantContext;
+    const auto held = distant->shadows({0, 0, -1}, .5f, &distantContext, 2);
+    CHECK(held && held->size() == 1);
+    CHECK(animated->image.pose.overrideParentTransform(1, TMat3F(EulerF{0, 0, -.5f}, {})));
+    const auto distantNext = world::WorldSceneFrame::capture(world, distantCamera, {}, false);
+    CHECK(distantNext);
+    cacheStats = {};
+    {
+        gfx::ScopedRenderWorkStats record(cacheStats);
+        const auto throttled = distantNext->shadows({0, 0, -1}, .5f, &distantContext, 2.016);
+        CHECK(throttled && throttled->size() == 1);
+        CHECK(throttled->front().bitmap.pixels == held->front().bitmap.pixels);
+    }
+    CHECK(cacheStats.shadowSilhouetteHits == 1);
+    cacheStats = {};
+    {
+        gfx::ScopedRenderWorkStats record(cacheStats);
+        CHECK(distantNext->shadows({0, 0, -1}, .5f, &distantContext, 2.15)->size() == 1);
+    }
+    CHECK(cacheStats.shadowSilhouetteHits == 0);
+    distantCamera.focal = {focal * .1f, focal * .1f};
+    const auto tiny = world::WorldSceneFrame::capture(world, distantCamera, {}, false);
+    CHECK(tiny && tiny->shadows({0, 0, -1}, .5f, &distantContext, 2.2)->empty());
     auto ceiling = std::make_shared<world::WorldSurfaceMesh>(*floor);
     for (auto& triangle : ceiling->triangles)
         for (auto& vertex : triangle.vertices)

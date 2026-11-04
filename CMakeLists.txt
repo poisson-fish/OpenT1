@@ -317,6 +317,8 @@ add_library(
     src/world/world_motion.cpp
     src/world/world_collision_sim.cpp
     src/world/world_surfaces.cpp
+    src/world/shadow_receivers.cpp
+    src/world/world_shadows.cpp
     src/world/terrain_lod.cpp
     src/world/terrain_stream.cpp
     src/world/terrain_surface_sim.cpp
@@ -635,6 +637,12 @@ add_executable(opent1 src/main/main.cpp)
 target_compile_definitions(opent1 PRIVATE OPENT1_STANDALONE_EXECUTABLE=1)
 target_link_libraries(opent1 PRIVATE opent1_game)
 # Source-derived AI parity checks and optional installed-content traces.
+add_executable(opent1_shadow_benchmark EXCLUDE_FROM_ALL tools/shadow_benchmark.cpp)
+target_link_libraries(opent1_shadow_benchmark PRIVATE opent1_world_sim)
+add_executable(opent1_shadow_allocation_audit EXCLUDE_FROM_ALL tools/shadow_benchmark.cpp)
+target_compile_definitions(opent1_shadow_allocation_audit PRIVATE OPENT1_SHADOW_ALLOCATIONS=1)
+target_link_libraries(opent1_shadow_allocation_audit PRIVATE opent1_world_sim)
+
 add_executable(opent1_ai_behavior_audit EXCLUDE_FROM_ALL tools/ai_behavior_audit.cpp)
 target_link_libraries(opent1_ai_behavior_audit PRIVATE opent1_game)
 foreach(audit_runtime IN ITEMS OpenAL SDL3::SDL3-shared)

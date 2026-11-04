@@ -4839,6 +4839,7 @@ bool FearGameApp::loadMission(std::string_view missionNameOrFile, bool dedicated
     if (missionNameOrFile.empty()) {
         return false;
     }
+    shadowContext_.clear();
     if (!initialized_ && !init()) {
         return false;
     }
@@ -4928,6 +4929,7 @@ bool FearGameApp::bindGameplayActions() {
     auto& cg = fearPlugin_->clientGlobals();
     const auto revision = game_.worldRevision(sim::WorldType::Client);
     if (revision != inputWorldRevision_) {
+        shadowContext_.clear();
         inputWorldRevision_ = revision;
         inputTarget_ = {};
         boundInputMaps_ = {};
@@ -4977,6 +4979,7 @@ gui::Presentation FearGameApp::guiPresentation(Point2I pixels) const {
 }
 
 void FearGameApp::trimRenderCaches() {
+    shadowContext_.clear();
     softwareTextureCache_.clear();
     gfx::clearHardwareTextureConversions();
     world::clearTsHardwareMeshes();
@@ -5321,7 +5324,8 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
                 shadowDirection = planet->planetImage().lightDirection;
                 break;
             }
-            auto ownedShadows = sceneFrame->shadows(shadowDirection);
+            auto ownedShadows = sceneFrame->shadows(
+                shadowDirection, .5f, &shadowContext_, game_.simulationTime());
             if (!ownedShadows) {
                 ownedShadows.emplace();
             }
@@ -5834,6 +5838,7 @@ void FearGameApp::shutdown() noexcept {
         guiRuntime_.reset();
     }
     pendingMission_.reset();
+    shadowContext_.clear();
     softwareTextureCache_.clear();
     hardwareLayerCrops_.clear();
     boundInputMaps_ = {};

@@ -800,7 +800,10 @@ WorldSceneFrame::captureImpl(sim::SimWorld& world,
                 if (query.image) {
                     query.attachments.insert(query.attachments.begin(), std::move(*query.image));
                 }
+                UInt32 shadowPart{};
                 for (auto& image : query.attachments) {
+                    image.shadowCaster = address.generation;
+                    image.shadowPart = ++shadowPart;
                     // Native shield-hit images use an orthogonal reflected basis.
                     if (frame.shapes_.size() == gfx::renderLimits().images ||
                         !rigid(image.shapeToWorld, true)) {
@@ -1083,133 +1086,4 @@ WorldSceneFrame::shadowGeometry(const sim::ShadowSourceWindow& window,
     return worldShadowGeometry(window, surfaces_, direction, length, lift, nativePartition);
 }
 
-std::optional<std::vector<WorldShadow>> WorldSceneFrame::shadows(Point3F direction,
-                                                                 Flt32 opacity) const {
-    if (!finite(direction) || direction.len() < .0001f || !std::isfinite(opacity) || opacity < 0 ||
-        opacity > 1) {
-        return {};
-    }
-    direction.normalize();
-    auto cameraToWorld = camera_.worldToCamera;
-    cameraToWorld.inverse();
-    Point3F cameraDirection;
-    cameraToWorld.getRow(1, cameraDirection);
-    std::vector<WorldShadow> result;
-    std::vector<const WorldShapeImage*> casters;
-    for (const auto& image : shapeInputs_) {
-        if (!image.castShadow || image.firstPerson || image.haze > .2f || image.opacity <= 0 ||
-            !image.resources.shape) {
-            continue;
-        }
-        casters.push_back(&image);
-    }
-    std::ranges::stable_sort(casters, {}, [&](const auto* image) {
-        return (image->shapeToWorld.p - cameraToWorld.p).lenSq();
-    });
-    // Bound attempts as well as successful shadows. Unsupported/over-budget
-    // receivers must not cause a crowded scene to retry every actor each frame.
-    const auto budget = std::min(std::size_t{32}, gfx::renderLimits().shadows);
-    std::vector<WorldSurfaceInstance> receiverInstances(surfaces_);
-    for (const auto* caster : casters | std::views::take(budget)) {
-        try {
-            const auto& image = *caster;
-            const auto& shape = *image.resources.shape;
-            auto shapeToLocal = image.shapeToWorld;
-            shapeToLocal.p = {};
-            Point3F center;
-            m_mul(shape.center, static_cast<const RMat3F&>(shapeToLocal), center);
-            // Keep window construction, plane tests and clipping near zero.
-            // Adding a small light-space quad to RPG world coordinates first
-            // loses enough float precision to reject an otherwise valid plane.
-            const auto window = sim::makeShadowSourceWindow(
-                direction, center, shape.radius, shape.bounds, shapeToLocal);
-            if (window.radius <= .0001f) {
-                continue;
-            }
-            // Clip to the actual receiver footprint and nearest surface along
-            // the light, including slopes, ledges and stacked interior floors.
-            // The silhouette camera sits ahead of the shape; start receiver
-            // collection at the caster instead so ceilings above it cannot
-            // steal its shadow from the floor below.
-            auto receivers = window;
-            for (auto& point : receivers.points) {
-                point += direction * (shape.radius + 2);
-            }
-            for (auto i : std::views::iota(std::size_t{}, surfaces_.size())) {
-                receiverInstances[i].placement = surfaces_[i].placement;
-                receiverInstances[i].placement.p -= image.shapeToWorld.p;
-                receiverInstances[i].placement.flags |= RMat3F::Matrix_HasTranslation;
-            }
-            auto geometry =
-                worldShadowGeometry(receivers, receiverInstances, cameraDirection, 100, .02f);
-            if (!geometry || geometry->polygons.empty()) {
-                continue;
-            }
-            // Render the retained animated pose from the light. A one-pixel
-            // border around the 64-square window supplies the blur kernel.
-            TMat3F lightToWorld;
-            lightToWorld.setRow(0, window.right);
-            lightToWorld.setRow(1, window.direction);
-            lightToWorld.setRow(2, window.up);
-            lightToWorld.p = (window.points[0] + window.points[2]) * .5f;
-            lightToWorld.flags = RMat3F::Matrix_HasRotation | RMat3F::Matrix_HasTranslation;
-            auto worldToLight = lightToWorld;
-            worldToLight.inverse();
-            TsStaticView view;
-            m_mul(shapeToLocal, worldToLight, view.shapeToCamera);
-            view.width = view.height = 66;
-            view.center = {33, 33};
-            view.focal = {32 / window.radius, 32 / window.radius};
-            view.perspective = false;
-            view.twoSided = true;
-            view.nearDistance = .001f;
-            view.farDistance = 65536;
-            view.detail = image.detail;
-            auto frame = TsStaticShapeFrame::prepare(image.resources, view, image.pose);
-            if (!frame) {
-                continue;
-            }
-            const auto mask = frame->silhouette();
-            if (!mask) {
-                continue;
-            }
-            std::vector<UInt8> pixels;
-            pixels.reserve(66 * 66);
-            for (auto y : std::views::iota(Int32{0}, Int32{66})) {
-                for (auto x : std::views::iota(Int32{0}, Int32{66})) {
-                    pixels.push_back(std::to_integer<UInt8>(mask->row(y)[x]));
-                }
-            }
-            for (auto& polygon : geometry->polygons) {
-                for (auto& vertex : polygon.vertices) {
-                    vertex.position += image.shapeToWorld.p;
-                }
-            }
-            // Local clipping can produce slivers narrower than one world-space
-            // float step. Translation can collapse them to a line or a point;
-            // discard those empty triangles before either renderer validates them.
-            std::erase_if(geometry->polygons, [](const auto& polygon) {
-                Point3F normal;
-                m_normal(polygon.vertices[0].position,
-                         polygon.vertices[1].position,
-                         polygon.vertices[2].position,
-                         normal);
-                return normal.len() < 1e-8f;
-            });
-            if (geometry->polygons.empty()) {
-                continue;
-            }
-            result.push_back({std::move(*geometry),
-                              sim::filterShadowBitmap(
-                                  pixels, 66, 64, sim::ShadowBlur::Box2, opacity * image.opacity)});
-        } catch (const std::invalid_argument&) {
-            // Shadows are optional. A bad caster must not drop the world frame
-            // or discard valid shadows already prepared for other players.
-            continue;
-        } catch (const std::length_error&) {
-            continue;
-        }
-    }
-    return result;
-}
 } // namespace opent1::world

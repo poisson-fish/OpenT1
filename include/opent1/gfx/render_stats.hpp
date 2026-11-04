@@ -22,6 +22,10 @@ struct RenderWorkStats {
     std::uint64_t bitmapCopyBytes{}, layerScanPixels{}, surfaceInversions{};
     std::uint64_t interiorGeometryBuilds{}, interiorLightMapBuilds{}, interiorLightMapBytes{};
     std::uint64_t terrainMeshCacheHits{};
+    double shadowIndexMs{}, shadowReceiversMs{}, shadowSilhouetteMs{}, shadowFilterMs{};
+    std::uint64_t shadowTriangleTests{}, shadowCandidates{}, shadowPairTests{}, shadowClipCalls{};
+    std::uint64_t shadowIndexBuilds{}, shadowIndexHits{}, shadowGeometryHits{}, shadowSilhouetteHits{};
+    std::uint64_t shadowCasters{}, shadowRendered{}, shadowSkipped{}, shadowBudgetExhaustions{}, shadowWork{};
 };
 
 inline thread_local RenderWorkStats* currentRenderWorkStats{};

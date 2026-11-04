@@ -1086,7 +1086,23 @@ protected:
                       << " tileEvictions=" << work.terrainTileEvictions
                       << " terrainCacheEntries=" << work.terrainCacheEntries
                       << " terrainCacheBytes=" << work.terrainCacheBytes << " sky=" << work.skyMs
-                      << " hardwareSkyPolygons=" << work.hardwareSkyPolygons;
+                      << " hardwareSkyPolygons=" << work.hardwareSkyPolygons
+                      << " shadowIndex=" << work.shadowIndexMs
+                      << " shadowReceivers=" << work.shadowReceiversMs
+                      << " shadowSilhouette=" << work.shadowSilhouetteMs
+                      << " shadowFilter=" << work.shadowFilterMs
+                      << " shadowCasters=" << work.shadowCasters
+                      << " shadowRendered=" << work.shadowRendered
+                      << " shadowCandidates=" << work.shadowCandidates
+                      << " shadowPairs=" << work.shadowPairTests
+                      << " shadowClips=" << work.shadowClipCalls
+                      << " shadowIndexBuilds=" << work.shadowIndexBuilds
+                      << " shadowIndexHits=" << work.shadowIndexHits
+                      << " shadowGeometryHits=" << work.shadowGeometryHits
+                      << " shadowSilhouetteHits=" << work.shadowSilhouetteHits
+                      << " shadowWork=" << work.shadowWork
+                      << " shadowBudgetExhaustions=" << work.shadowBudgetExhaustions
+                      << " shadowSkipped=" << work.shadowSkipped;
             if (hardware) {
                 const auto submitted = gpuSurface_->submissionStats();
                 const auto textures = gpuSurface_->textureCacheStats();

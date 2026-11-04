@@ -28,6 +28,7 @@ add_executable(
     world/collision_test.cpp
     world/mission_test.cpp
     world/render_retention_test.cpp
+    world/shadow_receivers_test.cpp
     gui/canvas_test.cpp
     gui/routing_test.cpp
     gui/editor_test.cpp

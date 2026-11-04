@@ -81,6 +81,10 @@ struct WorldShapeImage {
     };
 
     std::optional<SunOverride> sunOverride{};
+    // Local object generation + image slot, assigned by scene capture. Never a
+    // recycled network ID or a pointer into a mutable simulation object.
+    UInt64 shadowCaster{};
+    UInt32 shadowPart{};
 };
 
 struct WorldShapeQuery : sim::SimQuery {
@@ -367,6 +371,19 @@ struct WorldShadow {
     sim::ShadowBitmap bitmap;
 };
 
+class WorldShadowContext {
+public:
+    WorldShadowContext();
+    ~WorldShadowContext();
+    void clear();
+    WorldShadowContext(const WorldShadowContext&) = delete;
+    WorldShadowContext& operator=(const WorldShadowContext&) = delete;
+private:
+    friend class WorldSceneFrame;
+    struct State;
+    std::unique_ptr<State> state_;
+};
+
 // Owned, repeatable scene snapshot: shape poses, lighting, DMLs and volume
 // geometry survive provider/service removal and resource-manager destruction.
 // Immutable surface meshes and their material dependencies are strongly retained.
@@ -421,7 +438,9 @@ public:
                    Flt32 lift = .1f,
                    bool nativePartition = false) const;
     [[nodiscard]] std::optional<std::vector<WorldShadow>> shadows(Point3F lightDirection,
-                                                                  Flt32 opacity = .5f) const;
+                                                                  Flt32 opacity = .5f,
+                                                                  WorldShadowContext* = nullptr,
+                                                                  Flt64 seconds = 0) const;
     [[nodiscard]] std::optional<gfx::HardwareBatch>
     hardware(const gfx::Palette&,
              std::span<const sim::EnvironmentShadow> = {},

@@ -2,17 +2,29 @@
 #include <opent1/game/game_app.hpp>
 #include <ranges>
 #include <opent1/game/observer_camera.hpp>
+#include <opent1/game/player.hpp>
 #include <opent1/gfx/sdl_gpu_surface.hpp>
 #include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <sstream>
 
 using namespace opent1;
 
 namespace {
 using Clock = std::chrono::steady_clock;
+
+class BenchmarkShadowCaster : public world::SimTsShape {
+public:
+    bool processQuery(sim::SimQuery& query) override {
+        const bool result = SimTsShape::processQuery(query);
+        if (auto* shape = dynamic_cast<world::WorldShapeQuery*>(&query); shape && shape->image)
+            shape->image->castShadow = true;
+        return result;
+    }
+};
 
 double ms(Clock::time_point start) {
     return std::chrono::duration<double, std::milli>(Clock::now() - start).count();
@@ -31,20 +43,22 @@ void distribution(std::ostream& out, std::string_view name, std::vector<double> 
     const auto percentile = [&](double p) {
         return values[std::size_t(p * (values.size() - 1))];
     };
-    out << '"' << name << "\":{\"mean\":" << sum / values.size() << ",\"p95\":" << percentile(.95)
-        << ",\"p99\":" << percentile(.99) << '}';
+    out << '"' << name << "\":{\"mean\":" << sum / values.size() << ",\"p50\":" << percentile(.5)
+        << ",\"p95\":" << percentile(.95) << ",\"p99\":" << percentile(.99) << '}';
 }
 }
 
 int main(int argc, char** argv) {
     try {
         require(argc >= 4,
-                "Usage: render_benchmark ASSETS MISSION OUTPUT [stationary|rotate|travel] [FRAMES] "
+                "Usage: render_benchmark ASSETS MISSION OUTPUT "
+                "[stationary|rotate|travel|follow-bot] [FRAMES] "
                 "[DRIVER] [RPG]");
         const std::filesystem::path output = std::filesystem::absolute(argv[3]);
         std::filesystem::create_directories(output.parent_path());
         const std::string mode = argc > 4 ? argv[4] : "stationary";
-        require(mode == "stationary" || mode == "rotate" || mode == "travel",
+        require(mode == "stationary" || mode == "rotate" || mode == "travel" ||
+                    mode == "follow-bot",
                 "invalid camera mode");
         const unsigned count = argc > 5 ? unsigned(std::stoul(argv[5])) : 240;
         require(count > 0 && count <= 100000, "invalid frame count");
@@ -75,8 +89,41 @@ int main(int argc, char** argv) {
                            ? dynamic_cast<game::ObserverCamera*>(sg.playerPSC->getControlObject())
                            : nullptr;
         require(camera && server, "benchmark requires local observer cameras");
-        const auto origin = camera->getEyeTransform().p;
-        const auto rotation = camera->rotation();
+        sim::SimAddress followed;
+        const auto selectBot = [&] {
+            for (auto* object : sg.manager->objects()) {
+                if (auto* player = dynamic_cast<game::Player*>(object);
+                    player && player->isAiControlled() && !player->isDead())
+                    return player->address();
+            }
+            return sim::SimAddress{};
+        };
+        if (mode == "follow-bot") {
+            followed = selectBot();
+            require(bool(followed.resolve(*sg.manager)), "follow-bot requires a spawned bot");
+        }
+        auto origin = camera->getEyeTransform().p;
+        auto rotation = camera->rotation();
+        std::vector<BenchmarkShadowCaster*> shadowActors;
+        Point3F crowdOrigin;
+        const bool movingCrowd = std::getenv("OPENT1_SHADOW_BENCHMARK_MOVING") != nullptr;
+        if (const auto* value = std::getenv("OPENT1_SHADOW_BENCHMARK_ORIGIN")) {
+            std::istringstream position(value);
+            require(bool(position >> crowdOrigin.x >> crowdOrigin.y >> crowdOrigin.z),
+                    "invalid shadow benchmark origin");
+            const auto* name = std::getenv("OPENT1_SHADOW_BENCHMARK_SHAPE");
+            require(name && *name, "shadow benchmark requires OPENT1_SHADOW_BENCHMARK_SHAPE");
+            for (unsigned i = 0; i < 32; ++i) {
+                auto actor = std::make_unique<BenchmarkShadowCaster>();
+                require(actor->setShapeName(name), "shadow benchmark shape failed");
+                auto* caster = actor.get();
+                require(bool(cg.manager->addObject(std::move(actor))),
+                        "shadow benchmark actor failed");
+                shadowActors.push_back(caster);
+            }
+            origin = crowdOrigin + Point3F{0, -16, 8};
+            rotation = {-.35f, 0, 0};
+        }
         platform::SdlApplication application;
         require(application.initialize({}) == SDL_APP_CONTINUE, "SDL init failed");
         platform::WindowConfig wc;
@@ -91,6 +138,7 @@ int main(int argc, char** argv) {
         require(bool(surface), SDL_GetError());
         std::vector<double> frames, prepares, captures, submissions, simulations, terrain, lighting;
         std::vector<double> terrainVisibility, terrainSelect, terrainEdges, terrainEmit;
+        std::vector<double> shadowIndex, shadowReceivers, shadowSilhouette, shadowFilter;
         gfx::RenderWorkStats terrainWork;
         UInt64 polygons{}, draws{}, binds{}, vertexBytes{}, meshBytes{}, textureBytes{},
             geometryBuilds{}, mapBuilds{}, terrainCacheHits{};
@@ -104,13 +152,34 @@ int main(int argc, char** argv) {
                       })) {
             const auto start = Clock::now();
             require(game.stepFrame((f + 9) * .032, false), "simulation failed");
+            for (std::size_t i = 0; i < shadowActors.size(); ++i) {
+                const auto shift =
+                    mode == "stationary" && !movingCrowd ? 0.f : std::sin(float(f) * .025f) * .5f;
+                const auto position =
+                    crowdOrigin +
+                    Point3F{float(i % 8) * .5f - 1.75f + shift, float(i / 8) * .5f, 0};
+                require(shadowActors[i]->setTransform(TMat3F(EulerF{}, position)),
+                        "shadow benchmark placement failed");
+            }
             auto pos = origin;
             auto rot = rotation;
-            if (mode != "stationary")
+            if (mode == "rotate" || mode == "travel")
                 rot.z += Flt32(f % 120) * 6.2831853f / 120;
             if (mode == "travel") {
                 pos.x += 64 * std::sin(Flt32(f) * .025f);
                 pos.y += 64 * (1 - std::cos(Flt32(f) * .025f));
+            }
+            if (mode == "follow-bot") {
+                auto* bot = dynamic_cast<const game::Player*>(followed.resolve(*sg.manager));
+                if (!bot || bot->isDead()) {
+                    followed = selectBot();
+                    bot = dynamic_cast<const game::Player*>(followed.resolve(*sg.manager));
+                }
+                require(bot != nullptr, "follow-bot requires a living bot");
+                const auto angle = Flt32(f % 120) * 6.2831853f / 120;
+                pos = bot->getLinearPosition() +
+                      Point3F{8 * std::sin(angle), -8 * std::cos(angle), 4};
+                rot = {-.35f, 0, angle};
             }
             camera->setFlyMode(false, true, pos, rot);
             server->setFlyMode(false, true, pos, rot);
@@ -132,6 +201,19 @@ int main(int argc, char** argv) {
                 simulations.push_back(simMs);
                 terrain.push_back(game.renderStats().work.terrainLodMs);
                 const auto& work = game.renderStats().work;
+                shadowIndex.push_back(work.shadowIndexMs);
+                shadowReceivers.push_back(work.shadowReceiversMs);
+                shadowSilhouette.push_back(work.shadowSilhouetteMs);
+                shadowFilter.push_back(work.shadowFilterMs);
+                terrainWork.shadowCasters += work.shadowCasters;
+                terrainWork.shadowRendered += work.shadowRendered;
+                terrainWork.shadowCandidates += work.shadowCandidates;
+                terrainWork.shadowPairTests += work.shadowPairTests;
+                terrainWork.shadowClipCalls += work.shadowClipCalls;
+                terrainWork.shadowIndexHits += work.shadowIndexHits;
+                terrainWork.shadowGeometryHits += work.shadowGeometryHits;
+                terrainWork.shadowSilhouetteHits += work.shadowSilhouetteHits;
+                terrainWork.shadowBudgetExhaustions += work.shadowBudgetExhaustions;
                 terrainVisibility.push_back(work.terrainVisibilityMs);
                 terrainSelect.push_back(work.terrainSelectMs);
                 terrainEdges.push_back(work.terrainEdgesMs);
@@ -179,7 +261,9 @@ int main(int argc, char** argv) {
         const auto conversions = gfx::hardwareTextureConversionStats();
         std::ofstream out(output);
         out << "{\"mission\":\"" << argv[2] << "\",\"mode\":\"" << mode << "\",\"driver\":\""
-            << surface->driver() << "\",\"frames\":" << count << ",\"load_ms\":" << loadMs << ',';
+            << surface->driver() << "\",\"frames\":" << count << ",\"load_ms\":" << loadMs
+            << ",\"benchmark_shadow_casters\":" << shadowActors.size()
+            << ",\"benchmark_shadow_moving\":" << (movingCrowd ? "true" : "false") << ',';
         distribution(out, "frame_ms", frames);
         out << ',';
         distribution(out, "prepare_ms", prepares);
@@ -189,6 +273,24 @@ int main(int argc, char** argv) {
         distribution(out, "submit_ms", submissions);
         out << ',';
         distribution(out, "simulation_ms", simulations);
+        out << ',';
+        distribution(out, "shadow_index_ms", shadowIndex);
+        out << ',';
+        distribution(out, "shadow_receivers_ms", shadowReceivers);
+        out << ',';
+        distribution(out, "shadow_silhouette_ms", shadowSilhouette);
+        out << ',';
+        distribution(out, "shadow_filter_ms", shadowFilter);
+        out << ",\"mean_shadow_casters\":" << double(terrainWork.shadowCasters) / count
+            << ",\"mean_shadow_rendered\":" << double(terrainWork.shadowRendered) / count
+            << ",\"mean_shadow_candidates\":" << double(terrainWork.shadowCandidates) / count
+            << ",\"mean_shadow_pairs\":" << double(terrainWork.shadowPairTests) / count
+            << ",\"mean_shadow_clips\":" << double(terrainWork.shadowClipCalls) / count
+            << ",\"mean_shadow_index_hits\":" << double(terrainWork.shadowIndexHits) / count
+            << ",\"mean_shadow_geometry_hits\":" << double(terrainWork.shadowGeometryHits) / count
+            << ",\"mean_shadow_silhouette_hits\":"
+            << double(terrainWork.shadowSilhouetteHits) / count
+            << ",\"shadow_budget_exhaustions\":" << terrainWork.shadowBudgetExhaustions;
         out << ',';
         distribution(out, "terrain_lod_ms", terrain);
         out << ',';

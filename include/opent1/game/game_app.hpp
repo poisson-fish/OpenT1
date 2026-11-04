@@ -279,6 +279,7 @@ private:
     double lastWallTime_{-1.0};
     double simulationWallTime_{};
     RenderStats renderStats_{};
+    world::WorldShadowContext shadowContext_;
     UInt64 inputWorldRevision_{~UInt64{0}};
     sim::SimAddress inputTarget_{};
     std::array<std::shared_ptr<const sim::SimActionMap>, 3> boundInputMaps_{};

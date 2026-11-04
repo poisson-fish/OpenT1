@@ -65,6 +65,11 @@ void lexer() {
     for (const auto text : {"$a=2147483648;", "$a=0x100000000;", "$a=1e9999;", "$a=1e-9999;"}) {
         bad(text, DiagnosticCode::NumberOutOfRange);
     }
+    Limits legacy;
+    legacy.legacyDecimalIntegers = true;
+    const auto wrapped = tokenize("2147483648 10000000000000000000000000", "legacy.cs", legacy);
+    CHECK(wrapped.ok() && wrapped.tokens[0].integer == (-2147483647 - 1));
+    CHECK(wrapped.tokens[1].integer == 1241513984);
 }
 
 void structure() {

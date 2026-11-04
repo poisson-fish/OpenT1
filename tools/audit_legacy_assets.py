@@ -25,6 +25,10 @@ PROBES = (
     "presto/Install.cs", "DeusRPGPack/DeusHUD/DeusRPGHud.cs",
     "DeusRPGPack/DeusHUD/HPMP.cs", "gui/play.gui", "play.gui",
     "RPG.cs", "RPG.vol", "NewOpts.vol", "NewOpts/NewOptsInstall.cs",
+    "DarkLogo.bmp", "BrightLogo.bmp", "Background0.bmp", "Background1.bmp",
+    "Background2.bmp", "BackgroundGrid.bmp", "Shell.ppl", "ShellBorderCtrl.pba",
+    "BTN_QuickStart_DF.bmp", "Loading.bmp", "CUR_Arrow.bmp", "HH_Icon_Green.bmp",
+    "I_blaster_on.bmp",
 )
 FUNCTIONS = ("Include", "HUD::New", "RPGfetchData", "DeusRPGPack::func1")
 

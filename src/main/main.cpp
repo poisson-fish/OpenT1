@@ -271,10 +271,12 @@ protected:
             }
         }
 
+        // Startup --mission must leave a loading frame for the window to show.
+        app_.deferMissionLoading(includesProgramName_ && !opts_.headless && !opts_.hidden &&
+                                 !opts_.smoke && !opts_.dedicated);
         if (!app_.init(userArgs)) {
             return false;
         }
-        app_.deferMissionLoading(true);
 
         const bool createSdlWindow =
             !opts_.headless && (!opts_.dedicated || opts_.sdlLoop || opts_.smoke);

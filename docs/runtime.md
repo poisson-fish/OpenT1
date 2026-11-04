@@ -49,6 +49,8 @@ present. `--spawn-demo` selects the built-in session and suppresses automatic
 `console.cs` execution; `--exec-console-cs` explicitly requests that script.
 Mounted installations normally execute `console.cs` without needing the latter
 flag. `--mission NAME_OR_FILE` requests a mission after startup.
+In a visible standalone SDL window, it presents the selected mod's loading
+screen before starting the blocking mission load.
 
 Game command-line processing also exposes arguments through `$cargc` and
 `$cargvN`. `+exec FILE` loads a startup script; when `console.cs` is active, that

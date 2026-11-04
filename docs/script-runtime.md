@@ -89,6 +89,15 @@ mutations already completed before a runtime error remain. Subsequent invocation
 receive a fresh budget and empty result. Native callbacks must bound their own
 work; the interpreter cannot interrupt a callback that does not return.
 
+Console execution defaults to the original Windows lexer behavior for decimal
+integer literals: values wrap to signed 32-bit integers. For example, Wasteland's
+`10000000000000000000000000` literal becomes `1241513984`. This conversion uses
+defined unsigned arithmetic rather than overflowing a C++ signed integer.
+Standalone `script::parse` and `tokenize` remain strict unless
+`Limits::legacyDecimalIntegers` is enabled. Hosts can disable it through
+`ExecutionLimits::parser` when constructing a `Console`. Floating literals and
+hexadecimal literals retain their existing range checks.
+
 The runtime keeps the legacy numeric/string coercions, comparison rules,
 six-significant-digit numbers, postfix results, top-level flow behavior, and
 truncating `floor`. It defines integer edge cases without C++ overflow or invalid

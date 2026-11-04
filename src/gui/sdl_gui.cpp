@@ -112,7 +112,7 @@ std::optional<Point2I> SdlInput::position(float x, float y) const {
 
 SdlInput::SdlInput(platform::SdlWindow& window, Canvas& canvas)
     : canvas_(canvas), window_(window.nativeHandle()), id_(window.id()),
-      focused_(window.state().focused) {
+      focused_(window.state().focused), mouseFocused_(SDL_GetMouseFocus() == window_) {
     if (canvas_.captureMouse || canvas_.readClipboard || canvas_.writeClipboard) {
         throw std::logic_error("GUI canvas already has a platform binding");
     }
@@ -167,11 +167,30 @@ void SdlInput::release() noexcept {
     if (window_ && textInput_) {
         SDL_StopTextInput(window_);
     }
+    if (cursorHidden_) {
+        (void)SDL_ShowCursor();
+        cursorHidden_ = false;
+    }
     window_ = nullptr;
-    textInput_ = focused_ = false;
+    textInput_ = focused_ = mouseFocused_ = false;
 }
 
 bool SdlInput::synchronize() {
+    // Tribes draws the mod's cursor into the canvas. The OS pointer otherwise
+    // sits on top of it; restore it when the mouse leaves this canvas/window.
+    if (window_ && focused_ && mouseFocused_) {
+        if (!cursorHidden_ && SDL_CursorVisible()) {
+            if (!SDL_HideCursor()) {
+                return false;
+            }
+            cursorHidden_ = true;
+        }
+    } else if (cursorHidden_) {
+        if (!SDL_ShowCursor()) {
+            return false;
+        }
+        cursorHidden_ = false;
+    }
     const bool enable =
         window_ && focused_ && keyboardEnabled_ && dynamic_cast<TextEdit*>(canvas_.focus());
     if (enable == textInput_) {
@@ -209,6 +228,11 @@ bool SdlInput::process(const platform::Event& input) {
         return false;
     }
     if (const auto* e = std::get_if<platform::WindowEvent>(&input.data)) {
+        if (e->type == SDL_EVENT_WINDOW_MOUSE_ENTER) {
+            mouseFocused_ = true;
+        } else if (e->type == SDL_EVENT_WINDOW_MOUSE_LEAVE) {
+            mouseFocused_ = false;
+        }
         if (e->type == SDL_EVENT_WINDOW_FOCUS_GAINED) {
             focused_ = true;
             modifiers_ = SDL_GetModState();
@@ -216,6 +240,9 @@ bool SdlInput::process(const platform::Event& input) {
         if (e->type == SDL_EVENT_WINDOW_FOCUS_LOST || e->type == SDL_EVENT_WINDOW_HIDDEN) {
             canvas_.cancel();
             focused_ = false;
+            if (e->type == SDL_EVENT_WINDOW_HIDDEN) {
+                mouseFocused_ = false;
+            }
             modifiers_ = 0;
         }
         synchronize();

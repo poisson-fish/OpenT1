@@ -71,6 +71,11 @@ void basics() {
     CHECK(toInteger("2147483648") == 2147483647 && toInteger("-2147483649") == (-2147483647 - 1));
     CHECK(eval(c, "return 1 << 33;") == "2");
     CHECK(eval(c, "return 0x80000000 % -1;") == "0");
+    CHECK(eval(c, "return 2147483648;") == "-2147483648");
+    CHECK(eval(c, "return 4294967296;") == "0");
+    // Wasteland HellsHammer.cs uses this literal in a function body.
+    CHECK(eval(c, "function hugeExp() { return 10000000000000000000000000; } return hugeExp();") ==
+          "1241513984");
 }
 
 void callbacks() {

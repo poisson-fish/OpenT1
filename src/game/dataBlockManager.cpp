@@ -7,8 +7,10 @@
 #include <algorithm>
 #include <bit>
 #include <cctype>
+#include <cmath>
 #include <cstring>
 #include <format>
+#include <limits>
 
 namespace opent1::game {
 namespace {
@@ -35,6 +37,19 @@ template <class T> void writePod(BitStream& stream, const T& val) {
     std::array<std::byte, sizeof(T)> bytes{};
     std::memcpy(bytes.data(), &val, sizeof(T));
     stream.writeBytes(bytes);
+}
+
+void writeLegacyFloat(BitStream& stream, Flt32 value, Int32 bits) {
+    // Original datablocks truncate the scaled float and write its low bits.
+    // Mods use values outside [0,1] (Wasteland's MutantArmor uses 1.2).
+    // Keep the general BitStream normalized-float API strict.
+    OPENT1_ASSERT_FATAL(bits >= 1 && bits <= 30, "Invalid datablock float bit width");
+    const auto encoded = value * Flt32((UInt32{1} << bits) - 1);
+    OPENT1_ASSERT_FATAL(std::isfinite(encoded) &&
+                            double(encoded) >= double(std::numeric_limits<Int32>::min()) &&
+                            double(encoded) <= double(std::numeric_limits<Int32>::max()),
+                        "Invalid quantized datablock float");
+    stream.writeInt(static_cast<Int32>(encoded), bits);
 }
 
 template <class T> bool readPod(BitStream& stream, T& val) {
@@ -152,12 +167,12 @@ bool SoundProfileData::preload(ResourceManager* /*rm*/,
 void SoundProfileData::pack(BitStream& stream, DataBlockManager* /*dbm*/) const {
     const SoundProfileData test;
     stream.writeInt(static_cast<Int32>(profile.flags), 6);
-    stream.writeFloat(profile.baseVolume, 10);
+    writeLegacyFloat(stream, profile.baseVolume, 10);
     if (stream.writeFlag(test.profile.coneInsideAngle != profile.coneInsideAngle)) {
-        stream.writeFloat(profile.coneInsideAngle / 360.0f, 10);
+        writeLegacyFloat(stream, profile.coneInsideAngle / 360.0f, 10);
     }
     if (stream.writeFlag(test.profile.coneOutsideAngle != profile.coneOutsideAngle)) {
-        stream.writeFloat(profile.coneOutsideAngle / 360.0f, 10);
+        writeLegacyFloat(stream, profile.coneOutsideAngle / 360.0f, 10);
     }
     if (stream.writeFlag(profile.coneVector.x != test.profile.coneVector.x ||
                          profile.coneVector.y != test.profile.coneVector.y ||
@@ -225,7 +240,7 @@ bool SoundData::preload(ResourceManager* /*rm*/, bool /*server*/, std::string& /
 
 void SoundData::pack(BitStream& stream, DataBlockManager* dbm) const {
     stream.writeString(wavFileName);
-    stream.writeFloat(priority, 6);
+    writeLegacyFloat(stream, priority, 6);
     writeBlockIdHelper(stream, dbm, DataBlockManager::SoundProfileDataType, profileIndex);
 }
 
@@ -472,16 +487,16 @@ void PlayerData::pack(BitStream& stream, DataBlockManager* dbm) const {
 
     writePod(stream, minDamageSpeed);
     writePod(stream, jetEnergyDrain);
-    stream.writeFloat(maxForwardSpeed / 64.0f, 10);
-    stream.writeFloat(maxBackwardSpeed / 64.0f, 10);
-    stream.writeFloat(maxSideSpeed / 64.0f, 10);
+    writeLegacyFloat(stream, maxForwardSpeed / 64.0f, 10);
+    writeLegacyFloat(stream, maxBackwardSpeed / 64.0f, 10);
+    writeLegacyFloat(stream, maxSideSpeed / 64.0f, 10);
     stream.writeFlag(canCrouch);
 
-    stream.writeFloat(maxJetSideForceFactor, 8);
+    writeLegacyFloat(stream, maxJetSideForceFactor, 8);
     writePod(stream, groundForce);
     writePod(stream, groundTraction);
     writePod(stream, maxJetForwardVelocity);
-    stream.writeFloat(jumpSurfaceMinDot, 8);
+    writeLegacyFloat(stream, jumpSurfaceMinDot, 8);
     writePod(stream, jumpImpulse);
     writePod(stream, mass);
     writePod(stream, drag);

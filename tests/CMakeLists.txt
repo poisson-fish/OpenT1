@@ -45,6 +45,7 @@ add_executable(
     game/rpg_regressions_test.cpp
     game/compatibility_test.cpp
     game/shell_controls_test.cpp
+    game/datablock_quantization_test.cpp
     game/model_rendering_test.cpp
     game/sky_test.cpp
     game/weather_test.cpp
@@ -80,6 +81,7 @@ if(OPENT1_BUILD_AUDIO)
     list(APPEND suites audio)
 endif()
 if(OPENT1_BUILD_PLATFORM)
+    target_compile_definitions(opent1_tests PRIVATE OPENT1_SHELL_GPU=1)
     option(OPENT1_TEST_GPU "Register real-device GPU tests (requires a native video driver)" OFF)
     set(OPENT1_TEST_GPU_DRIVER
         "" CACHE STRING "SDL GPU backend for real-device tests (empty selects automatically)"

@@ -33,7 +33,7 @@ private:
     Canvas& canvas_;
     SDL_Window* window_{};
     platform::WindowId id_{};
-    bool focused_{}, textInput_{};
+    bool focused_{}, textInput_{}, mouseFocused_{}, cursorHidden_{};
     Point2I lastPoint_{};
     std::shared_ptr<void> cleanup_;
     bool mouseEnabled_{true}, keyboardEnabled_{true};

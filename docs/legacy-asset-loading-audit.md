@@ -171,6 +171,127 @@ a direct physical file load before using the resource manager, and
 path refresh therefore does not guarantee an already-created GUI will reload.
 Restarting is the cleanest way to compare configurations.
 
+## Menu artwork verification, November 4, 2026
+
+The supplied files do not reproduce a failure to load stock menu artwork in
+OpenT1. Fresh PCRPG launches with and without `-mod RPG` load and render the main
+menu, Options and Create Server screens. The main menu names `DarkLogo.bmp`;
+Options names `Background1.bmp`. The logos, three numbered backgrounds, grid,
+`Shell.ppl`, `ShellBorderCtrl.pba` and menu button bitmaps resolve to
+`base/Shell.vol` in both modes. The archive inventory contains no replacement
+copies of these menu assets elsewhere in either supplied installation. This
+stock-menu check does not cover all RPG styling. The RPG witch loading screen
+and sword cursor are present and do not require Presto or Deus:
+`RPG/loading.bmp` replaces the loading image, while `RPG/ShellCommon.vol`
+replaces `CUR_Arrow.bmp`, `CUR_Centering.bmp` and `CUR_Hand.bmp`.
+
+This follows the original `FearGuiShellBorder.cpp`: `read` restores the bitmap
+name saved in the GUI, and `onAdd` loads that name plus the tagged border array.
+`FearGuiUnivButton.cpp` similarly loads the saved button root with state
+suffixes such as `_DF.BMP`. OpenT1 binds those resources before displaying the
+GUI. Selecting a gameplay mod does not invent a background name or mount every
+archive in the mod directory.
+
+The optional `shell_artwork/installed_artwork` test now checks the decoded
+resources and their physical sources, renders the startup/main/options/host
+screens, and compares the main-menu interior with its selected background.
+It also writes a synthetic `RPG/DarkLogo.bmp` into a temporary output overlay:
+base ignores it, `-mod RPG` selects it, and its pixels reach the menu framebuffer.
+The installation is never modified. At 1280x720, Direct3D 12 and Vulkan readbacks
+matched the software frame byte for byte in both PCRPG launch modes, including
+the synthetic replacement. Earlier software captures also verified 640x480.
+The comparison TRIBES installation also rendered stock menus successfully;
+its startup reports `Include: Unknown command`, confirming the broken custom
+UI startup chain described above. The original executable was not run.
+
+The subsequent RPG-specific check renders `gui/Loading.gui` using the actual
+witch artwork and compares the selected cursor with the sword bitmap. These
+assets load correctly. The earlier missing-pack diagnosis applies to the
+separate scripted HUD libraries, not to these built-in RPG replacements.
+
+Two presentation problems were found and fixed:
+
+- Visible SDL `--mission` startup called `FearGameApp::init` before creating the
+  window, and `init` synchronously loaded the entire mission. The script's
+  `renderCanvas(MainWindow)` had no presentation callback at that point. The
+  existing deferral flag was set only afterward and was never consulted by
+  `loadMission`. The SDL host now enables deferral before initialization;
+  `loadMission` stages the mod's Loading GUI and cursor, and the host presents
+  that frame before `loadPendingMission` performs the blocking work. Dedicated,
+  headless, hidden and embedded launches retain synchronous startup.
+- The SDL GUI binding left the native OS pointer visible over the canvas's
+  software cursor. It now hides the native pointer while the focused game
+  canvas owns mouse focus, restoring it on mouse exit, focus loss and binding
+  destruction. A cursor already hidden by another caller remains hidden.
+
+The `shell_loading/installed_rpg_loading` regression failed before the deferral
+fix and passes afterward. It checks that `--mission rpgmap5` first stages the
+Loading GUI with RPG artwork and cursor, then loads exactly once. Platform
+tests cover native cursor visibility ownership and restoration.
+
+No distinct replacement border bitmap array is present in this copy: the RPG
+ShellCommon border/scroll/slider arrays match base, and `ShellBorderCtrl.pba`
+resolves to `base/Shell.vol`. This does not identify the historical edge styling
+the user remembers. The separate `rpghud.cs` explicitly requires Presto and the
+Deus client libraries are absent, as documented above.
+
+Run the focused check after building `opent1_tests`:
+
+```powershell
+$env:OPENT1_TEST_ASSETS = (Resolve-Path ../TribesRE/PCRPG).Path
+.\build\x64-release\tests\opent1_tests.exe --suite shell_artwork
+.\build\x64-release\tests\opent1_tests.exe --suite shell_loading
+
+# Optional real-device comparison; omit this variable for software-only checks.
+$env:OPENT1_SHELL_GPU = 'direct3d12' # or vulkan
+.\build\x64-release\tests\opent1_tests.exe --suite shell_artwork
+
+# Optional PPM captures; create the output directory first.
+New-Item -ItemType Directory -Force build/shell-captures | Out-Null
+$env:OPENT1_SHELL_CAPTURE = (Resolve-Path build/shell-captures).Path
+.\build\x64-release\tests\opent1_tests.exe --suite shell_artwork
+```
+
+The older optional `shell/installed_mission_selection` test separately fails
+its mission-description assertion with the supplied PCRPG installation and
+passes with the comparison TRIBES installation. That failure occurred before
+the artwork test was added; it does not indicate a missing menu bitmap.
+
+## Wasteland rpgmap5 compatibility, November 4, 2026
+
+`../Wasteland` supplies loose RPG scripts, including a different `EnemyArmors.cs`,
+rather than the PCRPG `RPG/scripts.vol` used in the earlier checks. Its
+`MutantArmor` declares `maxJetSideForceFactor = 1.2` at line 3068. OpenT1 tried
+to encode it with the strict normalized-float API and raised `Invalid quantized
+float` while replicating datablocks. The original `playerUpdate.cpp` sends this
+field with eight bits, and the original `bitstream.cpp` truncates the scaled
+integer and writes its low bits without checking the normalized range.
+
+Datablock serialization now preserves that encoding: `1.2 * 255` truncates to
+306 and sends 50 in eight bits, while the server's original 1.2 value remains
+unchanged. Other quantized datablock fields use the same legacy conversion.
+Non-finite values and conversions outside the representable signed integer
+range are still rejected; the general BitStream normalized-float API remains
+strict. Unit tests cover the native bytes, negative and oversized finite inputs,
+and rejection of unsafe conversions.
+
+The next loading blocker was `HellsHammer.cs:132`, whose function body contains
+the decimal literal `10000000000000000000000000`. The original lexer calls
+Windows `atoi`, which wraps that literal to `1241513984`. Console execution now
+uses defined unsigned arithmetic to preserve decimal literal wrapping, while
+standalone parsing retains its strict default. This lets the entire file parse
+without editing the external mod scripts.
+
+The optional `wasteland/installed_loading` regression uses an isolated write
+directory, loads the supplied `rpgmap5`, advances the local connection and
+renders a frame. It also checks that MutantArmor retains 1.2 on the server and
+receives the original eight-bit value on the client.
+
+```powershell
+$env:OPENT1_TEST_ASSETS = (Resolve-Path ../Wasteland).Path
+.\build\x64-release\tests\opent1_tests.exe --suite wasteland
+```
+
 ## Reproducing the audit
 
 Run the read-only metadata tool from the OpenT1 root:

@@ -227,6 +227,13 @@ struct Scanner {
                         std::uint32_t value = 0;
                         ec = std::from_chars(raw.data(), raw.data() + raw.size(), value, 16).ec;
                         token.integer = std::bit_cast<std::int32_t>(value);
+                    } else if (limits.legacyDecimalIntegers) {
+                        std::uint32_t value = 0;
+                        for (const char digit : raw) {
+                            value = value * 10U + std::uint32_t(digit - '0');
+                        }
+                        token.integer = std::bit_cast<std::int32_t>(value);
+                        ec = {};
                     } else {
                         ec = std::from_chars(raw.data(), raw.data() + raw.size(), token.integer).ec;
                     }

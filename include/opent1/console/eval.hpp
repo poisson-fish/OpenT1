@@ -8,7 +8,7 @@ class Console;
 
 namespace opent1::script {
 struct ExecutionLimits {
-    Limits parser;
+    Limits parser{.legacyDecimalIntegers = true};
     // Legacy execution is unmetered. Hosts may opt into finite limits; nested
     // eval/exec and callbacks share them. Native stack exhaustion is guarded
     // independently of a script's instruction or recursion count.

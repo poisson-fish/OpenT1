@@ -4,7 +4,12 @@
 #include <opent1/game/game_app.hpp>
 #include <opent1/game/shell_controls.hpp>
 #include <opent1/gui/runtime.hpp>
+#include <opent1/core/file_stream.hpp>
 #include <cstdlib>
+#include <fstream>
+#ifdef OPENT1_SHELL_GPU
+#include <opent1/gfx/sdl_gpu_surface.hpp>
+#endif
 
 namespace {
 using namespace opent1;
@@ -156,6 +161,213 @@ void installedMissionSelection() {
                 previous.c_str(),
                 expected.c_str());
 }
+
+void installedShellArtwork() {
+    const auto* assets = std::getenv("OPENT1_TEST_ASSETS");
+    if (!assets || !*assets) {
+        return;
+    }
+    const auto run = [&](bool rpg, bool overrideArtwork) {
+        if (rpg && !std::filesystem::exists(std::filesystem::path(assets) / "RPG/scripts.vol")) {
+            return;
+        }
+        game::FearGameApp::Config config;
+        config.assetRoot = assets;
+        config.writeRoot = std::filesystem::temp_directory_path() /
+                           std::format("opent1-shell-art-{}",
+                                       std::chrono::steady_clock::now().time_since_epoch().count());
+        struct Cleanup {
+            std::filesystem::path path;
+
+            ~Cleanup() {
+                std::error_code ec;
+                std::filesystem::remove_all(path, ec);
+            }
+        } cleanup{config.writeRoot};
+        // A disposable write overlay exercises a real loose mod replacement
+        // without changing the external installation or copying its art.
+        const auto replacementPath = config.writeRoot / "RPG/DarkLogo.bmp";
+        if (overrideArtwork) {
+            std::filesystem::create_directories(replacementPath.parent_path());
+            auto replacement = gfx::Bitmap::create(640, 480);
+            CHECK(replacement);
+            std::fill(replacement->pixels.begin(), replacement->pixels.end(), std::byte{222});
+            FileWStream file(replacementPath);
+            CHECK(replacement->write(file) && file.flush());
+        }
+        game::FearGameApp app(config);
+        CHECK(rpg ? app.init(std::array<std::string_view, 2>{"-mod", "RPG"}) : app.init());
+        auto runtime = app.guiRuntime();
+        CHECK(runtime);
+        for (const auto name : {"DarkLogo.bmp",
+                                "Background0.bmp",
+                                "Background1.bmp",
+                                "Background2.bmp",
+                                "BackgroundGrid.bmp",
+                                "Loading.bmp",
+                                "CUR_Arrow.bmp",
+                                "BTN_QuickStart_DF.bmp"}) {
+            CHECK(app.resources().load<gfx::Bitmap>(name));
+            const auto path = app.resources().getFullPath(name);
+            CHECK(path);
+            std::printf("%s %s: %s\n", rpg ? "RPG" : "base", name, path->string().c_str());
+        }
+        const auto frames = app.resources().load<gfx::BitmapArray>("ShellBorderCtrl.pba");
+        CHECK(frames && frames->bitmaps.size() >= 15);
+        CHECK(app.resources().load<gfx::Palette>("Shell.ppl"));
+        if (overrideArtwork) {
+            CHECK((app.resources().getFullPath("DarkLogo.bmp") == replacementPath) == rpg);
+        }
+        for (const auto screen :
+             {"Startup",
+              "gui/MainMenu.gui",
+              "gui/Options.gui",
+              "gui/CreateServer.gui",
+              "gui/Loading.gui"}) {
+            if (std::string_view(screen) == "gui/MainMenu.gui") {
+                CHECK(app.console().execute("startMainMenuScreen").ok());
+                const auto cursor = app.resources().load<gfx::Bitmap>("CUR_Arrow.bmp");
+                CHECK(cursor && runtime->canvas.cursor.bitmap);
+                CHECK(cursor->pixels == runtime->canvas.cursor.bitmap->pixels);
+                CHECK(runtime->canvas.setCursorPosition({60, 150}));
+            } else if (std::string_view(screen) != "Startup") {
+                CHECK(runtime->open(screen));
+            }
+            CHECK(runtime->canvas.top());
+            std::printf("%s screen %s\n", rpg ? "RPG" : "base", screen);
+            auto surface = gfx::SoftwareSurface::create(1280, 720);
+            CHECK(surface && app.renderFrame(*surface));
+#ifdef OPENT1_SHELL_GPU
+            if (const auto* driver = std::getenv("OPENT1_SHELL_GPU")) {
+                platform::SdlApplication application;
+                CHECK(application.initialize({}) == SDL_APP_CONTINUE);
+                platform::WindowConfig wc;
+                wc.hidden = true;
+                wc.width = 1280;
+                wc.height = 720;
+                auto& window = application.createWindow(wc);
+                gfx::GpuSurfaceConfig gc;
+                gc.driver = driver;
+                auto gpu = gfx::SdlGpuSurface::create(window, wc.width, wc.height, gc);
+                CHECK(gpu);
+                gfx::HardwareBatch batch;
+                CHECK(app.renderFrame(gpu->software(), &batch));
+                CHECK(gpu->render(batch));
+                std::vector<std::byte> actual(1280 * 720 * 4), expected(actual.size());
+                CHECK(gpu->readback(actual));
+                CHECK(surface->rgba(expected));
+                CHECK(actual == expected);
+                std::printf("%s %s %s GPU matches software\n", rpg ? "RPG" : "base", screen, driver);
+            }
+#endif
+            if (const auto* output = std::getenv("OPENT1_SHELL_CAPTURE"); output && !overrideArtwork) {
+                const auto path = std::filesystem::path(output) /
+                                  std::format("{}-{}.ppm",
+                                              rpg ? "rpg" : "base",
+                                              std::filesystem::path(screen).stem().string());
+                std::ofstream file(path, std::ios::binary);
+                file << "P6\n1280 720\n255\n";
+                std::vector<std::byte> rgba(1280 * 720 * 4);
+                CHECK(surface->rgba(rgba));
+                for (std::size_t i = 0; i < rgba.size(); i += 4) {
+                    file.write(reinterpret_cast<const char*>(rgba.data() + i), 3);
+                }
+                CHECK(file.good());
+                if (std::string_view(screen) == "gui/MainMenu.gui") {
+                    auto cursor = *runtime->canvas.cursor.bitmap;
+                    cursor.palette = *app.defaultPalette();
+                    FileWStream cursorFile(std::filesystem::path(output) /
+                                           std::format("{}-cursor.bmp", rpg ? "rpg" : "base"));
+                    CHECK(cursor.write(cursorFile, gfx::BitmapFormat::Microsoft));
+                }
+            }
+        }
+
+        CHECK(runtime->open("gui/MainMenu.gui"));
+        auto* root = dynamic_cast<game::FGShellBorder*>(runtime->canvas.top());
+        CHECK(root && root->bitmapName() == "DarkLogo.bmp");
+        // Hide the labels, animation and buttons to inspect the bound background
+        // across the menu interior, independently of a successful file decode.
+        for (auto* child : root->objects()) {
+            static_cast<gui::Control*>(child)->visible(false);
+        }
+        CHECK(runtime->canvas.setCursorPosition({0, 0}));
+        auto actual = gfx::SoftwareSurface::create(640, 480);
+        auto expected = gfx::SoftwareSurface::create(640, 480);
+        CHECK(actual && expected && app.renderFrame(*actual));
+        CHECK(expected->setPalette(*app.defaultPalette()));
+        gui::Bitmap background;
+        background.bitmap =
+            std::make_shared<gfx::Bitmap>(*app.resources().load<gfx::Bitmap>("DarkLogo.bmp"));
+        background.stretch = true;
+        CHECK(background.resize({}, {640, 480}) && background.draw(*expected, {}, {0, 0, 639, 479}));
+        bool nonzero = false;
+        for (Int32 y = 40; y < 430; ++y) {
+            const auto row = actual->bitmap().row(y).subspan(40, 550);
+            CHECK(std::ranges::equal(row, expected->bitmap().row(y).subspan(40, 550)));
+            nonzero |= std::ranges::any_of(row, [](std::byte b) {
+                return b != std::byte{};
+            });
+        }
+        CHECK(nonzero);
+        if (rpg && overrideArtwork) {
+            CHECK(actual->bitmap().row(240)[320] == std::byte{222});
+        }
+        std::printf("%s %s background reaches framebuffer\n",
+                    rpg ? "RPG" : "base",
+                    overrideArtwork ? "with mod replacement" : "stock");
+    };
+    for (const bool overrideArtwork : {false, true}) {
+        for (const bool rpg : {false, true}) {
+            run(rpg, overrideArtwork);
+        }
+    }
+}
+
+void installedRpgDeferredLoading() {
+    const auto* assets = std::getenv("OPENT1_TEST_ASSETS");
+    if (!assets || !std::filesystem::exists(std::filesystem::path(assets) / "RPG/scripts.vol")) {
+        return;
+    }
+    game::FearGameApp::Config config;
+    config.assetRoot = assets;
+    config.writeRoot = std::filesystem::temp_directory_path() /
+                       std::format("opent1-loading-{}",
+                                   std::chrono::steady_clock::now().time_since_epoch().count());
+    struct Cleanup {
+        std::filesystem::path path;
+
+        ~Cleanup() {
+            std::error_code ec;
+            std::filesystem::remove_all(path, ec);
+        }
+    } cleanup{config.writeRoot};
+    game::FearGameApp app(config);
+    app.deferMissionLoading(true);
+    CHECK(app.init(std::array<std::string_view, 4>{"-mod", "RPG", "--mission", "rpgmap5"}));
+    CHECK(app.missionPending() && app.loadedMissionName().empty());
+    CHECK(app.guiRuntime()->canvas.top()->getName() == "LoadingGui");
+    const auto image = app.resources().load<gfx::Bitmap>("Loading.bmp");
+    const auto cursor = app.resources().load<gfx::Bitmap>("CUR_Arrow.bmp");
+    CHECK(image && cursor && app.guiRuntime()->canvas.cursor.bitmap);
+    CHECK(cursor->pixels == app.guiRuntime()->canvas.cursor.bitmap->pixels);
+    auto surface = gfx::SoftwareSurface::create(640, 480);
+    CHECK(surface && app.renderFrame(*surface));
+    auto reference = gfx::SoftwareSurface::create(640, 480);
+    CHECK(reference && reference->setPalette(*app.defaultPalette()));
+    gui::Bitmap background;
+    background.bitmap = std::make_shared<gfx::Bitmap>(*image);
+    background.stretch = true;
+    CHECK(background.resize({}, {640, 480}) && background.draw(*reference, {}, {0, 0, 639, 479}));
+    CHECK(surface->bitmap().row(240)[320] == reference->bitmap().row(240)[320]);
+    app.console().setVariable("Server::Port", "0");
+    app.console().setVariable("Server::Heartbeats", "false");
+    app.console().setVariable("PCFG::Name", "LoadingTest");
+    app.console().setVariable("PCFG::Script", "");
+    CHECK(app.loadPendingMission());
+    CHECK(!app.missionPending() && app.loadedMissionName() == "rpgmap5");
+    CHECK(!app.loadPendingMission());
+}
 }
 
 int opent1_test_shell_mission_selection() {
@@ -177,3 +389,15 @@ OPENT1_REGISTER_TEST("game",
 OPENT1_REGISTER_TEST("shell",
                      "installed_mission_selection",
                      opent1_test_installed_shell_mission_selection);
+
+int opent1_test_installed_shell_artwork() {
+    return test::run(installedShellArtwork);
+}
+
+OPENT1_REGISTER_TEST("shell_artwork", "installed_artwork", opent1_test_installed_shell_artwork);
+
+int opent1_test_installed_rpg_loading() {
+    return test::run(installedRpgDeferredLoading);
+}
+
+OPENT1_REGISTER_TEST("shell_loading", "installed_rpg_loading", opent1_test_installed_rpg_loading);

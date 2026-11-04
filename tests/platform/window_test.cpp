@@ -1,5 +1,6 @@
 #include "test_support.hpp"
 #include <opent1/platform/sdl_window.hpp>
+#include <opent1/gui/sdl_gui.hpp>
 #include <SDL3/SDL.h>
 #include <thread>
 #include <type_traits>
@@ -7,6 +8,53 @@ using namespace opent1;
 using namespace opent1::platform;
 
 namespace {
+void canvasCursorOwnership() {
+    SdlApplication app;
+    CHECK(app.initialize({}) == SDL_APP_CONTINUE);
+    WindowConfig config;
+    config.hidden = true;
+    auto& window = app.createWindow(config);
+    gui::Canvas canvas;
+    CHECK(SDL_ShowCursor());
+    {
+        gui::SdlInput input(window, canvas);
+        const auto event = [&](UInt32 type) {
+            (void)input.process(Event{window.id(), 0, WindowEvent{type}});
+        };
+        event(SDL_EVENT_WINDOW_FOCUS_GAINED);
+        event(SDL_EVENT_WINDOW_MOUSE_ENTER);
+        CHECK(!SDL_CursorVisible());
+        event(SDL_EVENT_WINDOW_MOUSE_LEAVE);
+        CHECK(SDL_CursorVisible());
+        event(SDL_EVENT_WINDOW_MOUSE_ENTER);
+        CHECK(!SDL_CursorVisible());
+        event(SDL_EVENT_WINDOW_FOCUS_LOST);
+        CHECK(SDL_CursorVisible());
+        event(SDL_EVENT_WINDOW_FOCUS_GAINED);
+        CHECK(!SDL_CursorVisible());
+    }
+    CHECK(SDL_CursorVisible());
+    // An already hidden cursor belongs to another caller; do not expose it.
+    CHECK(SDL_HideCursor());
+    {
+        gui::SdlInput input(window, canvas);
+        (void)input.process(Event{window.id(), 0, WindowEvent{SDL_EVENT_WINDOW_FOCUS_GAINED}});
+        (void)input.process(Event{window.id(), 0, WindowEvent{SDL_EVENT_WINDOW_MOUSE_ENTER}});
+        (void)input.process(Event{window.id(), 0, WindowEvent{SDL_EVENT_WINDOW_MOUSE_LEAVE}});
+        CHECK(!SDL_CursorVisible());
+    }
+    CHECK(!SDL_CursorVisible());
+    CHECK(SDL_ShowCursor());
+    {
+        gui::SdlInput input(window, canvas);
+        (void)input.process(Event{window.id(), 0, WindowEvent{SDL_EVENT_WINDOW_FOCUS_GAINED}});
+        (void)input.process(Event{window.id(), 0, WindowEvent{SDL_EVENT_WINDOW_MOUSE_ENTER}});
+        CHECK(!SDL_CursorVisible());
+        app.destroyWindow(window.id());
+        CHECK(SDL_CursorVisible() && input.synchronize());
+    }
+}
+
 SDL_Event winEvent(WindowId id, UInt32 type, Int32 a = 0, Int32 b = 0) {
     SDL_Event e{};
     e.type = type;
@@ -515,6 +563,7 @@ int opent1_test_platform_window(int argc, char**) {
             return;
         }
         windowOwnership();
+        canvasCursorOwnership();
         translation();
         lifecycle();
         failurePaths();

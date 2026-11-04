@@ -4870,6 +4870,18 @@ bool FearGameApp::loadMission(std::string_view missionNameOrFile, bool dedicated
         return fail("Mission file not found: " + misFile);
     }
 
+    if (deferMissionLoading_ && !dedicated) {
+        if (!guiRuntime_ || !guiRuntime_->open("gui/Loading.gui")) {
+            return fail("Cannot open the mission loading screen");
+        }
+        const std::array<std::string, 2> cursor{"MainWindow", "Cur_Arrow.bmp"};
+        (void)game_.console().execute("setCursor", cursor);
+        (void)game_.console().execute("cursorOn", std::array<std::string, 1>{"MainWindow"});
+        pendingMission_ = PendingMission{stem, dedicated};
+        game_.console().setVariable("loadingMission", "true");
+        return true;
+    }
+
     if (game_.console().isFunction("createServer")) {
         world::clearTsHardwareMeshes();
         const std::array<std::string, 2> arguments{stem, dedicated ? "true" : "false"};
@@ -4895,6 +4907,15 @@ bool FearGameApp::loadPendingMission() {
     }
     auto request = std::move(*pendingMission_);
     pendingMission_.reset();
+    struct RestoreDeferral {
+        bool& flag;
+        bool value;
+
+        ~RestoreDeferral() {
+            flag = value;
+        }
+    } restore{deferMissionLoading_, deferMissionLoading_};
+    deferMissionLoading_ = false;
     const bool result = loadMission(request.name, request.dedicated);
     game_.console().setVariable("loadingMission", "false");
     if (!result && guiRuntime_) {

@@ -99,6 +99,8 @@ struct Limits {
     std::size_t maxTokens = 1'000'000; // excludes End
     std::size_t maxNodes = 1'000'000;
     std::size_t maxNesting = 128; // hard ceiling 128, even if raised by caller
+    // Original Windows atoi wraps decimal integer literals to 32 bits.
+    bool legacyDecimalIntegers = false;
 };
 
 struct Token {
@@ -292,7 +294,9 @@ struct ParseResult {
 // Bounded string_view input stops at its first NUL, matching SetScanBuffer.
 // Closed single quotes keep raw escapes. Keywords are case sensitive. Unlike
 // legacy truncation/undefined behavior, malformed strings and out-of-range
-// numbers produce diagnostics. Calls are independent and safe concurrently.
+// numbers produce diagnostics by default. legacyDecimalIntegers explicitly
+// preserves the Windows console's integer literal wrapping. Calls are independent
+// and safe concurrently.
 [[nodiscard]] TokenizeResult
 tokenize(std::string_view source, std::string_view sourceName = "<script>", Limits limits = {});
 [[nodiscard]] ParseResult

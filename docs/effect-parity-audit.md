@@ -57,6 +57,76 @@ destruction, and deletion at the half-second boundary. The installed effects
 test runs the original Hellstorm `DoCastSpell` branch, observes all 26 mines and
 their explosions, and verifies that every mine and client ghost is removed.
 
+### Live spell mine callback dispatch (November 4, 2026)
+
+The destruction guard did not cover a hostile caster's live spell effect touching
+the player during its fuse. Legacy `program/code/gamebase.cpp` implements
+`GameBase::getScriptDefaultClass` with `getClassName()`, so its `scriptName`
+fallback for a `Mine` is `Mine`, regardless of its C++ parent `Item`. OpenT1's
+`Mine` inherited `Item`'s hardcoded default namespace. With no datablock or
+`Handgrenade::onCollision` handler, a live bomb therefore dispatched the RPG
+pickup callback. The same mismatch bypassed the default `Mine::onDamage` handler.
+
+The underlying port error was broader than mines: `GameBase` returned a literal
+namespace and nine derived-class overrides returned other literals. Derived
+classes without overrides inherited their parent's script identity. For example,
+`Turret`, `Vehicle`, `Flier` and `Sensor` resolved to `StaticBase`, and several
+projectiles resolved to `ShapeBase`. Adding a `Mine` override addressed one
+instance but retained the structural mismatch.
+
+`GameBase::getScriptDefaultClass` now looks up the object's exact dynamic type in
+the host's existing persistent class registry, matching vanilla's `getClassName`.
+`SimGame::setWorld` binds that instance-owned registry to both world managers;
+script-created, native-created, loaded and ghost objects share the same lookup.
+The redundant hardcoded overrides are removed. The three concrete base classes
+exposed by existing factories are also registered. No spell IDs, effect datablock
+names, message filters, or mod-script edits participate in the repair.
+
+Named-object, datablock, datablock-class, concrete engine class and global
+callbacks retain that order. C++ parent namespaces are not another fallback.
+Ordinary items still dispatch their pickup callbacks.
+
+Before the repair, the installed-effects regression reproduced the `Handgrenade`
+message by casting fireball through `DoCastSpell` from a goblin AI, then moving
+the player into the live `Bomb9`. It checks for no such message through the fuse,
+client explosion and server cleanup. The asset-free `mine_script_callbacks`
+regression covers live contacts without a mine collision handler, default mine
+damage and collision handlers, named-object/datablock/class precedence, ordinary
+item callbacks and the destroyed collision guard. The installed check discovers
+the complete mine datablock group and verifies its collision dispatch, invoking
+live contacts for effects without a collision handler. `runtime_script_callbacks`
+checks 24 registered classes, including a new Item subclass with no namespace
+override, plus parent-callback rejection, global fallback, client ghosts and
+independent hosts with different names for the same C++ type. Earlier installed
+checks used self casts or remote effects; the throw-source blackout and distance
+hid this live-contact path.
+
+### Review of the three preceding effect fixes
+
+| Commit | Finding against vanilla | Why the pickup bug survived |
+| --- | --- | --- |
+| `4a3dd79` | Mine argument parsing, explosion construction and client smoke restore shared native paths. | Making mines constructible exposed incorrect callback dispatch; these checks established effect visibility, not hostile live contacts. |
+| `c36ee70` | The unarmed beam origin is a generic fallback for an unsupported native case: vanilla assumes a mounted weapon and its console muzzle fallback reads an uninitialized transform. No spell IDs are used. | Beam rendering is separate from mine collision callbacks. This fallback is not evidence of exact vanilla rendering parity. |
+| `18ff58e` | Destroyed-mine collision suppression, the half-second deletion delay, damage-state callbacks and grenade ray endpoints follow the corresponding native code. | Destruction guards cannot prevent a live mine from using the wrong script namespace during its fuse. |
+
+The subsequent `3b1996d` loading/quantization change does not modify this callback
+resolution path. The missing runtime identity, rather than an individual spell's
+datablock or pickup text, caused this remaining symptom.
+
+Validation for the runtime-identity repair (November 4):
+
+- With the committed namespace behavior, the installed hostile-cast check emits
+  the reported message and `mine_script_callbacks` observes an Item pickup.
+- With registry-based dispatch, all seven effects cases pass in headless Debug
+  and desktop Release, including all 19 installed mine datablocks (18 live
+  contacts) and the 24-class runtime test.
+- Release `opent1.exe` is rebuilt. Full CTest passes 11/12 headless suites and
+  13/14 Release suites; the only failing suite is the separate AI behavior audit.
+  Its latest Release result reports a movement precision difference
+  (`attack_mode0_follows_route`: 0.999890 versus 1.0). The spell/gameplay cases pass.
+- Local reproduction, build and test logs are under
+  `build/effect-parity/runtime-callback-*`.
+
 ### Grenade behavior audit (November 4, 2026)
 
 Hand grenades use `Mine` with the `Handgrenade` datablock and a scripted

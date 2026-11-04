@@ -394,7 +394,12 @@ bool GameBase::processQuery(sim::SimQuery& query) {
 }
 
 std::string_view GameBase::getScriptDefaultClass() const noexcept {
-    return "GameBase";
+    // Vanilla uses getClassName(): the concrete registered class, never a C++
+    // parent's script namespace (e.g. a Mine must not dispatch Item pickups).
+    const auto* manager = getManager();
+    const auto* registry = manager ? manager->classRegistry() : nullptr;
+    const auto* descriptor = registry ? registry->find(typeid(*this)) : nullptr;
+    return descriptor ? std::string_view(descriptor->name) : std::string_view{};
 }
 
 void GameBase::updateTimers(SimTime explicitCurrentTime) {

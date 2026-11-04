@@ -36,10 +36,6 @@ public:
     bool processEvent(const sim::SimEvent& event) override;
     bool processQuery(sim::SimQuery& query) override;
 
-    [[nodiscard]] std::string_view getScriptDefaultClass() const noexcept override {
-        return "StaticBase";
-    }
-
     void serverProcess(UInt32 curTime) override;
     void clientProcess(UInt32 curTime) override;
 
@@ -157,10 +153,6 @@ public:
 
     [[nodiscard]] UInt16 getGhostTag() const noexcept override {
         return static_cast<UInt16>(StaticShapePersTag);
-    }
-
-    [[nodiscard]] std::string_view getScriptDefaultClass() const noexcept override {
-        return "StaticShape";
     }
 
     UInt32

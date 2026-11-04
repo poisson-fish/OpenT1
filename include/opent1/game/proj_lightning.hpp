@@ -38,10 +38,6 @@ public:
     Lightning();
     ~Lightning() override = default;
 
-    [[nodiscard]] std::string_view getScriptDefaultClass() const noexcept override {
-        return "Lightning";
-    }
-
     [[nodiscard]] Int32 getDatGroup() const noexcept override {
         return DataBlockManager::LightningDataType;
     }

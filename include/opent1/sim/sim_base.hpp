@@ -415,6 +415,16 @@ public:
         return console_;
     }
 
+    // The host registry supplies runtime class identity for native script callbacks.
+    // It must outlive this manager, like the host console.
+    void setClassRegistry(const Persistent::ClassRegistry* registry) {
+        classRegistry_ = registry;
+    }
+
+    [[nodiscard]] const Persistent::ClassRegistry* classRegistry() const {
+        return classRegistry_;
+    }
+
     // Protect graph operations explicitly, including callbacks, with this mutex.
     std::recursive_mutex& mutex() {
         return mutex_;
@@ -453,6 +463,7 @@ private:
     bool advancing_{}, shuttingDown_{};
     TagDictionary tags_;
     Console* console_{}; // instance-owned host console; must outlive dispatch
+    const Persistent::ClassRegistry* classRegistry_{};
     std::recursive_mutex mutex_;
 };
 

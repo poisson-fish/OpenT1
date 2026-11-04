@@ -32,10 +32,6 @@ public:
     void setTarget(ShapeBase* io_pTarget) override;
     [[nodiscard]] Flt32 getTargetRange() const noexcept override;
 
-    [[nodiscard]] std::string_view getScriptDefaultClass() const noexcept override {
-        return "SeekingMissile";
-    }
-
     UInt32
     packUpdate(sim::network::GhostManager& gm, UInt32 mask, BitStream& stream) const override;
     bool unpackUpdate(sim::network::GhostManager& gm, BitStream& stream) override;

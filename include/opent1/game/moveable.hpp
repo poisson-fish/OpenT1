@@ -47,10 +47,6 @@ public:
         return static_cast<UInt16>(FearMoveablePersTag);
     }
 
-    [[nodiscard]] std::string_view getScriptDefaultClass() const noexcept override {
-        return "Moveable";
-    }
-
     void serverProcess(UInt32 curTime) override;
     void clientProcess(UInt32 curTime) override;
 
@@ -233,10 +229,6 @@ public:
 
     [[nodiscard]] UInt16 getGhostTag() const noexcept override {
         return static_cast<UInt16>(MoveableBasePersTag);
-    }
-
-    [[nodiscard]] std::string_view getScriptDefaultClass() const noexcept override {
-        return "MoveableBase";
     }
 
     void serverProcess(UInt32 curTime) override;

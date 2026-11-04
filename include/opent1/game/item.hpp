@@ -142,10 +142,6 @@ public:
 
     void throwObject(GameBase* object, Flt32 speed, bool careless) override;
 
-    [[nodiscard]] std::string_view getScriptDefaultClass() const noexcept override {
-        return "Item";
-    }
-
     UInt32
     packUpdate(sim::network::GhostManager& gm, UInt32 mask, BitStream& stream) const override;
     bool unpackUpdate(sim::network::GhostManager& gm, BitStream& stream) override;

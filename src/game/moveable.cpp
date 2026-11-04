@@ -1193,7 +1193,10 @@ MoveableBase::write(StreamIO& sio, Int32 version, Int32 user, Persistent::StoreC
 }
 
 bool registerBaseSimClasses(Persistent::ClassRegistry& registry) {
-    return registry.registerClass<SimMoveObject>("SimMoveObject") &&
+    return registry.registerClass<GameBase>("GameBase") &&
+           registry.registerClass<ShapeBase>("ShapeBase") &&
+           registry.registerClass<StaticBase>("StaticBase") &&
+           registry.registerClass<SimMoveObject>("SimMoveObject") &&
            registry.registerClass<StaticShape>(
                "StaticShape", makeFourCC('S', 'S', 'H', 'P'), StaticShapePersTag) &&
            registry.registerClass<Moveable>("Moveable", FearMoveablePersTag) &&

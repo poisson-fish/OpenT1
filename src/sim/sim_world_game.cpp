@@ -602,6 +602,7 @@ bool SimGame::setWorld(WorldType type, std::unique_ptr<SimWorld> replacement) {
     worlds_[index] = std::move(replacement);
     if (worlds_[index]) {
         worlds_[index]->manager().setConsole(&console_);
+        worlds_[index]->manager().setClassRegistry(&classes_);
     }
     return true;
 }

@@ -1,9 +1,11 @@
 #include "test_registry.hpp"
 #include "ts_test_support.hpp"
 #include <opent1/game/game_app.hpp>
+#include <opent1/game/ai.hpp>
 #include <opent1/game/explosion.hpp>
 #include <opent1/game/mine.hpp>
 #include <opent1/game/player.hpp>
+#include <opent1/game/player_manager.hpp>
 #include <opent1/game/proj_grenade.hpp>
 #include <opent1/game/proj_laser.hpp>
 #include <opent1/game/smoke_puff.hpp>
@@ -225,6 +227,154 @@ void mineLifecycle() {
     CHECK(manager.findObject(id) == bomb); // allow the destroyed state to replicate
     manager.advanceToTime(.75f);
     CHECK(!manager.findObject(id));
+}
+
+void mineScriptCallbacks() {
+    FearGameApp app;
+    CHECK(app.init() && app.fearPlugin().createServerWorld({}, true));
+    auto& globals = app.fearPlugin().serverGlobals();
+    auto& console = app.console();
+    CHECK(app.resources().add("callbacks.dts", test::ts::load(test::ts::shape())));
+    auto* data = dynamic_cast<MineData*>(
+        globals.dbm->createDataBlock("CallbackBomb", DataBlockManager::MineDataType));
+    CHECK(data);
+    data->shape = app.resources().load<world::TsShape>("callbacks.dts");
+    data->className = "Handgrenade";
+    data->maxDamage = 1;
+    CHECK(console.evaluate(R"(
+        $ItemContacts = 0;
+        $MineContacts = 0;
+        $MineDamage = 0;
+        function Item::onCollision(%this, %object) { $ItemContacts++; }
+        function Mine::onDamage(%this) { $MineDamage++; }
+    )").ok());
+    auto owned = std::make_unique<Mine>();
+    owned->bindDataBlockManager(globals.dbm);
+    owned->setDatFileName("CallbackBomb");
+    auto* bomb = owned.get();
+    CHECK(globals.manager->addObject(std::move(owned)));
+    std::array<GameBase, 5> contacts;
+    for (auto& contact : contacts)
+        contact.setType(SimPlayerObjectType);
+    globals.manager->advanceToTime(.125f);
+    bomb->onCollisionNotify(&contacts[0]);
+    // A live spell bomb has no pickup callback, even though Mine derives from Item.
+    CHECK(console.getVariable("ItemContacts") == "0");
+    bomb->applyDamage(0, .1f, {}, {}, {}, 0);
+    CHECK(console.getVariable("MineDamage") == "1");
+
+    // Ordinary pickups retain their Item fallback.
+    auto* pickup = dynamic_cast<Item*>(globals.manager->addObject(std::make_unique<Item>()));
+    CHECK(pickup);
+    pickup->scriptOnCollision(&contacts[0], .125f);
+    CHECK(console.getVariable("ItemContacts") == "1");
+
+    CHECK(console.evaluate(R"(
+        function Mine::onCollision(%this, %object) { $MineContacts++; }
+    )").ok());
+    bomb->onCollisionNotify(&contacts[1]);
+    CHECK(console.getVariable("MineContacts") == "1");
+    CHECK(console.evaluate(R"(
+        function Handgrenade::onCollision(%this, %object) { $MineContacts += 10; }
+    )").ok());
+    bomb->onCollisionNotify(&contacts[2]);
+    CHECK(console.getVariable("MineContacts") == "11");
+    CHECK(console.evaluate(R"(
+        function CallbackBomb::onCollision(%this, %object) { $MineContacts += 100; }
+    )").ok());
+    bomb->onCollisionNotify(&contacts[3]);
+    CHECK(console.getVariable("MineContacts") == "111");
+    bomb->assignName("NamedCallbackBomb");
+    CHECK(console.evaluate(R"(
+        function NamedCallbackBomb::onCollision(%this, %object) { $MineContacts += 1000; }
+    )").ok());
+    CHECK(bomb->scriptName("onCollision") == "NamedCallbackBomb::onCollision");
+    bomb->setState(StaticBase::Destroyed);
+    bomb->onCollisionNotify(&contacts[4]);
+    CHECK(console.getVariable("MineContacts") == "111");
+}
+
+// A new registered Item subclass must get its own script namespace without an override.
+class CallbackItemSubclass final : public Item {};
+
+void runtimeScriptCallbacks() {
+    FearGameApp app;
+    CHECK(app.init() && app.fearPlugin().createServerWorld({}, true));
+    auto& globals = app.fearPlugin().serverGlobals();
+    auto& console = app.console();
+    auto& registry = app.game().classes();
+    CHECK(registry.registerClass<CallbackItemSubclass>("CallbackEffect"));
+    CHECK(app.resources().add("runtime-callback.dts", test::ts::load(test::ts::shape())));
+    const auto model = app.resources().load<world::TsShape>("runtime-callback.dts");
+    for (const auto name :
+         {"GameBase",     "ShapeBase",       "StaticBase",  "StaticShape",    "Moveable",
+          "MoveableBase", "Player",          "Item",        "Mine",           "Sensor",
+          "Turret",       "Vehicle",         "Flier",       "Bullet",         "Grenade",
+          "RocketDumb",   "LaserProjectile", "TargetLaser", "SeekingMissile", "Lightning",
+          "RepairEffect", "Marker",          "Trigger",     "CallbackEffect"}) {
+        const auto* descriptor = registry.find(name);
+        CHECK(descriptor);
+        auto object = descriptor->create();
+        auto* base = dynamic_cast<GameBase*>(object.get());
+        CHECK(base);
+        if (const auto group = base->getDatGroup(); group >= 0) {
+            const auto dataName = std::string(name) + "CallbackData";
+            auto* data = globals.dbm->createDataBlock(dataName, group);
+            CHECK(data);
+            if (auto* shape = dynamic_cast<ShapeBaseData*>(data))
+                shape->shape = model;
+            if (auto* projectile = dynamic_cast<ProjectileData*>(data))
+                projectile->shape = model;
+            base->bindDataBlockManager(globals.dbm);
+            base->setDatFileName(dataName);
+        }
+        auto owned = std::unique_ptr<sim::SimObject>(base);
+        (void)object.release();
+        CHECK(globals.manager->addObject(std::move(owned)));
+        CHECK(console
+                  .evaluate(std::format(
+                      "function {}::onRuntimeProbe(%this) {{ return \"{}\"; }}", name, name))
+                  .ok());
+        CHECK(base->getScriptDefaultClass() == name);
+        CHECK(base->scriptName("onRuntimeProbe") == std::string(name) + "::onRuntimeProbe");
+        CHECK(console
+                  .execute(base->scriptName("onRuntimeProbe"),
+                           std::array<std::string, 1>{base->scriptThis()})
+                  .value == name);
+        base->deleteObject();
+    }
+
+    // A parent callback is not a fallback in vanilla; only the global is.
+    CHECK(console
+              .evaluate(R"(
+        function Item::onParentOnly(%this) { return "pickup"; }
+        function ShapeBase::onParentOnly(%this) { return "shape"; }
+    )")
+              .ok());
+    auto* effect = dynamic_cast<GameBase*>(
+        globals.manager->addObject(std::make_unique<CallbackItemSubclass>()));
+    CHECK(effect && effect->scriptName("onParentOnly").empty());
+    CHECK(console
+              .evaluate(R"(
+        function onParentOnly(%this) { return "global"; }
+    )")
+              .ok());
+    CHECK(effect->scriptName("onParentOnly") == "onParentOnly");
+
+    // Registration belongs to the host, including ghosts and independent games.
+    CHECK(app.fearPlugin().createClientWorld());
+    auto ghost = std::make_unique<CallbackItemSubclass>();
+    CHECK(ghost->setNetFlags(sim::SimNetObject::IsGhost));
+    auto* ghostBase = ghost.get();
+    CHECK(app.fearPlugin().clientGlobals().manager->addObject(std::move(ghost)));
+    CHECK(ghostBase->getScriptDefaultClass() == "CallbackEffect");
+    FearGameApp other;
+    CHECK(other.init() && other.fearPlugin().createServerWorld({}, true));
+    CHECK(other.game().classes().registerClass<CallbackItemSubclass>("OtherCallbackEffect"));
+    auto* otherBase = dynamic_cast<GameBase*>(other.fearPlugin().serverGlobals().manager->addObject(
+        std::make_unique<CallbackItemSubclass>()));
+    CHECK(otherBase && otherBase->getScriptDefaultClass() == "OtherCallbackEffect");
+    CHECK(ghostBase->getScriptDefaultClass() == "CallbackEffect");
 }
 
 class GrenadeProbe final : public Grenade {
@@ -718,6 +868,80 @@ void installedEffects() {
     }
     CHECK(handDestroyed && handEffect && !handAddress.resolve(server));
     CHECK(!app.fearPlugin().findGhostForServerObject(handAddress.objectId));
+
+    // A hostile caster's live effect can touch the player before its short fuse.
+    // Self casts and effects far from players hide the incorrect Item fallback.
+    CHECK(app.fearPlugin().focusServer());
+    CHECK(console.evaluate(R"(
+        $BotInfo[EffectGoblin992, RACE] = "Goblin";
+        SpawnAI(EffectGoblin992, SpellGoblin, "20000 20020 20000",
+                "TempSpawn 20000 20020 20000 2");
+        $EffectCaster = AI::getId(EffectGoblin992);
+        $EnemyCast = DoCastSpell($EffectCaster, 14, GameBase::getPosition($EffectCaster),
+                                "20000 20000 20000", 0, "");
+    )").ok());
+    CHECK(script::toBool(console.getVariable("EnemyCast")));
+    auto* caster = app.fearPlugin().serverGlobals().aiManager->findAI("EffectGoblin992");
+    CHECK(caster && caster->player());
+    caster->player()->setForceMask(0);
+    Mine* enemyBomb = nullptr;
+    for (auto* object : projectiles->objects())
+        if (auto* bomb = dynamic_cast<Mine*>(object); bomb && bomb->getPos().x > 19990)
+            enemyBomb = bomb;
+    CHECK(enemyBomb && enemyBomb->throwSource() == caster->player());
+    CHECK(enemyBomb->getState() != StaticBase::Destroyed);
+    const auto enemyAddress = enemyBomb->address();
+    const auto enemyExplosion = enemyBomb->mineData()->explosionId;
+    auto messages = std::make_shared<std::vector<std::string>>();
+    app.fearPlugin().clientGlobals().playerManager->onChatMessage =
+        [messages](Int32, std::string_view message) { messages->emplace_back(message); };
+    player->setPos(enemyBomb->getPos());
+    player->setLinearVelocity({});
+    (void)player->stepPosition(player->getTransform(), .1f, .3f);
+    server.advanceToTime(server.getCurrentTime());
+    CHECK(enemyAddress.resolve(server) == enemyBomb);
+    bool enemyDestroyed = false, enemyEffect = false;
+    const auto enemyEnd = tick + 32;
+    for (; tick < enemyEnd; ++tick) {
+        CHECK(app.stepFrame(tick * .032, false));
+        if (auto* bomb = dynamic_cast<Mine*>(enemyAddress.resolve(server)))
+            enemyDestroyed |= bomb->getState() == StaticBase::Destroyed;
+        for (auto* explosion : explosions(client))
+            if (explosion->getDatFileId() == enemyExplosion && explosion->position().x > 19990)
+                enemyEffect = true;
+    }
+    for (const auto& message : *messages)
+        CHECK(message.find("Handgrenade") == std::string::npos);
+    CHECK(enemyDestroyed && enemyEffect && !enemyAddress.resolve(server));
+
+    // Discover the mod's complete mine group instead of enumerating spells.
+    CHECK(app.fearPlugin().focusServer());
+    auto& dbm = *app.fearPlugin().serverGlobals().dbm;
+    unsigned checkedMines = 0, liveContacts = 0;
+    for (Int32 index = 0; index < dbm.getDataGroupSize(DataBlockManager::MineDataType); ++index) {
+        const auto name = dbm.lookupBlockName(index, DataBlockManager::MineDataType);
+        CHECK(!name.empty());
+        CHECK(console.evaluate(std::format("$CallbackMine = newObject(\"\", Mine, \"{}\");", name))
+                  .ok());
+        auto* mine = dynamic_cast<Mine*>(
+            server.findObject(script::toInteger(console.getVariable("CallbackMine"))));
+        CHECK(mine && mine->getScriptDefaultClass() == "Mine");
+        CHECK(mine->scriptName("onCollision") != "Item::onCollision");
+        if (mine->scriptName("onCollision").empty()) {
+            mine->onCollisionNotify(player);
+            ++liveContacts;
+        }
+        mine->deleteObject();
+        ++checkedMines;
+    }
+    for (const auto tickEnd = tick + 4; tick < tickEnd; ++tick)
+        CHECK(app.stepFrame(tick * .032, false));
+    for (const auto& message : *messages)
+        CHECK(message.find("You received ") == std::string::npos);
+    CHECK(checkedMines > 0 && liveContacts > 0);
+    std::printf("Checked all %u installed mine datablocks, including %u live contacts.\n",
+                checkedMines,
+                liveContacts);
 }
 }
 
@@ -749,6 +973,32 @@ int opent1_test_mine_lifecycle_focused() {
 }
 
 OPENT1_REGISTER_TEST("effects", "mine_lifecycle", opent1_test_mine_lifecycle_focused);
+
+int opent1_test_mine_script_callbacks() {
+    return opent1::test::run(mineScriptCallbacks);
+}
+
+OPENT1_REGISTER_TEST("game", "mine_script_callbacks", opent1_test_mine_script_callbacks);
+
+int opent1_test_mine_script_callbacks_focused() {
+    return opent1::test::run(mineScriptCallbacks);
+}
+
+OPENT1_REGISTER_TEST("effects", "mine_script_callbacks", opent1_test_mine_script_callbacks_focused);
+
+int opent1_test_runtime_script_callbacks() {
+    return opent1::test::run(runtimeScriptCallbacks);
+}
+
+OPENT1_REGISTER_TEST("game", "runtime_script_callbacks", opent1_test_runtime_script_callbacks);
+
+int opent1_test_runtime_script_callbacks_focused() {
+    return opent1::test::run(runtimeScriptCallbacks);
+}
+
+OPENT1_REGISTER_TEST("effects",
+                     "runtime_script_callbacks",
+                     opent1_test_runtime_script_callbacks_focused);
 
 int opent1_test_grenade_lifecycle() {
     return opent1::test::run(grenadeLifecycle);

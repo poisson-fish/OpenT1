@@ -160,10 +160,6 @@ public:
     bool processQuery(sim::SimQuery& query) override;
     bool initResources(GameBaseData* inData) override;
 
-    [[nodiscard]] std::string_view getScriptDefaultClass() const noexcept override {
-        return "Player";
-    }
-
     [[nodiscard]] Int32 getDatGroup() const noexcept override {
         return DataBlockManager::PlayerDataType;
     }

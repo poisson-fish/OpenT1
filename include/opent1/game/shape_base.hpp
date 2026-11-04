@@ -89,10 +89,6 @@ public:
     bool processEvent(const sim::SimEvent& event) override;
     bool processQuery(sim::SimQuery& query) override;
 
-    [[nodiscard]] std::string_view getScriptDefaultClass() const noexcept override {
-        return "ShapeBase";
-    }
-
     // Position & rotation
     void setPos(const Point3F& pos);
     void setRot(const Point3F& rot);

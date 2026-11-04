@@ -995,7 +995,6 @@ std::optional<gfx::HardwareBatch> Terrain2WaterFrame::hardware(const TsStaticVie
     for (auto& p : *polygons) {
         p.material.perspective = false;
         p.material.wrap = true;
-        p.material.deferredHaze = false;
         if (!underwater || !water) {
             p.material.alphaSource = gfx::HardwareAlphaSource::Constant;
             p.material.opacity = water ? alpha : .5f;

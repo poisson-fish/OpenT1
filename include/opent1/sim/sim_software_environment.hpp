@@ -5,8 +5,8 @@
 
 namespace opent1::sim {
 using SoftwareShadow = EnvironmentShadow;
-// A filtered shadow's byte is black opacity, not a palette color. Install this
-// palette snapshot on the destination before drawing filtered shadows. The
+// A filtered shadow's byte is black opacity, not a palette color. SoftwareEnvironment
+// installs/caches this palette snapshot on demand for filtered shadows. The
 // reserved -2 subpalette contains a 256x256 black-alpha table; row zero preserves
 // every destination index exactly. Other rows round RGB and use Palette::nearest.
 // Replaces an existing -2 entry, or appends one (maximum 16 palettes). Never

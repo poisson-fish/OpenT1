@@ -90,7 +90,7 @@ public:
     // haze, material blending and gamma run on the GPU. Does not alter
     // the indexed software framebuffer. Depth clears each frame (larger 1/z wins).
     // Reuses bindings and merges adjacent compatible triangle ranges within
-    // each material/haze layer, preserving primitive and transparency order.
+    // each composed layer, preserving primitive and transparency order.
     // Waits for this surface's preceding hardware submission to bound memory.
     bool render(const HardwareBatch&, const GpuFrameConfig& = {});
     // Per-device content cache: configurable retained entries (8192 by default),
@@ -101,7 +101,7 @@ public:
     [[nodiscard]] GpuTextureCacheStats textureCacheStats() const noexcept;
     // Cumulative successful allocation counts and retained buffer capacities.
     [[nodiscard]] GpuResourceStats resourceStats() const noexcept;
-    // Last successfully submitted frame, including deferred haze and gamma.
+    // Last successfully submitted frame, including fog and gamma.
     [[nodiscard]] GpuSubmissionStats submissionStats() const noexcept;
     void clearTextureCache() noexcept; // does not discard the published frame
     bool

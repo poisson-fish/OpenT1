@@ -20,6 +20,7 @@ public:
     static inline constexpr Flt32 kJetFuelMin = 5.0f;
     static inline Int32 prefShapeDetail = 100;
     static inline Flt32 prefPlayerShadowSize = 10.0f;
+    static inline bool prefPlayerShadows = true;
     static inline Int32 prefFreeLook = 1;
 
     enum Constants : Int32 {
@@ -173,6 +174,8 @@ public:
 
     // Movement & physics (player.cpp / playerUpdate.cpp)
     void serverUpdateMove(std::span<const PlayerMove> moves) override;
+    bool getWeaponAmmoType(ProjectileDataType& primary,
+                           ProjectileDataType& secondary) const override;
     void serverProcess(UInt32 curTime) override;
     void clientProcess(UInt32 curTime) override;
     void updateMove(const PlayerMove* curMove, bool server);
@@ -235,6 +238,14 @@ public:
     }
 
     void setDead(bool dead);
+
+    [[nodiscard]] Point3F getLeadCenter() const noexcept {
+        return mount_ ? mount_->getLinearPosition() : getBoxCenter();
+    }
+
+    [[nodiscard]] const Point3F& getLeadVelocity() const noexcept override {
+        return mount_ ? mount_->getLeadVelocity() : Parent::getLeadVelocity();
+    }
 
     [[nodiscard]] bool isExposed() const noexcept {
         return !mount_ || mount_->mountRender();

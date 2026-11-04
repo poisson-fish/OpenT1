@@ -145,7 +145,26 @@ bool SoftwareEnvironment::draw(gfx::SoftwareSurface& surface,
             std::ranges::find(palette->palettes, shadowIndex, &gfx::SubPalette::index);
         if (entry == palette->palettes.end() || entry->type != gfx::PaletteType::Translucent ||
             entry->remap.size() != 65536) {
-            return false;
+            // Most callers supply the mission palette. Build its black-alpha
+            // table on demand, then share it across frames/surfaces instead of
+            // repeating 65536 nearest-color searches every frame.
+            struct ShadowPaletteCache {
+                std::optional<gfx::Palette> source;
+                std::shared_ptr<const gfx::Palette> derived;
+            };
+
+            static thread_local ShadowPaletteCache cache;
+            if (!cache.source || *cache.source != *palette) {
+                auto derived = softwareShadowPalette(*palette);
+                if (!derived) {
+                    return false;
+                }
+                cache.source = *palette;
+                cache.derived = std::make_shared<const gfx::Palette>(std::move(*derived));
+            }
+            if (!surface.setSharedPalette(cache.derived)) {
+                return false;
+            }
         }
     }
     std::vector<gfx::SortedPolygon> batch(scene.begin(), scene.end());

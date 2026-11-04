@@ -31,7 +31,7 @@ enum class HardwareLightMapMode : UInt8 { OpenGL, OpenGLPacked };
 struct HardwareMaterial {
     const Bitmap* texture{}; // borrowed only during prepare()
     Point3F color{1, 1, 1};
-    Flt32 opacity{1}, shade{1}, haze{};
+    Flt32 opacity{1}, shade{1}, haze{}; // fog applies to source RGB before blending; alpha is unchanged
     PolygonSource shadeSource{PolygonSource::None}, hazeSource{PolygonSource::None};
     HardwareBlend blend{HardwareBlend::Opaque};
     HardwareDepth depth{HardwareDepth::TestAndWrite};
@@ -46,7 +46,6 @@ struct HardwareMaterial {
     // RGBA8 / RGB5551 / RGBA4444 palette rules, without paletteAlpha overrides.
     HardwarePaletteMode paletteMode{HardwarePaletteMode::Native};
     Flt32 paletteGamma{1}; // original OpenGL palette gamma before texture filtering/blending
-    bool deferredHaze{};   // alpha haze overlays after all material draws; no texture cutouts
     HardwareLightMapMode lightMapMode{HardwareLightMapMode::OpenGL};
     // Unset follows linear. Original OpenGL cutouts use nearest magnification
     // while retaining bilinear minification and nearest authored mip selection.
@@ -145,7 +144,6 @@ struct HardwareDraw {
     HardwareAlphaSource alphaSource{};
     Flt32 alphaCutoff{};
     bool transparent{};
-    bool deferredHaze{};
     bool magnificationLinear{};
     UInt32 mesh{}; // 1-based HardwareMeshInstance; ranges then address indices
 };

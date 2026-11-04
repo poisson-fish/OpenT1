@@ -53,17 +53,12 @@ void Player::serverUpdateMove(std::span<const PlayerMove> moves) {
         } else if (!lastPlayerMove_.trigger && move.trigger) {
             setImageTriggerDown(0);
         }
-        if (aiControlled_) {
-            lastPlayerMove_ = move;
-        }
         updateDamage(.032f);
         updateMove(&lastPlayerMove_, true);
         updateAnimation(.032f);
         updateShieldThread(.032f);
         updateScriptThreads(.032f);
-        if (!aiControlled_) {
-            lastPlayerMove_ = move;
-        }
+        lastPlayerMove_ = move;
     }
     updateSkipCount_ = 0;
     if (!mount_ || mountPoint_ != 1) {

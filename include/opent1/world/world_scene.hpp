@@ -67,6 +67,8 @@ struct WorldShapeImage {
     Flt32 haze{};
     // First-person attachments sit closer than the world camera's near plane.
     bool firstPerson{};
+    // Keep a hidden first-person body available to the shadow pass.
+    bool drawShape{true};
     // Native ShapeInstance::alwaysAlpha affects hardware material alpha. The
     // original software device's SetConstantAlpha is intentionally a no-op.
     Flt32 opacity{1};

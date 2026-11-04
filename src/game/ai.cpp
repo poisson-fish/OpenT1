@@ -40,6 +40,11 @@ namespace {
     return (isZero(x) && isZero(y)) ? 0.0f : m_atan(x, y);
 }
 
+Point3F leadCenter(const GameBase& object) noexcept {
+    const auto* player = dynamic_cast<const Player*>(&object);
+    return player ? player->getLeadCenter() : object.getBoxCenter();
+}
+
 } // namespace
 
 void AIObj::Incrementor::init(Flt32 inc) noexcept {
@@ -188,13 +193,14 @@ Flt32 AIObj::AngleSeek::step(Flt32* delta) noexcept {
 }
 
 void AIObj::JetSkill::init(const AIObj& ai, const Point3F& dest) noexcept {
-    startPos = ai.player() ? ai.player()->getBoxCenter() : Point3F{};
+    startPos = ai.player() ? ai.player()->getLeadCenter() : Point3F{};
     destPos = dest;
     midpoint = (startPos + destPos) * .5f;
     midpoint.z += 40.f;
     stage = Jump;
     jumpCount = 0;
     savedVelocity = {};
+    flightStarted = false;
 }
 
 bool AIObj::JetSkill::jetToPoint(AIObj& ai, PlayerMove& pm, const Point3F& dest) noexcept {
@@ -204,13 +210,14 @@ bool AIObj::JetSkill::jetToPoint(AIObj& ai, PlayerMove& pm, const Point3F& dest)
         return false;
     }
     (void)dest;
+    ai.frameAccurate_ = true;
     pm.forwardAction = pm.backwardAction = pm.leftAction = pm.rightAction = 0;
-    const auto position = player->getBoxCenter();
+    const auto position = player->getLeadCenter();
     const auto velocity = player->getLinearVelocity();
     if (stage == Jump) {
         const auto heading = ai.getAngleSeekZ(destPos, position, player->getRot().z);
         pm.turnRot = std::copysign(ai.iqVars_.turnInc.getInc(heading.absDiff), heading.diff);
-        if (heading.absDiff < .08f && velocity.len() < .3f) {
+        if (heading.absDiff < .08f && velocity.lenf() < .3f) {
             pm.jumpAction = true;
             stage = Jumped;
             jumpCount = 0;
@@ -219,9 +226,12 @@ bool AIObj::JetSkill::jetToPoint(AIObj& ai, PlayerMove& pm, const Point3F& dest)
         pm.jetting = true;
         if (jumpCount++ > 10) {
             stage = StartFlight;
-            savedVelocity = velocity;
         }
     } else if (stage == StartFlight || stage == StartFlight + 1) {
+        if (!flightStarted) {
+            savedVelocity = velocity;
+            flightStarted = true;
+        }
         const auto start = stage == StartFlight ? startPos : midpoint;
         const auto finish = stage == StartFlight ? midpoint : destPos;
         const auto delta = finish - position;
@@ -229,12 +239,12 @@ bool AIObj::JetSkill::jetToPoint(AIObj& ai, PlayerMove& pm, const Point3F& dest)
         if (remaining > .01f) {
             auto direction = delta * (1.f / remaining);
             const auto total = (finish - start).len();
-            const auto fraction = total > 0 ? std::clamp(1.f - remaining / total, 0.f, 1.f) : 1.f;
+            const auto fraction = total > 0 ? 1.f - remaining / total : 1.f;
             const auto endScale = stage == StartFlight ? .2f : .04f;
             const auto desiredSpeed =
                 (.2f + (endScale - .2f) * fraction) * data->maxJetForwardVelocity;
             auto actualForce = velocity - savedVelocity;
-            if (actualForce.len() > 10) {
+            if (actualForce.lenf() > 10) {
                 actualForce = {};
             }
             const auto projection = std::min(m_dot(actualForce, direction), desiredSpeed);
@@ -270,7 +280,7 @@ bool AIObj::JetSkill::jetToPoint(AIObj& ai, PlayerMove& pm, const Point3F& dest)
         if (std::hypot(delta.x, delta.y) < 1.f) {
             ++stage;
         }
-        if (stage > StartFlight + 1 || velocity.len() < .03f) {
+        if (stage > StartFlight + 1 || velocity.lenf() < .03f) {
             stage = NoNav;
         }
     } else {
@@ -291,6 +301,18 @@ AIObj::AIObj(AIManager* mgr) : aiManager_(mgr) {
 }
 
 AIObj::~AIObj() = default;
+
+void AIObj::setIq(Flt32 value) noexcept {
+    iq_ = value;
+    scaleIQVariables();
+    if (aiManager_) {
+        aiManager_->requestRecomputation();
+    }
+}
+
+Flt32 AIObj::distance3(const Point3F& a, const Point3F& b) const noexcept {
+    return frameAccurate_ ? m_dist(a, b) : m_distf(a, b);
+}
 
 void AIObj::scaleIQVariables() noexcept {
     const Flt32 t = std::clamp(iq_ / 100.0f, 0.0f, 1.0f);
@@ -387,7 +409,11 @@ AIObj::AngleSeek AIObj::getAngleSeekZ(const Point3F& seekLoc,
 bool AIObj::setVar(std::string_view varName, std::string_view value) {
     if (equalIgnoreCase(varName, "iq")) {
         iq_ = parseFloatSv(value);
-        scaleIQVariables();
+        if (aiManager_) {
+            aiManager_->requestRecomputation();
+        } else {
+            scaleIQVariables();
+        }
         return true;
     }
     if (equalIgnoreCase(varName, "attackMode")) {
@@ -396,22 +422,30 @@ bool AIObj::setVar(std::string_view varName, std::string_view value) {
     }
     if (equalIgnoreCase(varName, "spotDist")) {
         iqVars_.spotDistOverride = parseFloatSv(value);
-        scaleIQVariables();
         return true;
     }
     if (equalIgnoreCase(varName, "smartGuyWeaponRange")) {
         iqVars_.smartGuyWeaponRange = parseFloatSv(value);
-        scaleIQVariables();
+        if (aiManager_)
+            aiManager_->requestRecomputation();
+        else
+            scaleIQVariables();
         return true;
     }
     if (equalIgnoreCase(varName, "dumbGuyWeaponRange")) {
         iqVars_.dumbGuyWeaponRange = parseFloatSv(value);
-        scaleIQVariables();
+        if (aiManager_)
+            aiManager_->requestRecomputation();
+        else
+            scaleIQVariables();
         return true;
     }
     if (equalIgnoreCase(varName, "smartGuyMinAccuracy")) {
         iqVars_.smartGuyMinAccuracy = parseFloatSv(value);
-        scaleIQVariables();
+        if (aiManager_)
+            aiManager_->requestRecomputation();
+        else
+            scaleIQVariables();
         return true;
     }
     if (equalIgnoreCase(varName, "dopeOffset") || equalIgnoreCase(varName, "dopeBase")) {
@@ -467,7 +501,7 @@ bool AIObj::setVar(std::string_view varName, std::string_view value) {
         return true;
     }
     if (equalIgnoreCase(varName, "automaticTargets")) {
-        automaticTargets_ = (parseIntSv(value) != 0 || equalIgnoreCase(value, "true"));
+        setAutomaticTargets(parseIntSv(value) != 0 || equalIgnoreCase(value, "true"));
         return true;
     }
     return false;
@@ -525,7 +559,7 @@ std::string AIObj::getVar(std::string_view varName) const {
 
 bool AIObj::getTargetPosition(Point3F& pos, const DynamicTarget& targ) const noexcept {
     if (targ.obj) {
-        pos = targ.obj->getBoxCenter();
+        pos = leadCenter(*targ.obj);
         return true;
     }
     if (targ.id >= 0) {
@@ -555,14 +589,14 @@ bool AIObj::leadPosition(const DynamicTarget& targ,
                          Point3F& outPos) const noexcept {
     Point3F targetBasePos = targ.pos;
     if (targ.obj) {
-        targetBasePos = targ.obj->getBoxCenter();
+        targetBasePos = leadCenter(*targ.obj);
     }
     if (projSpeed <= 0.0f) {
         outPos = targetBasePos;
         return true;
     }
-    const Point3F myPos = player_ ? player_->getLinearPosition() : Point3F{0.0f, 0.0f, 0.0f};
-    const Flt32 dist = (targetBasePos - myPos).len();
+    const Point3F myPos = player_ ? player_->getLeadCenter() : Point3F{};
+    const Flt32 dist = distance3(targetBasePos, myPos);
     const Flt32 time = dist / projSpeed;
     const Point3F targetVel = (targ.obj ? targ.obj->getLeadVelocity() : targ.vel) -
                               (player_ ? player_->getLeadVelocity() : Point3F{});
@@ -571,13 +605,13 @@ bool AIObj::leadPosition(const DynamicTarget& targ,
 }
 
 Point3F AIObj::targetDope(const Point3F& target, Flt32 width, Flt32 height) noexcept {
-    const Point3F source = player_ ? player_->getBoxCenter() : Point3F{};
+    const Point3F source = player_ ? player_->getLeadCenter() : Point3F{};
     auto direction = target - source;
-    const auto range = direction.len();
+    const auto range = distance3(target, source);
     if (range == 0) {
         direction = {1, 0, 0};
     } else {
-        direction *= 1.f / range;
+        direction.normalize();
     }
     Point3F sideways;
     m_cross(Point3F{0, 0, 1}, direction, sideways);
@@ -601,7 +635,7 @@ Point3F AIObj::targetDope(const Point3F& target, Flt32 width, Flt32 height) noex
 }
 
 void AIObj::dopeOffset(Flt32 dist, Point3F& offset) noexcept {
-    const auto source = player_ ? player_->getBoxCenter() : Point3F{};
+    const auto source = player_ ? player_->getLeadCenter() : Point3F{};
     offset = targetDope(source + Point3F{0, dist, 0}, .6f, 1.2f);
 }
 
@@ -609,8 +643,8 @@ void AIObj::seekLocation(PlayerMove* pm) {
     if (!pm || !player_) {
         return;
     }
-    const auto source = player_->getBoxCenter();
-    const Flt32 distance = (curDest_ - source).len();
+    const auto source = player_->getLeadCenter();
+    const Flt32 distance = distance3(curDest_, source);
     if (distance <= 1.f) {
         return;
     }
@@ -644,12 +678,17 @@ void AIObj::aimAt(PlayerMove& move, const Point3F& target, Flt32 threshold) {
     if (!player_) {
         return;
     }
-    const auto source = player_->getBoxCenter();
+    const auto source = player_->getLeadCenter();
     const auto yaw = getAngleSeekZ(target, source, player_->getRot().z);
-    const Flt32 pitch = getDesiredPitch(target, source, true) - player_->getViewPitch();
+    const Flt32 pitch = getDesiredPitch(target, source, frameAccurate_) - player_->getViewPitch();
     move.turnRot = std::copysign(iqVars_.turnInc.getInc(yaw.absDiff), yaw.diff);
     if (yaw.absDiff < threshold) {
-        move.pitch = std::copysign(iqVars_.pitchInc.getInc(std::abs(pitch)), pitch);
+        // Native pitchAtTarget uses these constants, independently of IQ.
+        const Flt32 difference = std::abs(pitch);
+        const Flt32 increment =
+            difference < .168f ? std::min(difference, std::max(.03f, .084f * difference / .168f))
+                               : .084f;
+        move.pitch = std::copysign(increment, pitch);
         if (std::abs(pitch) < threshold) {
             move.trigger = trigger_.press(rng_);
         }
@@ -667,7 +706,7 @@ void AIObj::fireAtPlayerTarget(PlayerMove* pm, const DynamicTarget& target) {
     if (!leadPosition(target, getProjectileSpeed(), point)) {
         return;
     }
-    const auto center = target.obj ? target.obj->getBoxCenter() : target.pos;
+    const auto center = target.obj ? leadCenter(*target.obj) : target.pos;
     const auto bounds =
         target.obj ? target.obj->getBoundingBox() : Box3F{{-.6f, -.6f, -1.2f}, {.6f, .6f, 1.2f}};
     point += targetDope(center, bounds.len_x() * .5f, bounds.len_z() * .5f);
@@ -675,59 +714,63 @@ void AIObj::fireAtPlayerTarget(PlayerMove* pm, const DynamicTarget& target) {
     currentTargetId_ = target.id;
 }
 
-void AIObj::fireAtLaserOwner(PlayerMove* pm, Int32 playerId) {
-    if (!player_ || !player_->getManager()) {
-        return;
+bool AIObj::fireAtLaserOwner(PlayerMove* pm, Int32 playerId) {
+    if (!player_ || !player_->getManager() || getProjectileSpeed() <= 0) {
+        return false;
     }
     auto* manager = player_->getManager();
     auto* players = PlayerManager::get(manager);
     auto* client = players ? players->findBaseRep(playerId) : nullptr;
     auto* owner = client ? dynamic_cast<Player*>(client->ownedObject) : nullptr;
     if (!owner) {
-        return;
+        return false;
     }
     auto* targets = dynamic_cast<sim::SimSet*>(manager->findObject(TargetableSetId));
     if (!targets) {
-        return;
+        return false;
     }
+    bool aiming = false;
     for (auto* object : targets->objects()) {
         auto* laser = dynamic_cast<opent1::game::TargetLaser*>(object);
         Point3F point;
         Int32 targetTeam;
         if (laser && (laser->shooter() == owner || laser->getOwnerId() == owner->getId()) &&
             laser->getTarget(&point, &targetTeam)) {
-            fireAtLaserTarget(pm, point);
+            aiming = fireAtLaserTarget(pm, point) || aiming;
         }
     }
+    return aiming;
 }
 
-void AIObj::fireAtLaserTarget(PlayerMove* pm, const Point3F& targetPos) {
+bool AIObj::fireAtLaserTarget(PlayerMove* pm, const Point3F& targetPos) {
     if (!pm || !player_) {
-        return;
+        return false;
     }
     ProjectileDataType primary, secondary;
     auto* dbm = player_->resolveDataBlockManager();
     if (!dbm || !player_->getWeaponAmmoType(primary, secondary) || primary.type < 0) {
-        return;
+        return false;
     }
     const auto* data =
         dynamic_cast<const ProjectileData*>(dbm->lookupDataBlock(primary.dataType, primary.type));
     if (!data) {
-        return;
+        return false;
     }
     const auto origin = player_->getEyeTransform().p;
     const auto gravity = -player_->getForce(sim::MovementGravityForce).value_or(Point3F{}).len();
     Point3F primaryVector, secondaryVector;
     bool primaryRange = false, secondaryRange = false;
     if (!data->getTargetVector(origin, targetPos, gravity, &primaryVector, &primaryRange, false)) {
-        return;
+        return false;
     }
     const bool second =
         data->getTargetVector(origin, targetPos, gravity, &secondaryVector, &secondaryRange, true);
     if (!(second && secondaryRange) && !primaryRange) {
-        return;
+        return false;
     }
+    frameAccurate_ = true;
     aimAt(*pm, origin + (second && secondaryRange ? secondaryVector : primaryVector) * 50.f, .001f);
+    return true;
 }
 
 void AIObj::fireAtPointTarget(PlayerMove* pm, const Point3F& targetPos) {

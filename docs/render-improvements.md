@@ -654,6 +654,17 @@ the validation history are in
 
 ## Draw submission follow-up (2026-11-03)
 
+The later fog correction applies haze in the material fragment shader and removes
+the separate haze draws described in the historical measurements below. A late
+terrain haze overlay could pass the depth test over alpha-blended foliage because
+those leaves intentionally do not write depth. Fog now follows alpha discard and
+precedes blending, and translucent TS faces retain their own haze. Additive and
+subtractive effects fog toward black; multiply effects fog toward white. Native
+terrain distances, clipping, depth modes, image sorting and layer order are
+unchanged. GPU regression readbacks cover foreground foliage, cutout holes,
+nearer occluders, sky, partial/full haze and all five blend modes in both projected
+and retained paths. The measurements below predate this correction.
+
 Native terrain patch instances now carry their lightmap-page rectangles and
 texture-array layers. Flat shader outputs retain those values per primitive,
 including source-UV clamping before the page transform. Adjacent compatible

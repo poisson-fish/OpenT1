@@ -1453,11 +1453,12 @@ void SimMovement::testRestCondition() {
     }
 }
 
-bool SimMovement::setRotation(const RMat3F& mat, bool force) {
+bool SimMovement::setRotation(const RMat3F& mat, bool /*force*/) {
     auto target = transform_;
     static_cast<RMat3F&>(target) = mat;
     target.flags |= RMat3F::Matrix_HasTranslation;
-    return setPosition(target, force);
+    // Native setRotation ignores force and rechecks collision/contact.
+    return setPosition(target);
 }
 
 bool SimMovement::setPosition(TMat3F target, bool force) {

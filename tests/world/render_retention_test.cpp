@@ -349,6 +349,26 @@ int retainedTerrainPatches() {
             CHECK(compact->terrainPatches && compact->triangles.empty());
             CHECK(compact->terrainSquareIds == reference->terrainSquareIds);
             CHECK(compact->triangleCount() == reference->triangleCount());
+            if (frame < 3) {
+                // Shadow broad-phase must retain the same local receivers
+                // without expanding every retained terrain patch.
+                const auto window = sim::makeShadowSourceWindow(
+                    {0, 0, -1}, {14, 4, 12}, 2, {{-1, -1, -1}, {1, 1, 1}}, RMat3F{});
+                const std::array<world::WorldSurfaceInstance, 1> eager{
+                    {{std::make_shared<const world::WorldSurfaceMesh>(*reference), {}}}};
+                const std::array<world::WorldSurfaceInstance, 1> retained{
+                    {{std::make_shared<const world::WorldSurfaceMesh>(*compact), {}}}};
+                const auto a = world::worldShadowGeometry(window, eager, {0, 0, -1});
+                const auto b = world::worldShadowGeometry(window, retained, {0, 0, -1});
+                CHECK(a && b && !a->polygons.empty() && a->polygons.size() == b->polygons.size());
+                for (auto p : std::views::iota(std::size_t{}, a->polygons.size())) {
+                    CHECK(a->polygons[p].vertices.size() == b->polygons[p].vertices.size());
+                    for (auto v : std::views::iota(std::size_t{}, a->polygons[p].vertices.size())) {
+                        CHECK(a->polygons[p].vertices[v].position ==
+                              b->polygons[p].vertices[v].position);
+                    }
+                }
+            }
             if (frame < 3)
                 CHECK(compact->triangleCount() > 0);
             // Baseline selection/stitch fingerprint across moving, rotated,

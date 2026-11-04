@@ -38,16 +38,19 @@ add_executable(
     game/e2e_integration_test.cpp
     game/gameplay_fix_pack_test.cpp
     game/trpg_behavior_test.cpp
+    game/ai_behavior_test.cpp
     game/rpg_paths_test.cpp
     game/rpg_regressions_test.cpp
     game/compatibility_test.cpp
     game/shell_controls_test.cpp
     game/model_rendering_test.cpp
+    game/sky_test.cpp
     game/weather_test.cpp
     game/disconnect_test.cpp
     video/video_test.cpp
 )
 target_link_libraries(opent1_tests PRIVATE opent1_game)
+add_dependencies(opent1_tests opent1_ai_behavior_audit)
 target_include_directories(opent1_tests PRIVATE support)
 include(fixtures.cmake)
 
@@ -107,6 +110,15 @@ foreach(suite IN LISTS suites)
                    "SDL_VIDEODRIVER=dummy;ALSOFT_DRIVERS=null"
     )
 endforeach()
+
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/ai_parity")
+add_test(NAME ai_parity COMMAND opent1_ai_behavior_audit)
+set_tests_properties(
+    ai_parity
+    PROPERTIES TIMEOUT 120 LABELS game
+               WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/ai_parity"
+               ENVIRONMENT "SDL_VIDEODRIVER=dummy;ALSOFT_DRIVERS=null"
+)
 
 if(OPENT1_BUILD_PLATFORM AND OPENT1_TEST_GPU)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/gpu")

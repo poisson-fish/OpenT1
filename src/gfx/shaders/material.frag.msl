@@ -31,8 +31,6 @@ fragment float4 main0(Input v [[stage_in]],
         discard_fragment();
     if (v.sphereDistance > 1)
         discard_fragment();
-    if (m.alphaControls.z == 2)
-        return float4(m.hazeColor.rgb, saturate(v.haze));
     float4 rect = v.imageArray.z != 0 ? v.lightRect : m.lightRect;
     float2 array = v.imageArray.z != 0 ? v.imageArray.xy : m.arrayControls.xy;
     float4 texel = array.y != 0
@@ -49,6 +47,6 @@ fragment float4 main0(Input v [[stage_in]],
         discard_fragment();
     float3 rgb = mix(texel.rgb * light * v.color * m.tint.rgb,
                      m.hazeColor.rgb,
-                     m.alphaControls.z == 1 ? 0 : saturate(v.haze));
+                     saturate(v.haze));
     return float4(pow(saturate(rgb), m.options.xxx), alpha);
 }

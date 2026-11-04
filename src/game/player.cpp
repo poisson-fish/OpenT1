@@ -174,14 +174,18 @@ bool Player::processQuery(sim::SimQuery& query) {
         appendMountedImages(*shapes);
         appendJetFlame(*shapes);
         (void)Parent::processQuery(query);
-        if (isFirstPersonView()) {
-            shapes->image.reset();
+        if (shapes->image) {
+            auto& image = *shapes->image;
+            image.drawShape = !isFirstPersonView();
+            // Existing installations commonly disable the native shadow mask.
+            // Player/bot shadows have their own enabled-by-default preference.
+            image.castShadow = prefPlayerShadows && !mount_ && image.haze <= .2f;
+            if (auto pose = animationPose()) {
+                image.pose = std::move(*pose);
+            }
         }
         if (!isFirstPersonView()) {
             if (shapes->image) {
-                if (auto pose = animationPose()) {
-                    shapes->image->pose = std::move(*pose);
-                }
                 const auto skin = std::string(getSkinBase());
                 if (!skinMaterials_ || renderedSkin_ != skin) {
                     auto* dbm = resolveDataBlockManager();

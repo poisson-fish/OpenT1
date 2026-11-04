@@ -8,6 +8,7 @@
 #include <opent1/game/marker.hpp>
 #include <opent1/game/player.hpp>
 #include <opent1/game/player_manager.hpp>
+#include <opent1/game/sky.hpp>
 #include <opent1/game/chat_inventory_huds.hpp>
 #include <opent1/game/status_combat_huds.hpp>
 #include <cstdlib>
@@ -18,6 +19,15 @@ using namespace opent1;
 using namespace opent1::game;
 
 namespace {
+void checkSkyMaterials(const WorldGlobals& globals, std::string_view name, std::size_t count) {
+    const auto* sky = dynamic_cast<const Sky*>(globals.manager->findObject(TribesSkyId));
+    CHECK(sky && sky->dmlName() == name);
+    const auto* materials = sky->materials();
+    CHECK(materials && materials->textures().size() == count);
+    for (const auto& texture : materials->textures())
+        CHECK(texture);
+}
+
 void itemWorldCollision() {
     const std::array<float, 4> heights{};
     const std::array<world::TerrainCollisionCell, 1> cells{};
@@ -296,6 +306,13 @@ void installedRpgRegressions() {
                          return tick <= 96;
                      }))
         CHECK(app.stepFrame(tick * .032));
+    checkSkyMaterials(app.fearPlugin().serverGlobals(), "lushsky_night.dml", 16);
+    checkSkyMaterials(app.fearPlugin().clientGlobals(), "lushsky_night.dml", 16);
+    auto skySurface = gfx::SoftwareSurface::create(320, 240);
+    CHECK(skySurface && app.renderFrame(*skySurface));
+    gfx::HardwareBatch skyHardware;
+    CHECK(app.renderFrame(*skySurface, &skyHardware));
+    CHECK(app.renderStats().work.hardwareSkyPolygons > 0);
     CHECK(app.fearPlugin().focusServer());
     for (const auto& [ferry, start] : ferries) {
         CHECK((ferry->getPos() - start).len() > 1);
@@ -468,6 +485,8 @@ void installedRpgMap1Rendering() {
         CHECK(app.stepFrame(frame * .032));
     const auto& server = app.fearPlugin().serverGlobals();
     const auto& client = app.fearPlugin().clientGlobals();
+    checkSkyMaterials(server, "litesky.dml", 8);
+    checkSkyMaterials(client, "litesky.dml", 8);
     const auto localId = Int32(client.manager->getId());
     CHECK(localId > 2049);
     const auto* local = server.playerManager->findClient(localId);
@@ -482,6 +501,7 @@ void installedRpgMap1Rendering() {
     CHECK(app.lastSceneSurfaceCount() > 0 && app.lastScenePolygonCount() > 0);
     gfx::HardwareBatch hardware;
     CHECK(app.renderFrame(*surface, &hardware));
+    CHECK(app.renderStats().work.hardwareSkyPolygons > 0);
     CHECK(app.lastSceneSurfaceCount() > 0 && app.lastScenePolygonCount() > 0);
     CHECK(!hardware.draws().empty());
     CHECK(app.fearPlugin().focusServer());

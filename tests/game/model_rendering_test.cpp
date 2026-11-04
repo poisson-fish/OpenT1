@@ -294,7 +294,7 @@ void playerShadows() {
     auto floor = std::make_shared<world::WorldSurfaceMesh>();
     world::TsMaterialResources::Data materials;
     materials.list.details = materials.list.materialsPerDetail = 1;
-    materials.list.materials.push_back({.flags = 1, .index = 200});
+    materials.list.materials.push_back({.flags = 1, .index = 200, .mapFile = {}});
     materials.textures.resize(1);
     floor->materials = world::TsMaterialResources(std::move(materials));
     const std::array<Point3F, 4> corners{{{-8, 0, 0}, {8, 0, 0}, {8, 16, 0}, {-8, 16, 0}}};

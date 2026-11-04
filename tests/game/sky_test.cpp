@@ -1,6 +1,7 @@
 #include "test_registry.hpp"
 #include "test_support.hpp"
 #include <opent1/game/game_app.hpp>
+#include <opent1/game/planet.hpp>
 #include <opent1/game/sky.hpp>
 
 namespace {
@@ -56,6 +57,59 @@ void skyMaterialNames() {
     checkSky(server, "lushsky_night.day.dml", "day.bmp");
     checkSky(client, "lushsky_night.day.dml", "day.bmp");
 }
+
+void planetBitmaps() {
+    FearGameApp app;
+    CHECK(app.init());
+    CHECK(app.fearPlugin().createClientWorld());
+    auto& manager = *app.fearPlugin().clientGlobals().manager;
+    auto sky = std::make_unique<Sky>();
+    CHECK(manager.addObject(std::move(sky)));
+    auto surface = gfx::SoftwareSurface::create(320, 240);
+    CHECK(surface && app.renderFrame(*surface));
+    const auto background = surface->bitmap().pixels;
+
+    auto owned = std::make_unique<Planet>();
+    owned->set("", 0, 20, true, false, {.4f, .4f, .4f}, {.16f, .16f, .16f}, 400, 2000);
+    auto* planet = owned.get();
+    CHECK(manager.addObject(std::move(owned)));
+    CHECK(app.renderFrame(*surface));
+    CHECK(surface->bitmap().pixels == background);
+    sim::SimLightQuery lighting;
+    CHECK(planet->processQuery(lighting));
+    CHECK(lighting.lights.size() == 1 && lighting.lights[0].intensity.red == .4f);
+    CHECK(lighting.ambient.red == .16f && Planet::shadows);
+
+    planet->planetImage().setTexture("missing-planet.bmp");
+    CHECK(app.renderFrame(*surface));
+    CHECK(surface->bitmap().pixels == background);
+
+    auto bitmap = gfx::Bitmap::create(4, 4);
+    CHECK(bitmap);
+    bitmap->attributes |= gfx::BitmapTransparent;
+    bitmap->row(1)[1] = bitmap->row(2)[2] = std::byte{80};
+    bitmap->row(1)[2] = bitmap->row(2)[1] = std::byte{160};
+    CHECK(app.resources().add("planet.bmp", std::move(bitmap)));
+    planet->planetImage().setTexture("planet.bmp");
+    CHECK(app.renderFrame(*surface));
+    const auto pixel = [&](Int32 x, Int32 y) { return surface->bitmap().row(y)[x]; };
+    CHECK(pixel(150, 52) == std::byte{80} && pixel(170, 52) == std::byte{160});
+    CHECK(pixel(150, 72) == std::byte{160} && pixel(170, 72) == std::byte{80});
+    CHECK(pixel(130, 32) == background[32 * surface->bitmap().stride() + 130]);
+    const auto textured = surface->bitmap().pixels;
+    gfx::HardwareBatch hardware;
+    CHECK(app.renderFrame(*surface, &hardware));
+    CHECK(!hardware.draws().empty());
+
+    // Clipping a partially visible bitmap must preserve its texture coordinates.
+    planet->planetImage().position.x -= planet->planetImage().position.y;
+    CHECK(app.renderFrame(*surface));
+    CHECK(pixel(5, 52) == std::byte{160} && pixel(5, 72) == std::byte{80});
+    CHECK(pixel(25, 52) == background[52 * surface->bitmap().stride() + 25]);
+    planet->planetImage().setTexture("");
+    CHECK(app.renderFrame(*surface));
+    CHECK(surface->bitmap().pixels == background && surface->bitmap().pixels != textured);
+}
 }
 
 int opent1_test_sky_material_names() {
@@ -63,3 +117,9 @@ int opent1_test_sky_material_names() {
 }
 
 OPENT1_REGISTER_TEST("game", "sky_material_names", opent1_test_sky_material_names);
+
+int opent1_test_planet_bitmaps() {
+    return opent1::test::run(planetBitmaps);
+}
+
+OPENT1_REGISTER_TEST("game", "planet_bitmaps", opent1_test_planet_bitmaps);

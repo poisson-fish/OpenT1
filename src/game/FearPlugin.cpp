@@ -505,37 +505,71 @@ void renderStarFieldPass(const StarField& stars,
     }
 }
 
-void renderPlanetPass(const Planet& planet,
-                      gfx::SoftwareSurface& surface,
-                      const sim::EnvironmentCamera& cam,
-                      int pass,
-                      const gfx::Palette* pal) {
+bool renderPlanetPass(const Planet& planet,
+                       gfx::SoftwareSurface& surface,
+                       const sim::EnvironmentCamera& cam,
+                       int pass,
+                       ResourceManager& resources) {
     if (pass != 1 && pass != 3) {
-        return;
+        return true;
     }
     const auto& img = planet.planetImage();
+    // Missions such as RPGMap5 use an untextured Planet only for lighting.
+    // Native Planet::load never adds an absent/failed bitmap to the render set.
+    if (img.fileName.empty()) {
+        return true;
+    }
+    const auto texture = resources.load<gfx::Bitmap>(img.fileName);
+    if (!texture) {
+        return true;
+    }
     Point3F cp{};
     m_mul(img.position, static_cast<const RMat3F&>(cam.worldToCamera), cp);
-    if (cp.y <= 1.0f) {
-        return;
+    if (cp.y <= cam.nearDistance || !std::isfinite(img.size) || img.size <= 0) {
+        return true;
     }
-    const Int32 sx = static_cast<Int32>(cam.center.x + (cp.x / cp.y) * cam.focal.x);
-    const Int32 sy = static_cast<Int32>(cam.center.y - (cp.z / cp.y) * cam.focal.y);
-    const Int32 rad = std::clamp(
-        static_cast<Int32>((img.size / std::max(100.0f, cp.y)) * cam.focal.x * 0.25f), 3, 24);
-    const Int32 w = surface.bitmap().width;
-    const Int32 h = surface.bitmap().height;
-    const Int32 x0 = std::max(0, sx - rad);
-    const Int32 y0 = std::max(0, sy - rad);
-    const Int32 x1 = std::min(w - 1, sx + rad);
-    const Int32 y1 = std::min(h - 1, sy + rad);
-    if (x0 <= x1 && y0 <= y1) {
-        UInt8 col = 252;
-        if (pal && !pal->palettes.empty()) {
-            col = pal->nearest(gfx::PaletteColor{255, 240, 185, 0});
+
+    // Native planets face the view plane with their top toward celestial north.
+    // Work in camera space so translation cannot move a distant sun or moon.
+    Point3F north{}, normal{}, up{}, right{};
+    m_mul(Point3F{0, 0, 1}, static_cast<const RMat3F&>(cam.worldToCamera), north);
+    m_cross(cp, north, normal);
+    m_cross(normal, Point3F{0, 1, 0}, up);
+    if (up.lenf() < .00001f) {
+        return true;
+    }
+    up.normalize();
+    m_cross(Point3F{0, 1, 0}, up, right);
+    right *= img.size;
+    up *= img.size;
+    const std::array<Point3F, 4> points{
+        cp - right + up, cp + right + up, cp + right - up, cp - right - up};
+    constexpr std::array<Point2F, 4> uv{{{0, 0}, {1, 0}, {1, 1}, {0, 1}}};
+    std::array<world::StaticSurfaceTriangle, 2> triangles;
+    constexpr std::array indices{std::array{0, 1, 2}, std::array{0, 2, 3}};
+    for (std::size_t i = 0; i < triangles.size(); ++i) {
+        for (std::size_t j = 0; j < 3; ++j) {
+            triangles[i].vertices[j].position = points[indices[i][j]];
+            triangles[i].vertices[j].texture = uv[indices[i][j]];
         }
-        surface.fill(RectI{x0, y0, x1, y1}, col);
     }
+    world::TsMaterialList list;
+    list.details = list.materialsPerDetail = 1;
+    world::TsMaterial material;
+    material.flags = 3 | ((texture->attributes & gfx::BitmapTransparent) ? 0x1000U : 0U);
+    list.materials.push_back(material);
+    world::TsStaticView view;
+    view.width = surface.bitmap().width;
+    view.height = surface.bitmap().height;
+    view.focal = cam.focal;
+    view.center = cam.center;
+    view.nearDistance = cam.nearDistance;
+    view.farDistance = 65536;
+    view.shapeToCamera.identity();
+    view.texturePerspective = false;
+    const auto frame = world::TsStaticShapeFrame::prepareSurfaces(
+        world::TsMaterialResources{std::move(list), {texture}}, triangles, view);
+    return frame && frame->draw(surface);
 }
 
 struct WeatherGeometry {
@@ -5150,7 +5184,11 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
                 } else if (auto* stars = dynamic_cast<StarField*>(obj)) {
                     renderStarFieldPass(*stars, surface, envCam, pass, defaultPalette_.get());
                 } else if (auto* planet = dynamic_cast<Planet*>(obj)) {
-                    renderPlanetPass(*planet, surface, envCam, pass, defaultPalette_.get());
+                    if (!renderPlanetPass(*planet, surface, envCam, pass, *resources_)) {
+                        game_.console().setVariable("OpenT1::LastRenderError",
+                                                    "Planet preparation failed");
+                        return false;
+                    }
                 }
             }
         }

@@ -135,6 +135,12 @@ template <class T> T* findGameplayControl(gui::Control* root) {
     }
     return nullptr;
 }
+
+gui::Control* gameplayRoot(gui::Canvas& canvas, bool showingScores) {
+    // Vanilla playDelegate::curGui remains the content GUI while score.gui is
+    // pushed above it. Other dialogs (including the console) remain modal.
+    return showingScores && canvas.dialogCount() == 1 ? canvas.content() : canvas.top();
+}
 }
 
 bool FearGameApp::consoleVisible() const {
@@ -185,7 +191,8 @@ bool FearGameApp::gameplayKeyboardActive() const {
         !cg.playerPSC->getControlObject() || !guiRuntime_ || !guiRuntime_->canvas.top()) {
         return false;
     }
-    const auto* chat = findGameplayControl<FearGuiChat>(guiRuntime_->canvas.top());
+    const auto* chat =
+        findGameplayControl<FearGuiChat>(gameplayRoot(guiRuntime_->canvas, showingScores_));
     return !chat || !chat->visible();
 }
 
@@ -265,9 +272,9 @@ bool FearGameApp::escapeGameplay() {
     if (!cg.playerPSC || !guiRuntime_) {
         return false;
     }
-    if (auto* chat = findGameplayControl<FearGuiChat>(guiRuntime_->canvas.top());
+    if (auto* chat =
+            findGameplayControl<FearGuiChat>(gameplayRoot(guiRuntime_->canvas, showingScores_));
         chat && chat->visible()) {
-        (void)chat->setText("");
         chat->deactivate();
         return true;
     }
@@ -300,7 +307,7 @@ bool FearGameApp::handleGameplayAction(const sim::SimActionEvent& event) {
     if (!guiRuntime_) {
         return false;
     }
-    auto* root = guiRuntime_->canvas.top();
+    auto* root = gameplayRoot(guiRuntime_->canvas, showingScores_);
     switch (event.action) {
         case 220200: {
             auto* chat = findGameplayControl<FearGuiChat>(root);
@@ -308,6 +315,7 @@ bool FearGameApp::handleGameplayAction(const sim::SimActionEvent& event) {
                 return false;
             }
             chat->activate(static_cast<Int32>(event.fValue));
+            game_.console().setVariable("pref::msgChannel", std::to_string(chat->channel()));
             if (auto* psc = fearPlugin_->clientGlobals().playerPSC) {
                 psc->resetInput();
             }
@@ -550,6 +558,10 @@ void FearGameApp::updateGameplayGui() {
             }
         }
     };
+    auto* root = gameplayRoot(guiRuntime_->canvas, showingScores_);
+    if (root != guiRuntime_->canvas.top()) {
+        update(update, *root);
+    }
     update(update, *guiRuntime_->canvas.top());
 }
 

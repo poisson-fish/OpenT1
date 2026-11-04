@@ -16,6 +16,47 @@ std::string escapeChatArgument(std::string_view value) {
     }
     return escaped;
 }
+
+std::string_view chatPrompt(Int32 channel) {
+    return channel > 0 ? "SAY TEAM: " : "SAY: ";
+}
+
+Int32 fontHeight(const gfx::BitmapFont& font) {
+    return std::max(1, Int32((Int64(font.info.height) * font.info.scale.y) >> 16));
+}
+
+// FearGuiChat::formatMessage reserves the prompt on the first line, then
+// wraps at spaces. A single long word still makes progress.
+std::vector<std::size_t>
+lineEnds(std::string_view text, const gfx::BitmapFont& font, Int32 width, Int32 channel) {
+    std::vector<std::size_t> ends;
+    std::size_t start = 0;
+    auto available = std::max<Int64>(1, width - font.textWidth(chatPrompt(channel)));
+    do {
+        auto end = start;
+        auto space = start;
+        while (end < text.size()) {
+            auto next = end + 1;
+            while (next < text.size() && (UInt8(text[next]) & 0xc0) == 0x80) {
+                ++next;
+            }
+            if (end > start && font.textWidth(text.substr(start, next - start)) > available) {
+                break;
+            }
+            if (text[end] == ' ' && end > start) {
+                space = end;
+            }
+            end = next;
+        }
+        if (end < text.size() && text[end] != ' ' && space > start) {
+            end = space;
+        }
+        ends.push_back(end);
+        start = end;
+        available = std::max(1, width);
+    } while (start < text.size());
+    return ends;
+}
 }
 
 FearGuiChat::FearGuiChat() {
@@ -31,19 +72,16 @@ void FearGuiChat::pushHistory(std::string_view line) {
         history_.erase(history_.begin());
     }
     history_.emplace_back(line);
-    historyCursor_ = static_cast<Int32>(history_.size());
+    historyCursor_ = -1;
 }
 
 std::string_view FearGuiChat::historyPrev() {
     if (history_.empty()) {
         return {};
     }
-    if (historyCursor_ > 0) {
-        --historyCursor_;
-    } else {
-        historyCursor_ = 0;
-    }
-    (void)setText(history_[static_cast<std::size_t>(historyCursor_)]);
+    historyCursor_ =
+        historyCursor_ < 0 ? static_cast<Int32>(history_.size()) - 1 : historyCursor_ - 1;
+    (void)setText(historyCursor_ < 0 ? "" : history_[static_cast<std::size_t>(historyCursor_)]);
     cursor = anchor = text.size();
     return text;
 }
@@ -52,14 +90,16 @@ std::string_view FearGuiChat::historyNext() {
     if (history_.empty()) {
         return {};
     }
-    if (historyCursor_ + 1 < static_cast<Int32>(history_.size())) {
-        ++historyCursor_;
-        (void)setText(history_[static_cast<std::size_t>(historyCursor_)]);
-        cursor = anchor = text.size();
+    if (historyCursor_ < 0) {
+        historyCursor_ = static_cast<Int32>(history_.size()) - 1;
     } else {
-        historyCursor_ = static_cast<Int32>(history_.size());
-        (void)setText("");
+        historyCursor_ = (historyCursor_ + 1) % static_cast<Int32>(history_.size());
+        if (historyCursor_ == static_cast<Int32>(history_.size()) - 1) {
+            historyCursor_ = -1;
+        }
     }
+    (void)setText(historyCursor_ < 0 ? "" : history_[static_cast<std::size_t>(historyCursor_)]);
+    cursor = anchor = text.size();
     return text;
 }
 
@@ -68,6 +108,7 @@ std::string FearGuiChat::submitLine(std::string_view rawInput) {
     pushHistory(line);
     (void)setText("");
     lineCount_ = 2;
+    reflow();
     if (line.empty()) {
         return {};
     }
@@ -77,36 +118,50 @@ std::string FearGuiChat::submitLine(std::string_view rawInput) {
         if (sp != std::string_view::npos) {
             const auto target = rest.substr(0, sp);
             const auto body = rest.substr(sp + 1);
-            return std::format("ircSend(\"{}\", \"{}\");",
-                               escapeChatArgument(body), escapeChatArgument(target));
+            return std::format(
+                "ircSend(\"{}\", \"{}\");", escapeChatArgument(body), escapeChatArgument(target));
         }
     }
     return std::format("say({}, \"{}\");", channel_, escapeChatArgument(line));
 }
 
 void FearGuiChat::activate(Int32 chatChannel) {
-    channel_ = chatChannel;
+    channel_ = std::clamp(chatChannel, 0, 31);
+    firstKeyPress_ = true;
+    // Keep an escaped draft, but reset inherited selection/undo state.
+    (void)setText(text);
+    cursor = anchor = text.size();
     visible(true);
     active = true;
+    reflow();
     if (canvas()) {
-        (void)canvas()->makeFirstResponder(this);
+        (void)canvas()->makeFirstResponder(this, true);
     }
 }
 
 void FearGuiChat::deactivate() {
+    historyCursor_ = -1;
     visible(false);
-    if (canvas()) {
+    if (canvas() && canvas()->focus() == this) {
         (void)canvas()->makeFirstResponder(nullptr);
     }
 }
 
 bool FearGuiChat::event(const gui::Event& e) {
     if (e.type == gui::EventType::KeyDown) {
+        if (firstKeyPress_ && (e.key == gui::Key::Delete || e.key == gui::Key::Backspace)) {
+            firstKeyPress_ = false;
+            (void)setText("");
+            reflow();
+            return true;
+        }
+        firstKeyPress_ = false;
         if (e.key == gui::Key::Return) {
             const auto line = text;
             pushHistory(line);
             (void)setText("");
             lineCount_ = 2;
+            reflow();
             deactivate();
             if (!line.empty() && sendLine) {
                 sendLine(channel_, line);
@@ -114,20 +169,28 @@ bool FearGuiChat::event(const gui::Event& e) {
             return true;
         }
         if (e.key == gui::Key::Escape) {
-            (void)setText("");
             deactivate();
             return true;
         }
         if (e.key == gui::Key::Up) {
             (void)historyPrev();
+            reflow();
             return true;
         }
         if (e.key == gui::Key::Down) {
             (void)historyNext();
+            reflow();
             return true;
         }
     }
-    return Parent::event(e);
+    if (e.type == gui::EventType::Text) {
+        firstKeyPress_ = false;
+    }
+    const auto handled = Parent::event(e);
+    if (handled && (e.type == gui::EventType::Text || e.type == gui::EventType::KeyDown)) {
+        reflow();
+    }
+    return handled;
 }
 
 void FearGuiChat::wake() {
@@ -137,21 +200,37 @@ void FearGuiChat::wake() {
     }
 }
 
+const gfx::BitmapFont* FearGuiChat::messageFont(bool small) const {
+    const auto& selected =
+        small ? (channel_ > 0 ? smallTeamFont : smallFont) : (channel_ > 0 ? teamFont : font);
+    return selected ? selected.get() : font.get();
+}
+
+void FearGuiChat::reflow() {
+    if (parent()) {
+        (void)layout(parent()->fields().extent);
+    }
+}
+
 bool FearGuiChat::layout(Point2I extent) {
     const bool small = extent.x < 512 || extent.y < 384;
-    const auto& selectedFont = small && smallFont ? smallFont : font;
-    const auto height = selectedFont ? selectedFont->info.height : 12;
-    const auto width = std::min(small ? 184 : 370, std::max(1, extent.x - 12));
-    const auto textHeight = height * std::max(1, lineCount_);
+    const auto* f = messageFont(small);
+    const auto height = f ? fontHeight(*f) : 12;
+    const auto width =
+        std::min(std::max(fields_.extent.x, small ? 200 : 370), std::max(1, extent.x - 1));
+    if (f) {
+        const auto lines = lineEnds(text, *f, width - 2 * DisplayBorderX, channel_);
+        lineCount_ = std::max(lineCount_, Int32(lines.size()));
+    }
+    lineCount_ = std::clamp(lineCount_, 1, std::max(1, (extent.y - DisplayBorderY - 1) / height));
+    const auto textHeight = height * lineCount_;
     return resize({(extent.x - width) / 2, std::max(0, extent.y - 40 - textHeight)},
-                  {width, textHeight + 10});
+                  {width, textHeight + DisplayBorderY});
 }
 
 bool FearGuiChat::draw(gfx::SoftwareSurface& surface, Point2I offset, RectI clip) const {
     const bool small = surface.bitmap().width < 512 || surface.bitmap().height < 384;
-    const auto selectedFont =
-        small ? (channel_ > 0 ? smallTeamFont : smallFont) : (channel_ > 0 ? teamFont : font);
-    const auto* f = selectedFont ? selectedFont.get() : font.get();
+    const auto* f = messageFont(small);
     if (!drawHudPanel(
             surface,
             {offset.x, offset.y, offset.x + fields_.extent.x, offset.y + fields_.extent.y})) {
@@ -173,47 +252,50 @@ bool FearGuiChat::draw(gfx::SoftwareSurface& surface, Point2I offset, RectI clip
 
     const auto inner = gfx::intersect(clip,
                                       {offset.x + 12,
-                                       offset.y + 2,
+                                       offset.y + 4,
                                        offset.x + fields_.extent.x - 12,
-                                       offset.y + fields_.extent.y - 2});
+                                       offset.y + fields_.extent.y - 4});
     if (!inner) {
         return true;
     }
     surface.setClip(*inner);
-    const std::string_view prompt = channel_ > 0 ? "SAY TEAM: " : "SAY: ";
+    const auto prompt = chatPrompt(channel_);
     const auto promptWidth = Int32(f->textWidth(prompt));
-    const auto width = std::max(1, fields_.extent.x - 24 - promptWidth);
-    if (!surface.text(*f, offset + Point2I{12, 0}, prompt)) {
+    const auto height = fontHeight(*f);
+    const auto textY = offset.y - (small ? 0 : 2);
+    if (!surface.text(*f, {offset.x + DisplayBorderX, textY}, prompt)) {
         return false;
     }
     std::size_t start = 0;
     Int32 row = 0;
-    do {
-        auto end = start;
-        while (end < text.size() && (end == start || f->textWidth(std::string_view(text).substr(
-                                                         start, end - start + 1)) <= width)) {
-            ++end;
-        }
-        const auto at = offset + Point2I{12 + promptWidth, row * f->info.height};
+    bool cursorDrawn = false;
+    for (const auto end : lineEnds(text, *f, fields_.extent.x - 2 * DisplayBorderX, channel_)) {
+        const Point2I at{offset.x + DisplayBorderX + (row == 0 ? promptWidth : 0),
+                         textY + row * height};
         const auto line = std::string_view(text).substr(start, end - start);
         const auto [a, b] = selection();
         if (a < end && b > start) {
             const auto left = Int32(f->textWidth(line.substr(0, std::max(a, start) - start)));
             const auto right = Int32(f->textWidth(line.substr(0, std::min(b, end) - start)));
-            surface.fill({at.x + left, at.y + 2, at.x + right, at.y + f->info.height}, GREEN_78);
+            surface.fill({at.x + left, at.y + 2, at.x + right, at.y + height}, GREEN_78);
         }
         if (!surface.text(*f, at, line)) {
             return false;
         }
-        if (cursorOn && canvas() && canvas()->focus() == this && cursor >= start &&
-            (cursor < end || end == text.size())) {
+        if (!cursorDrawn && cursorOn && canvas() && canvas()->focus() == this && cursor >= start &&
+            cursor <= end) {
             const auto x =
                 at.x + Int32(f->textWidth(line.substr(0, std::min(cursor, end) - start)));
-            surface.line({x, at.y + 2}, {x, at.y + f->info.height - 1}, GREEN);
+            const auto y = at.y + (small ? 0 : 3);
+            surface.line({x, y}, {x, y + height}, GREEN);
+            cursorDrawn = true;
         }
         start = end;
         ++row;
-    } while (start < text.size() && row < std::max(1, lineCount_));
+        if (row >= std::max(1, lineCount_)) {
+            break;
+        }
+    }
     return true;
 }
 
@@ -222,11 +304,17 @@ std::function<void()> FearGuiChat::checkpoint() {
     const auto fp = fracPos_;
     const auto lc = lineCount_;
     const auto ch = channel_;
-    return [this, base = std::move(base), fp, lc, ch] {
+    const auto history = history_;
+    const auto historyCursor = historyCursor_;
+    const auto firstKeyPress = firstKeyPress_;
+    return [this, base = std::move(base), fp, lc, ch, history, historyCursor, firstKeyPress] {
         base();
         fracPos_ = fp;
         lineCount_ = lc;
         channel_ = ch;
+        history_ = history;
+        historyCursor_ = historyCursor;
+        firstKeyPress_ = firstKeyPress;
     };
 }
 

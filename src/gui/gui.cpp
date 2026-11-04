@@ -1956,7 +1956,7 @@ Control* Canvas::top() const {
     return roots_.empty() ? nullptr : roots_.back();
 }
 
-bool Canvas::contains(const Control* c) const {
+bool Canvas::contains(const Control* c, bool includeCovered) const {
     if (!c || c->canvas() != this) {
         return false;
     }
@@ -1966,7 +1966,8 @@ bool Canvas::contains(const Control* c) const {
             return false;
         }
     }
-    return root == top() && root->visible();
+    return root->visible() &&
+           (root == top() || (includeCovered && std::ranges::find(roots_, root) != roots_.end()));
 }
 
 void Canvas::invalidate(Control& c) {
@@ -2301,8 +2302,8 @@ bool Canvas::commitDialog(const std::function<bool()>& commit) {
     return true;
 }
 
-bool Canvas::makeFirstResponder(Control* c) {
-    if (c && (!contains(c) || !c->becomeFirstResponder())) {
+bool Canvas::makeFirstResponder(Control* c, bool allowCovered) {
+    if (c && (!contains(c, allowCovered) || !c->becomeFirstResponder())) {
         if (focus_ && !focus_->loseFirstResponder()) {
             return false;
         }
@@ -2415,7 +2416,8 @@ void Canvas::rebuildTabs() {
         }
     };
     visit(visit, *top());
-    if (focus_ && std::ranges::find(tabs_, focus_) == tabs_.end()) {
+    if (focus_ && (!contains(focus_, true) ||
+                   (contains(focus_) && std::ranges::find(tabs_, focus_) == tabs_.end()))) {
         focus_ = nullptr;
     }
     if (capture_ && !contains(capture_)) {
@@ -2528,6 +2530,16 @@ bool Canvas::dispatch(const Event& e) {
     };
     checkpoint(checkpoint, *top());
     save(save, *top());
+    // Covered chat is an explicit keyboard responder. Include its graph in
+    // rollback just as we do the active dialog's controls.
+    if (focus_ && !contains(focus_)) {
+        auto* root = focus_;
+        while (root->parent()) {
+            root = root->parent();
+        }
+        checkpoint(checkpoint, *root);
+        save(save, *root);
+    }
     auto restoreInteraction = interactionCheckpoint();
     dispatching_ = true;
     bool result{};

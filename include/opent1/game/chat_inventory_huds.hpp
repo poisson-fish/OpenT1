@@ -25,7 +25,7 @@ class FearGuiChat : public gui::TextEdit {
 public:
     static constexpr std::size_t HistoryLimit = 20;
     static constexpr Int32 DisplayBorderX = 12;
-    static constexpr Int32 DisplayBorderY = 6;
+    static constexpr Int32 DisplayBorderY = 10;
 
     FearGuiChat();
     ~FearGuiChat() override = default;
@@ -80,11 +80,14 @@ public:
     write(StreamIO& sio, Int32 version, Int32 user, Persistent::StoreContext& ctx) const override;
 
 private:
+    [[nodiscard]] const gfx::BitmapFont* messageFont(bool small) const;
+    void reflow();
     Point2F fracPos_{0.0f, 0.0f};
     Int32 lineCount_{2};
     Int32 channel_{0};
     std::vector<std::string> history_{};
     Int32 historyCursor_{-1};
+    bool firstKeyPress_{false};
 };
 
 // -----------------------------------------------------------------------------

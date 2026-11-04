@@ -394,6 +394,10 @@ public:
     bool commitDialog(const std::function<bool()>&);
     [[nodiscard]] Control* top() const;
 
+    [[nodiscard]] Control* content() const {
+        return roots_.empty() ? nullptr : roots_.front();
+    }
+
     [[nodiscard]] Control* focus() const {
         return focus_;
     }
@@ -414,7 +418,9 @@ public:
         return mouseClicked_;
     }
 
-    bool makeFirstResponder(Control*);
+    // Explicit responders such as the in-game chat may receive keyboard input
+    // beneath a score dialog. Mouse capture and tab navigation stay in the top graph.
+    bool makeFirstResponder(Control*, bool allowCovered = false);
     bool lockMouse(Control*);
     void unlockMouse();
     void rebuildTabs();
@@ -547,7 +553,7 @@ public:
     }
 
     // True for visible controls in the active content/dialog graph.
-    [[nodiscard]] bool contains(const Control*) const;
+    [[nodiscard]] bool contains(const Control*, bool includeCovered = false) const;
 
 private:
     friend class Control;

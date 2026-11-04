@@ -458,6 +458,49 @@ void nativeChatDelivery() {
     CHECK(!plugin.serverGlobals().playerManager->processEvent(PlayerSayEvent{}));
 }
 
+void nativeTeamDelivery() {
+    Console console;
+    auto protocol = std::make_shared<Registry>();
+    CHECK(registerPlayerManagerEvents(*protocol));
+    Endpoint from(protocol, true), to(protocol);
+    auto* server = add<PlayerManager>(from.manager(), true);
+    auto* client = add<PlayerManager>(to.manager(), false);
+    server->bindConsole(&console);
+    CHECK(server->clientAdded("Peer", "male1", "base", true, 2049) == 2049);
+    server->findClient(2049)->packetStream = from.stream;
+    console.setVariable("Server::teamSkin/", "neutral");
+    console.setVariable("Server::teamName0", "Citizen");
+    console.setVariable("Server::teamSkin0", "rpghuman0");
+    server->teamAdded(0);
+    deliver(*from.stream, *to.stream);
+    CHECK(client->getNumTeams() == 1);
+    CHECK(client->getTeamSkinBase(-1) == "neutral");
+    CHECK(client->findTeam(0)->name == "Citizen");
+    CHECK(client->getTeamSkinBase(0) == "rpghuman0");
+
+    // The named overload must publish through the event-manager path as well.
+    server->findClient(2049)->packetStream = nullptr;
+    server->findClient(2049)->eventManager = from.events;
+    server->teamAdded("Elf", "rpgelf");
+    deliver(*from.stream, *to.stream);
+    CHECK(client->getNumTeams() == 2);
+    CHECK(client->findTeam(1)->name == "Elf");
+    CHECK(client->getTeamSkinBase(1) == "rpgelf");
+    server->findClient(2049)->eventManager = nullptr;
+    server->findClient(2049)->packetStream = from.stream;
+
+    // A mission reset must precede the new neutral and playable team records.
+    console.setVariable("Server::teamSkin/", "newneutral");
+    console.setVariable("Server::teamSkin0", "rpgscalemail");
+    server->missionReset();
+    server->teamAdded(0);
+    deliver(*from.stream, *to.stream);
+    CHECK(client->getNumTeams() == 1);
+    CHECK(client->getTeamSkinBase(-1) == "newneutral");
+    CHECK(client->getTeamSkinBase(0) == "rpgscalemail");
+    CHECK(!client->findTeam(1));
+}
+
 void nativeLightGhosts() {
     Endpoint receiver;
     const auto decode = [&](Int32 type, Flt32 range, Point3F direction) {
@@ -1207,8 +1250,9 @@ void remoteJoinWithStartupBots() {
               .ok());
     auto& sg = serverPlugin.serverGlobals();
     const auto* startupBot = sg.aiManager->findAI("StartupBot");
-    sg.playerManager->teamAdded("Players", "base");
-    sg.playerManager->teamAdded("Enemies", "base");
+    sg.playerManager->teamAdded("Players", "rpghuman0");
+    sg.playerManager->teamAdded("Enemies", "rpgscalemail");
+    sg.playerManager->setTeamSkin(-1, "neutral");
     CHECK(startupBot && startupBot->id == 2049);
     CHECK(sg.playerManager->getNumClients() == 0);
     CHECK(serverApp.console().getVariable("HumanConnections").empty());
@@ -1244,6 +1288,15 @@ void remoteJoinWithStartupBots() {
     CHECK(!sg.playerManager->findClient(2049) && !cg.playerManager->findClient(2049));
     CHECK(cg.playerManager->findBaseRep(2049));
     CHECK(cg.playerManager->getNumClients() == 1 && cg.playerManager->getNumBaseReps() == 2);
+    CHECK(cg.playerManager->getNumTeams() == 2);
+    CHECK(cg.playerManager->getTeamSkinBase(-1) == "neutral");
+    CHECK(cg.playerManager->findTeam(0)->name == "Players");
+    CHECK(cg.playerManager->getTeamSkinBase(0) == "rpghuman0");
+    CHECK(cg.playerManager->getTeamSkinBase(1) == "rpgscalemail");
+    // Static town NPCs select their skin from the received team table.
+    auto* townNpc = add<Item>(*cg.manager);
+    townNpc->setTeam(0);
+    CHECK(townNpc->getSkinBase() == "rpghuman0");
     CHECK(clientApp.console().getVariable("HumanJoins") == "1");
     CHECK(serverApp.console()
               .evaluate(R"(
@@ -1257,6 +1310,7 @@ void remoteJoinWithStartupBots() {
     advanceFrames(16);
     CHECK(cg.playerManager->findBaseRep(lateId));
     CHECK(cg.playerManager->findBaseRep(lateId)->team == 1);
+    CHECK(cg.playerManager->getPlayerSkinBase(lateId) == "rpgscalemail");
     CHECK(!cg.playerManager->findClient(lateId));
     CHECK(clientApp.console().getVariable("HumanJoins") == "1");
     CHECK(sg.aiManager->remove("LateBot", true));
@@ -1507,6 +1561,7 @@ int opent1_test_game_network_parity() {
     recorderLayout();
     ownershipBacklinks();
     remoteJoinWithStartupBots();
+    nativeTeamDelivery();
     addressedJoin();
     hostnameConnection();
     return 0;

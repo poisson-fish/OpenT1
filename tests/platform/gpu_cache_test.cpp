@@ -723,6 +723,49 @@ void terrainSubmission(platform::SdlWindow& window) {
     }
 }
 
+void shadowReadbacks(platform::SdlWindow& window) {
+    auto surface = gfx::SdlGpuSurface::create(window, 64, 64);
+    CHECK(surface);
+    gfx::Palette palette;
+    sim::EnvironmentCamera camera;
+    camera.viewport = {0, 0, 63, 63};
+    camera.center = camera.focal = {32, 32};
+    camera.nearDistance = .1f;
+    camera.farDistance = 20;
+    std::array<gfx::PolygonVertex, 4> ground{{{{0, 0}}, {{64, 0}}, {{64, 64}}, {{0, 64}}}};
+    for (auto& vertex : ground)
+        vertex.inverseDepth = .25f;
+    gfx::HardwareMaterial material;
+    material.color = {1, 1, 1};
+    const std::array<gfx::HardwarePolygon, 1> scene{{{ground, material}}};
+    sim::ShadowGeometry geometry;
+    geometry.polygons.push_back({0,
+                                 {{{-1, 3.98f, 1}, {0, 0}},
+                                  {{1, 3.98f, 1}, {1, 0}},
+                                  {{1, 3.98f, -1}, {1, 1}},
+                                  {{-1, 3.98f, -1}, {0, 1}}}});
+    const std::vector<UInt8> silhouette(66 * 66, 255);
+    auto bitmap = sim::filterShadowBitmap(silhouette, 66, 64, sim::ShadowBlur::Box2, .5f);
+    const std::array<sim::EnvironmentShadow, 1> shadows{{{geometry, bitmap}}};
+    const auto plain = sim::prepareHardwareEnvironment(camera, {}, {}, palette, {}, scene);
+    const auto shaded = sim::prepareHardwareEnvironment(camera, {}, {}, palette, shadows, scene);
+    CHECK(plain && shaded && surface->render(*plain));
+    std::vector<std::byte> a(64 * 64 * 4), b(a.size());
+    CHECK(surface->readback(a) && surface->render(*shaded) && surface->readback(b));
+    const auto center = (32 * 64 + 32) * 4, outside = (8 * 64 + 8) * 4;
+    CHECK(a[center] == std::byte{255});
+    CHECK(int(b[center]) >= 120 && int(b[center]) <= 135);
+    CHECK(b[outside] == a[outside]);
+    // A projected shadow behind the receiver must fail the depth test.
+    for (auto& vertex : geometry.polygons[0].vertices)
+        vertex.position.y = 4.02f;
+    const auto occluded = sim::prepareHardwareEnvironment(camera, {}, {}, palette, shadows, scene);
+    CHECK(occluded && surface->render(*occluded) && surface->readback(b));
+    CHECK(b == a);
+    CHECK(surface->trimCaches() && surface->render(*shaded) && surface->readback(b));
+    CHECK(int(b[center]) >= 120 && int(b[center]) <= 135);
+}
+
 void shapeReadbacks(platform::SdlWindow& window) {
     ResourceManager manager;
     CHECK(manager.add("retained.dts", test::ts::load(test::ts::shape())));
@@ -868,6 +911,7 @@ int runGpuCache(bool requireGpu) {
         arrayReadbacks(window);
         terrainReadbacks(window);
         terrainSubmission(window);
+        shadowReadbacks(window);
         shapeReadbacks(window);
     });
 }

@@ -217,6 +217,7 @@ prepareHardwareEnvironment(const EnvironmentCamera& camera,
             shadowTextures.push_back(std::move(*texture));
             gfx::HardwareMaterial material;
             material.texture = &shadowTextures.back();
+            material.dynamicTexture = true;
             material.perspective = camera.perspective;
             material.twoSided = true;
             material.transparent = !bitmap.translucent;

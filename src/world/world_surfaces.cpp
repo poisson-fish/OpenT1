@@ -211,6 +211,68 @@ struct Candidate {
     Point3F normal;
     Flt32 constant{};
 };
+
+// Reject whole retained terrain patches/interior surfaces before expanding
+// their triangles. A player shadow touches a small part of a visible scene.
+template <class Visit>
+bool visitShadowTriangles(const WorldSurfaceMesh& mesh,
+                          const Box3F& query,
+                          std::size_t& work,
+                          Visit&& visit) {
+    if (mesh.terrainPatches) {
+        const auto& patches = mesh.terrainPatches->patches;
+        for (auto i : std::views::iota(std::size_t{}, patches.size())) {
+            collision_detail::spend(work);
+            const auto& patch = patches[i];
+            if (patch.origin.x > query.fMax.x || patch.origin.x + patch.extent < query.fMin.x ||
+                patch.origin.y > query.fMax.y || patch.origin.y + patch.extent < query.fMin.y) {
+                continue;
+            }
+            const auto end = i + 1 < patches.size() ? patches[i + 1].firstTriangle
+                                                    : mesh.terrainPatches->triangles;
+            for (auto t : std::views::iota(patch.firstTriangle, end)) {
+                if (!visit(mesh.terrainTriangle(t))) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+    if (mesh.interiorMesh) {
+        const auto& source = *mesh.interiorMesh;
+        for (auto i : std::views::iota(std::size_t{}, source.surfaceIds.size())) {
+            collision_detail::spend(work);
+            const auto surface = source.surfaceIds[i];
+            if ((mesh.interiorSelection &&
+                 !std::ranges::binary_search(*mesh.interiorSelection, surface)) ||
+                !source.surfaceBounds[surface].overlaps(query)) {
+                continue;
+            }
+            StaticSurfaceTriangle triangle;
+            triangle.material = source.source->surfaces[surface].material;
+            for (auto j : std::views::iota(std::size_t{}, std::size_t{3})) {
+                const auto& v = source.hardware->vertices()[source.hardware->indices()[i * 3 + j]];
+                triangle.vertices[j].position = {v.position.x, v.position.y, v.inverseDepth};
+            }
+            if (!visit(triangle)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    for (const auto& triangle : mesh.triangles) {
+        collision_detail::spend(work);
+        Box3F bounds{triangle.vertices[0].position, triangle.vertices[0].position};
+        for (const auto& vertex : triangle.vertices) {
+            bounds.fMin.setMin(vertex.position);
+            bounds.fMax.setMax(vertex.position);
+        }
+        if (bounds.overlaps(query) && !visit(triangle)) {
+            return false;
+        }
+    }
+    return true;
+}
 }
 
 std::optional<WorldSurfaceMesh> WorldSurfaceMesh::terrain(const TerrainGridResources& resources,
@@ -906,14 +968,27 @@ collectShadowReceivers(const sim::ShadowSourceWindow& w,
                 instance.mesh->triangleCount() > 1'048'576) {
                 return {};
             }
-            for (const auto& t : instance.mesh->surfaceTriangles(true)) {
+            auto inverse = instance.placement;
+            inverse.inverse();
+            const auto first = point(w.points[0], inverse);
+            Box3F query{first, first};
+            for (const auto& p : w.points) {
+                for (const auto& end : {p, p + w.direction * length}) {
+                    const auto local = point(end, inverse);
+                    query.fMin.setMin(local);
+                    query.fMax.setMax(local);
+                }
+            }
+            query.fMin -= .01f;
+            query.fMax += .01f;
+            const auto collect = [&](const StaticSurfaceTriangle& t) {
                 spend(work);
                 if (t.material >= instance.mesh->materials.list().materials.size()) {
-                    return {};
+                    return false;
                 }
                 const auto& material = instance.mesh->materials.list().materials[t.material];
                 if (!material.type() || (material.flags & 0x2000U)) {
-                    continue;
+                    return true;
                 }
                 std::array<Point3F, 3> points;
                 std::ranges::transform(t.vertices, points.begin(), [&](const auto& v) {
@@ -922,21 +997,21 @@ collectShadowReceivers(const sim::ShadowSourceWindow& w,
                 if (!std::ranges::all_of(points, [](auto p) {
                         return finite(p);
                     })) {
-                    return {};
+                    return false;
                 }
                 Point3F normal;
                 m_normal(points[0], points[1], points[2], normal);
                 const auto normalLength = normal.len();
                 if (!std::isfinite(normalLength)) {
-                    return {};
+                    return false;
                 }
                 if (normalLength < 1e-10f) {
-                    continue;
+                    return true;
                 }
                 normal /= normalLength;
                 const auto dot = m_dot(normal, w.direction);
                 if (dot >= -.01f) {
-                    continue;
+                    return true;
                 }
                 const auto constant = m_dot(normal, points[0]);
                 Candidate c;
@@ -952,13 +1027,17 @@ collectShadowReceivers(const sim::ShadowSourceWindow& w,
                 c.polygon = clip(c.polygon, c.depth, work);
                 c.polygon = clip(c.polygon, {-c.depth.x, -c.depth.y, length - c.depth.c}, work);
                 if (c.polygon.empty()) {
-                    continue;
+                    return true;
                 }
                 c.edges = edges(c.polygon);
                 if (candidates.size() == 4096) {
-                    return {};
+                    return false;
                 }
                 candidates.push_back(std::move(c));
+                return true;
+            };
+            if (!visitShadowTriangles(*instance.mesh, query, work, collect)) {
+                return {};
             }
         }
         std::vector<sim::ShadowReceiver> result;

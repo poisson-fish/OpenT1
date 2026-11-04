@@ -124,6 +124,13 @@ smoke and positive-frame-limit runs also use 32 ms frame times; interactive SDL
 runs use elapsed wall time. Consequently, the build without SDL is currently a
 bounded execution/test host, not a continuous dedicated-server loop.
 
+Player and bot shadows are enabled by default in both renderers, including the
+local player's shadow in first person. Set `$pref::playerShadows = "FALSE";` to
+disable them. This preference is independent of the legacy shadow detail mask
+and scale. Animated silhouettes project onto terrain and interior surfaces using
+the mission sun, with a downward fallback when no suitable sun is available.
+Up to 32 nearby shadows are rendered per frame.
+
 ## Network and console services
 
 Game sessions use UDP, with optional native IPX routing when the Windows OS

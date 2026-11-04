@@ -20,6 +20,7 @@ public:
     static inline constexpr Flt32 kJetFuelMin = 5.0f;
     static inline Int32 prefShapeDetail = 100;
     static inline Flt32 prefPlayerShadowSize = 10.0f;
+    static inline bool prefPlayerShadows = true;
     static inline Int32 prefFreeLook = 1;
 
     enum Constants : Int32 {

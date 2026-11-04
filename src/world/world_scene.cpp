@@ -806,6 +806,11 @@ WorldSceneFrame::captureImpl(sim::SimWorld& world,
                         !rigid(image.shapeToWorld, true)) {
                         return;
                     }
+                    if (!image.drawShape) {
+                        frame.shapes_.emplace_back();
+                        frame.shapeInputs_.push_back(std::move(image));
+                        continue;
+                    }
                     TsStaticView view;
                     m_mul(image.shapeToWorld, camera.worldToCamera, view.shapeToCamera);
                     view.width = Int32(camera.viewport.width());
@@ -928,6 +933,9 @@ WorldSceneFrame::hardware(const gfx::Palette& palette,
         }
     }
     for (auto i : std::views::iota(std::size_t{0}, shapes_.size())) {
+        if (!shapeInputs_[i].drawShape) {
+            continue;
+        }
         const auto first = polygons.size();
         if (!shapes_[i].appendHardwarePolygons(polygons, &palette, paletteGamma)) {
             return {};
@@ -986,8 +994,11 @@ bool WorldSceneFrame::draw(gfx::SoftwareSurface& surface,
         }
         polygons.insert(polygons.end(), inputs->begin(), inputs->end());
     }
-    for (const auto& shape : shapes_) {
-        auto inputs = shape.softwarePolygons(surface.palette(), cache);
+    for (auto i : std::views::iota(std::size_t{0}, shapes_.size())) {
+        if (!shapeInputs_[i].drawShape) {
+            continue;
+        }
+        auto inputs = shapes_[i].softwarePolygons(surface.palette(), cache);
         if (!inputs) {
             return false;
         }
@@ -1034,6 +1045,10 @@ WorldSceneFrame::reframed(const sim::EnvironmentCamera& camera) const {
         result.surfaceFrames_.push_back(std::move(*frame));
     }
     for (const auto& image : shapeInputs_) {
+        if (!image.drawShape) {
+            result.shapes_.emplace_back();
+            continue;
+        }
         auto view = viewFor(image.shapeToWorld);
         view.detail = image.detail;
         view.automaticDetail = image.automaticDetail;
@@ -1080,29 +1095,54 @@ std::optional<std::vector<WorldShadow>> WorldSceneFrame::shadows(Point3F directi
     Point3F cameraDirection;
     cameraToWorld.getRow(1, cameraDirection);
     std::vector<WorldShadow> result;
-    try {
-        for (const auto& image : shapeInputs_) {
-            if (!image.castShadow || image.firstPerson || image.haze > .2f || image.opacity <= 0 ||
-                !image.resources.shape) {
-                continue;
-            }
+    std::vector<const WorldShapeImage*> casters;
+    for (const auto& image : shapeInputs_) {
+        if (!image.castShadow || image.firstPerson || image.haze > .2f || image.opacity <= 0 ||
+            !image.resources.shape) {
+            continue;
+        }
+        casters.push_back(&image);
+    }
+    std::ranges::stable_sort(casters, {}, [&](const auto* image) {
+        return (image->shapeToWorld.p - cameraToWorld.p).lenSq();
+    });
+    // Bound attempts as well as successful shadows. Unsupported/over-budget
+    // receivers must not cause a crowded scene to retry every actor each frame.
+    const auto budget = std::min(std::size_t{32}, gfx::renderLimits().shadows);
+    std::vector<WorldSurfaceInstance> receiverInstances(surfaces_);
+    for (const auto* caster : casters | std::views::take(budget)) {
+        try {
+            const auto& image = *caster;
             const auto& shape = *image.resources.shape;
+            auto shapeToLocal = image.shapeToWorld;
+            shapeToLocal.p = {};
             Point3F center;
-            m_mul(shape.center, static_cast<const RMat3F&>(image.shapeToWorld), center);
-            const auto window = sim::makeShadowSourceWindow(direction,
-                                                            center,
-                                                            shape.radius,
-                                                            shape.bounds,
-                                                            image.shapeToWorld,
-                                                            image.shapeToWorld.p);
+            m_mul(shape.center, static_cast<const RMat3F&>(shapeToLocal), center);
+            // Keep window construction, plane tests and clipping near zero.
+            // Adding a small light-space quad to RPG world coordinates first
+            // loses enough float precision to reject an otherwise valid plane.
+            const auto window = sim::makeShadowSourceWindow(
+                direction, center, shape.radius, shape.bounds, shapeToLocal);
             if (window.radius <= .0001f) {
                 continue;
             }
-            auto geometry = shadowGeometry(window, cameraDirection, 100, .1f, true);
-            if (!geometry) {
-                return {};
+            // Clip to the actual receiver footprint and nearest surface along
+            // the light, including slopes, ledges and stacked interior floors.
+            // The silhouette camera sits ahead of the shape; start receiver
+            // collection at the caster instead so ceilings above it cannot
+            // steal its shadow from the floor below.
+            auto receivers = window;
+            for (auto& point : receivers.points) {
+                point += direction * (shape.radius + 2);
             }
-            if (geometry->polygons.empty()) {
+            for (auto i : std::views::iota(std::size_t{}, surfaces_.size())) {
+                receiverInstances[i].placement = surfaces_[i].placement;
+                receiverInstances[i].placement.p -= image.shapeToWorld.p;
+                receiverInstances[i].placement.flags |= RMat3F::Matrix_HasTranslation;
+            }
+            auto geometry =
+                worldShadowGeometry(receivers, receiverInstances, cameraDirection, 100, .02f);
+            if (!geometry || geometry->polygons.empty()) {
                 continue;
             }
             // Render the retained animated pose from the light. A one-pixel
@@ -1116,7 +1156,7 @@ std::optional<std::vector<WorldShadow>> WorldSceneFrame::shadows(Point3F directi
             auto worldToLight = lightToWorld;
             worldToLight.inverse();
             TsStaticView view;
-            m_mul(image.shapeToWorld, worldToLight, view.shapeToCamera);
+            m_mul(shapeToLocal, worldToLight, view.shapeToCamera);
             view.width = view.height = 66;
             view.center = {33, 33};
             view.focal = {32 / window.radius, 32 / window.radius};
@@ -1127,11 +1167,11 @@ std::optional<std::vector<WorldShadow>> WorldSceneFrame::shadows(Point3F directi
             view.detail = image.detail;
             auto frame = TsStaticShapeFrame::prepare(image.resources, view, image.pose);
             if (!frame) {
-                return {};
+                continue;
             }
             const auto mask = frame->silhouette();
             if (!mask) {
-                return {};
+                continue;
             }
             std::vector<UInt8> pixels;
             pixels.reserve(66 * 66);
@@ -1140,12 +1180,21 @@ std::optional<std::vector<WorldShadow>> WorldSceneFrame::shadows(Point3F directi
                     pixels.push_back(std::to_integer<UInt8>(mask->row(y)[x]));
                 }
             }
+            for (auto& polygon : geometry->polygons) {
+                for (auto& vertex : polygon.vertices) {
+                    vertex.position += image.shapeToWorld.p;
+                }
+            }
             result.push_back({std::move(*geometry),
                               sim::filterShadowBitmap(
                                   pixels, 66, 64, sim::ShadowBlur::Box2, opacity * image.opacity)});
+        } catch (const std::invalid_argument&) {
+            // Shadows are optional. A bad caster must not drop the world frame
+            // or discard valid shadows already prepared for other players.
+            continue;
+        } catch (const std::length_error&) {
+            continue;
         }
-    } catch (const std::invalid_argument&) {
-        return {};
     }
     return result;
 }

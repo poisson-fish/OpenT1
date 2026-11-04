@@ -5100,6 +5100,8 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
     if (!shadowMask.empty()) {
         ShapeBase::prefShadowDetailMask = parseIntSv(shadowMask);
     }
+    const auto playerShadows = game_.console().getVariable("pref::playerShadows");
+    Player::prefPlayerShadows = playerShadows.empty() || script::toBool(playerShadows);
     sim::SimWorld* activeWorld = cg.world ? cg.world : sg.world;
     sim::SimManager* activeMgr = cg.manager ? cg.manager : sg.manager;
 
@@ -5277,24 +5279,29 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
                 }
             }
             const auto worldStart = std::chrono::steady_clock::now();
-            std::vector<world::WorldShadow> ownedShadows;
+            Point3F shadowDirection{0, 0, -1};
+            for (const auto& light : sceneFrame->lighting().lights) {
+                if (light.type == sim::SimLight::Type::Directional && light.direction.z < -.01f) {
+                    shadowDirection = light.direction;
+                    break;
+                }
+            }
             for (const auto* object : envObjects) {
                 const auto* planet = dynamic_cast<const Planet*>(object);
-                if (!planet || !planet->planetImage().castShadows) {
+                if (!planet || !planet->planetImage().castShadows ||
+                    planet->planetImage().lightDirection.z >= -.01f) {
                     continue;
                 }
-                auto shadows = sceneFrame->shadows(planet->planetImage().lightDirection);
-                if (!shadows) {
-                    game_.console().setVariable("OpenT1::LastRenderError",
-                                                "World shadow preparation failed");
-                    return false;
-                }
-                ownedShadows = std::move(*shadows);
+                shadowDirection = planet->planetImage().lightDirection;
                 break;
             }
+            auto ownedShadows = sceneFrame->shadows(shadowDirection);
+            if (!ownedShadows) {
+                ownedShadows.emplace();
+            }
             std::vector<sim::EnvironmentShadow> shadows;
-            shadows.reserve(ownedShadows.size());
-            for (const auto& shadow : ownedShadows) {
+            shadows.reserve(ownedShadows->size());
+            for (const auto& shadow : *ownedShadows) {
                 shadows.push_back({shadow.geometry, shadow.bitmap});
             }
             if (hardware) {

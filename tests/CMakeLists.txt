@@ -129,6 +129,15 @@ set_tests_properties(
                ENVIRONMENT "SDL_VIDEODRIVER=opent1-invalid-driver;ALSOFT_DRIVERS=null"
 )
 
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/stdio_console")
+add_test(NAME stdio_console COMMAND "${CMAKE_COMMAND}"
+    "-DOPENT1_EXECUTABLE=$<TARGET_FILE:opent1>"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/runtime/stdio_console.cmake")
+set_tests_properties(stdio_console PROPERTIES
+    TIMEOUT 45 LABELS integration
+    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/stdio_console"
+    ENVIRONMENT "SDL_VIDEODRIVER=opent1-invalid-driver;ALSOFT_DRIVERS=null")
+
 if(OPENT1_TEST_GPU)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/gpu")
     add_test(NAME gpu COMMAND opent1_tests --suite gpu)

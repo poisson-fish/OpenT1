@@ -16,6 +16,7 @@
 
 #include <opent1/gfx/sdl_gpu_surface.hpp>
 #include <opent1/platform/sdl_window.hpp>
+#include <opent1/platform/process_console.hpp>
 #include <opent1/gui/sdl_gui.hpp>
 #include <opent1/sim/sim_sdl_input.hpp>
 
@@ -256,6 +257,13 @@ protected:
 
         opts_ = parseRuntimeOptions(userArgs, includesProgramName_);
         opts_.exePath = exeDir;
+
+        if (includesProgramName_ && (opts_.headless || opts_.dedicated)) {
+            processConsole_ = std::make_unique<platform::ProcessConsole>();
+            consoleOutput_ = app_.console().subscribeOutput([this](std::string_view line) {
+                processConsole_->writeLine(line);
+            });
+        }
 
         (void)audio::registerWaveLoader(app_.resources());
         app_.bindMovieAudio = [service = movieAudio_](SmackerCtrl& control) {
@@ -549,6 +557,10 @@ protected:
             };
         }
         startTicksMs_ = SDL_GetTicks();
+        if (processConsole_) {
+            processConsole_->writeLine("OpenT1 script console ready. Enter quit(); to stop.");
+            processConsole_->showPrompt(app_.console().getVariable("Console::Prompt"));
+        }
         return true;
     }
 
@@ -783,6 +795,25 @@ protected:
     }
 
     void onIdle() override {
+        if (processConsole_) {
+            const auto commands = processConsole_->poll();
+            for (const auto& command : commands) {
+                const auto result = app_.console().evaluate(command, "<stdin>");
+                for (const auto& diagnostic : result.diagnostics) {
+                    app_.console().print(diagnostic.format());
+                }
+                if (result.ok() && !result.value.empty()) {
+                    app_.console().print(result.value);
+                }
+                if (app_.fearPlugin().quitRequested()) {
+                    requestQuit(0);
+                    return;
+                }
+            }
+            if (!commands.empty()) {
+                processConsole_->showPrompt(app_.console().getVariable("Console::Prompt"));
+            }
+        }
         if (loadingPresented_ && app_.missionPending()) {
             (void)app_.loadPendingMission();
             loadingPresented_ = false;
@@ -1134,6 +1165,7 @@ protected:
             audioRuntime_.reset();
         }
         app_.shutdown();
+        consoleOutput_.reset();
     }
 
 private:
@@ -1152,6 +1184,8 @@ private:
     double audioSimulationTime_{};
     RuntimeOptions opts_{};
     FearGameApp app_{};
+    std::unique_ptr<platform::ProcessConsole> processConsole_;
+    std::shared_ptr<Console::Output> consoleOutput_;
     std::unique_ptr<gfx::SdlGpuSurface> gpuSurface_{};
     std::unique_ptr<gfx::SoftwareSurface> softwareSurface_{};
     std::unique_ptr<audio::Runtime> audioRuntime_{};

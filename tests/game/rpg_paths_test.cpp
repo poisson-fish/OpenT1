@@ -153,9 +153,9 @@ void chatEntryParity() {
     const auto caretX = origin.x + FearGuiChat::DisplayBorderX + 11 * 8;
     CHECK(chat.draw(*surface, origin, surface->bitmap().bounds()));
     // The word after the first wrap uses the whole inset width; the prompt is
-    // reserved once. Native high-res caret ends at textY + 3 + font height.
-    CHECK(surface->bitmap().row(origin.y + 16 + 17)[caretX] == std::byte{GREEN});
-    CHECK(surface->bitmap().row(origin.y + 16 + 18)[caretX] != std::byte{GREEN});
+    // reserved once. The two occupied rows are centered with their caret.
+    CHECK(surface->bitmap().row(origin.y + 37)[caretX] == std::byte{GREEN});
+    CHECK(surface->bitmap().row(origin.y + 38)[caretX] != std::byte{GREEN});
     CHECK(canvas.focus() == &chat);
     chat.reject = true;
     gui::Event key;
@@ -191,15 +191,89 @@ void chatEntryParity() {
     const auto lowOrigin = chat.fields().position;
     const auto lowCaretX = lowOrigin.x + FearGuiChat::DisplayBorderX + 10 * 8;
     CHECK(chat.draw(*lowSurface, lowOrigin, lowSurface->bitmap().bounds()));
-    CHECK(lowSurface->bitmap().row(lowOrigin.y + 16)[lowCaretX] == std::byte{GREEN});
-    CHECK(lowSurface->bitmap().row(lowOrigin.y + 17)[lowCaretX] != std::byte{GREEN});
+    CHECK(lowSurface->bitmap().row(lowOrigin.y + 29)[lowCaretX] == std::byte{GREEN});
+    CHECK(lowSurface->bitmap().row(lowOrigin.y + 30)[lowCaretX] != std::byte{GREEN});
     font->info.scale.y = 98304;
     CHECK(chat.layout({320, 240}) && chat.fields().extent.y == 58);
     const auto scaledOrigin = chat.fields().position;
     lowSurface->clear(0);
     CHECK(chat.draw(*lowSurface, scaledOrigin, lowSurface->bitmap().bounds()));
-    CHECK(lowSurface->bitmap().row(scaledOrigin.y + 24)[lowCaretX] == std::byte{GREEN});
-    CHECK(lowSurface->bitmap().row(scaledOrigin.y + 25)[lowCaretX] != std::byte{GREEN});
+    CHECK(lowSurface->bitmap().row(scaledOrigin.y + 41)[lowCaretX] == std::byte{GREEN});
+    CHECK(lowSurface->bitmap().row(scaledOrigin.y + 42)[lowCaretX] != std::byte{GREEN});
+    CHECK(canvas.content(nullptr));
+}
+
+void chatEntryCentering() {
+    const auto makeFont = [](Int32 height, UInt8 glyphHeight, Int32 baseline) {
+        auto font = chatTestFont();
+        font->info.height = height;
+        font->info.baseline = baseline;
+        font->characters[0].height = glyphHeight;
+        font->characters[0].baseline = 0;
+        std::ranges::fill(font->sheets.bitmaps[0].pixels, std::byte{77});
+        // Installed fonts have a transparent space below the visible capitals.
+        font->sheets.bitmaps.push_back(*gfx::Bitmap::create(8, 2));
+        font->characters.push_back({1, 0, 0, 8, 2, 1, {}});
+        font->lookup[0] = 1;
+        return font;
+    };
+    const std::array fonts{
+        makeFont(13, 9, 12), makeFont(17, 11, 15), makeFont(8, 5, 6), makeFont(10, 7, 8)};
+    gui::Control root;
+    FearGuiChat chat;
+    gui::Canvas canvas;
+    chat.font = fonts[0];
+    chat.teamFont = fonts[1];
+    chat.smallFont = fonts[2];
+    chat.smallTeamFont = fonts[3];
+    CHECK(root.addObject(chat) && canvas.content(&root));
+    for (const auto extent : {Point2I{640, 480}, Point2I{320, 240}}) {
+        CHECK(root.resize({}, extent));
+        for (const auto scale : {65536, 98304, 131072}) {
+            for (const auto& font : fonts) {
+                font->info.scale.y = scale;
+            }
+            for (const auto channel : {0, 1}) {
+                for (const auto& text :
+                     {std::string{}, std::string{"Hello"}, std::string(100, 'A')}) {
+                    CHECK(chat.setText(text));
+                    chat.setLineCount(2);
+                    chat.activate(channel);
+                    chat.anchor = 0; // Include selection and the caret in the rendered check.
+                    auto surface = gfx::SoftwareSurface::create(extent.x, extent.y);
+                    CHECK(surface);
+                    const auto origin = chat.fields().position;
+                    CHECK(chat.draw(*surface, origin, surface->bitmap().bounds()));
+                    Int32 glyphTop = extent.y, glyphBottom = -1;
+                    Int32 caretTop = extent.y, caretBottom = -1;
+                    for (Int32 y = 0; y < extent.y; ++y) {
+                        const auto row = surface->bitmap().row(y);
+                        for (Int32 x = origin.x + FearGuiChat::DisplayBorderX;
+                             x < origin.x + chat.fields().extent.x - FearGuiChat::DisplayBorderX;
+                             ++x) {
+                            if (row[x] == std::byte{77}) {
+                                glyphTop = std::min(glyphTop, y);
+                                glyphBottom = std::max(glyphBottom, y);
+                            } else if (row[x] == std::byte{GREEN}) {
+                                caretTop = std::min(caretTop, y);
+                                caretBottom = std::max(caretBottom, y);
+                            }
+                        }
+                    }
+                    const auto topGap = glyphTop - origin.y;
+                    const auto bottomGap = origin.y + chat.fields().extent.y - 1 - glyphBottom;
+                    CHECK(glyphBottom >= glyphTop && std::abs(topGap - bottomGap) <= 1);
+                    CHECK(caretBottom >= caretTop && caretTop >= origin.y + 4 &&
+                          caretBottom <= origin.y + chat.fields().extent.y - 4);
+                    const auto& font = fonts[(extent.x < 512 ? 2 : 0) + channel];
+                    const auto glyphHeight = (font->characters[0].height * scale) >> 16;
+                    // The caret stays centered on the last occupied row, including after wrapping.
+                    CHECK(std::abs(caretTop + caretBottom - (2 * glyphBottom - glyphHeight + 1)) <=
+                          2);
+                }
+            }
+        }
+    }
     CHECK(canvas.content(nullptr));
 }
 
@@ -470,6 +544,7 @@ int opent1_test_rpg_paths() {
         recipientMessages();
         chatReentry();
         chatEntryParity();
+        chatEntryCentering();
         chatOverServerMenu();
         thrownItems();
     });

@@ -262,14 +262,24 @@ bool FearGuiChat::draw(gfx::SoftwareSurface& surface, Point2I offset, RectI clip
     const auto prompt = chatPrompt(channel_);
     const auto promptWidth = Int32(f->textWidth(prompt));
     const auto height = fontHeight(*f);
-    const auto textY = offset.y - (small ? 0 : 2);
+    const auto lines = lineEnds(text, *f, fields_.extent.x - 2 * DisplayBorderX, channel_);
+    const auto rows = std::min(Int32(lines.size()), std::max(1, lineCount_));
+    // Center the occupied rows on the prompt's capital height. The font origin
+    // and transparent space glyphs do not describe the visible text bounds.
+    const auto capital = f->glyph('S').info;
+    const auto promptTop = Int32(
+        (Int64(f->info.baseline + capital.baseline - capital.height + 2) * f->info.scale.y) >> 16);
+    const auto promptHeight = Int32((Int64(capital.height) * f->info.scale.y) >> 16);
+    const auto textY =
+        offset.y + (fields_.extent.y - ((rows - 1) * height + promptHeight)) / 2 - promptTop;
+    const auto caretOffset = promptTop - (height - promptHeight) / 2;
     if (!surface.text(*f, {offset.x + DisplayBorderX, textY}, prompt)) {
         return false;
     }
     std::size_t start = 0;
     Int32 row = 0;
     bool cursorDrawn = false;
-    for (const auto end : lineEnds(text, *f, fields_.extent.x - 2 * DisplayBorderX, channel_)) {
+    for (const auto end : lines) {
         const Point2I at{offset.x + DisplayBorderX + (row == 0 ? promptWidth : 0),
                          textY + row * height};
         const auto line = std::string_view(text).substr(start, end - start);
@@ -277,7 +287,9 @@ bool FearGuiChat::draw(gfx::SoftwareSurface& surface, Point2I offset, RectI clip
         if (a < end && b > start) {
             const auto left = Int32(f->textWidth(line.substr(0, std::max(a, start) - start)));
             const auto right = Int32(f->textWidth(line.substr(0, std::min(b, end) - start)));
-            surface.fill({at.x + left, at.y + 2, at.x + right, at.y + height}, GREEN_78);
+            surface.fill(
+                {at.x + left, at.y + caretOffset, at.x + right, at.y + caretOffset + height},
+                GREEN_78);
         }
         if (!surface.text(*f, at, line)) {
             return false;
@@ -286,7 +298,7 @@ bool FearGuiChat::draw(gfx::SoftwareSurface& surface, Point2I offset, RectI clip
             cursor <= end) {
             const auto x =
                 at.x + Int32(f->textWidth(line.substr(0, std::min(cursor, end) - start)));
-            const auto y = at.y + (small ? 0 : 3);
+            const auto y = at.y + caretOffset;
             surface.line({x, y}, {x, y + height}, GREEN);
             cursorDrawn = true;
         }

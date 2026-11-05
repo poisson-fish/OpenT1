@@ -17,6 +17,23 @@ the Tribes scripting runtime, HUD and shell GUI, and Smacker video playback.
 It remains a work in progress; compatibility and platform support should be
 verified for the particular game content and environment being used.
 
+## Downloads and documentation
+
+[Numbered releases](https://github.com/poisson-fish/OpenT1/releases) provide fixed
+versions; the [continuous main prerelease](https://github.com/poisson-fish/OpenT1/releases/tag/continuous)
+updates after successful main builds. Packages target Windows x64, Linux x64
+(Ubuntu 24.04 or compatible), and macOS ARM64 (macOS 15+), and include runtime
+libraries, matching docs and original scripting examples. Supply game data from
+your own installation. Checksums and a combined source/dependency bundle accompany
+each release. OpenT1's version in `VERSION` is separate from the Tribes 1.11 target.
+
+The [wiki](https://github.com/poisson-fish/OpenT1/wiki) covers
+[installation](docs/wiki/Getting-started.md), [game modding](docs/wiki/Game-modding.md),
+[scripting](docs/wiki/Scripting-reference.md), [examples](docs/wiki/Scripting-examples.md),
+[source modding](docs/wiki/Source-modding.md), and [server hosting](docs/wiki/Server-hosting.md).
+See [releasing](docs/wiki/Releasing.md) for release automation and acceptance checks,
+and [contributing](CONTRIBUTING.md) for development expectations.
+
 ## Build
 
 On Windows, install Visual Studio with the **Desktop development with C++**

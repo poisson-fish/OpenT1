@@ -1,0 +1,30 @@
+# Run after installing, while build dependencies are still available. This also
+# collects Homebrew libc++/libc++abi rather than requiring Homebrew on user Macs.
+include(BundleUtilities)
+function(gp_item_default_embedded_path_override item result)
+    # These are relocatable command-line archives, not .app bundles. Keep every
+    # non-system dylib beside the executable instead of ../Frameworks.
+    set(${result} "@executable_path" PARENT_SCOPE)
+endfunction()
+set(BU_CHMOD_BUNDLE_ITEMS ON)
+set(_llvm_root "@OPENT1_LLVM_ROOT@")
+if(NOT _llvm_root)
+    set(_llvm_root "$ENV{OPENT1_LLVM_ROOT}")
+endif()
+if(NOT _llvm_root)
+    get_filename_component(_compiler_bin "@CMAKE_CXX_COMPILER@" DIRECTORY)
+    get_filename_component(_llvm_root "${_compiler_bin}" DIRECTORY)
+endif()
+# libc++ and libc++abi depend on libunwind, which Homebrew installs separately.
+# BundleUtilities does not propagate every dependent dylib's @loader_path rpath.
+set(_runtime_dirs "@CMAKE_BINARY_DIR@" "@CMAKE_BINARY_DIR@/_deps/openal_soft-build"
+    "${_llvm_root}/lib/c++" "${_llvm_root}/lib/unwind" "${_llvm_root}/lib")
+fixup_bundle("${CMAKE_INSTALL_PREFIX}/opent1" "" "${_runtime_dirs}")
+fixup_bundle("${CMAKE_INSTALL_PREFIX}/opent1_asset_tool" "" "${_runtime_dirs}")
+file(GLOB _binaries "${CMAKE_INSTALL_PREFIX}/*.dylib")
+list(APPEND _binaries "${CMAKE_INSTALL_PREFIX}/opent1" "${CMAKE_INSTALL_PREFIX}/opent1_asset_tool")
+foreach(_binary IN LISTS _binaries)
+    if(NOT IS_SYMLINK "${_binary}")
+        execute_process(COMMAND codesign --force --sign - "${_binary}" COMMAND_ERROR_IS_FATAL ANY)
+    endif()
+endforeach()

@@ -1,8 +1,9 @@
 cmake_minimum_required(VERSION 3.24)
 
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" OPENT1_VERSION LIMIT_COUNT 1)
 project(
     OpenT1
-    VERSION 1.11.0
+    VERSION ${OPENT1_VERSION}
     DESCRIPTION "Starsiege: Tribes 1 Modern C++20 Cross-Platform Engine & Game (OpenT1)"
     LANGUAGES C CXX
 )
@@ -607,6 +608,13 @@ target_link_libraries(opent1_game INTERFACE opent1_world_audio)
 target_link_libraries(opent1_game INTERFACE opent1_video_sdl)
 add_executable(opent1 src/main/main.cpp)
 target_compile_definitions(opent1 PRIVATE OPENT1_STANDALONE_EXECUTABLE=1)
+execute_process(COMMAND git rev-parse HEAD WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    OUTPUT_VARIABLE OPENT1_GIT_COMMIT OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+if(NOT OPENT1_GIT_COMMIT)
+    set(OPENT1_GIT_COMMIT "source-archive")
+endif()
+target_compile_definitions(opent1 PRIVATE OPENT1_VERSION="${PROJECT_VERSION}"
+    OPENT1_GIT_COMMIT="${OPENT1_GIT_COMMIT}")
 target_link_libraries(opent1 PRIVATE opent1_game)
 # Source-derived AI parity checks and optional installed-content traces.
 add_executable(opent1_shadow_benchmark EXCLUDE_FROM_ALL tools/shadow_benchmark.cpp)
@@ -695,3 +703,5 @@ endif()
 if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
+
+include(cmake/Install.cmake)

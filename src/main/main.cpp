@@ -1261,6 +1261,14 @@ int runFearMain(std::span<const std::string_view> commandLineArgs) {
 #if defined(OPENT1_STANDALONE_EXECUTABLE)
 
 SDL_AppResult SDL_AppInit(void** state, int argc, char** argv) {
+    for (int i = 1; i < argc; ++i) {
+        if (std::string_view(argv[i]) == "--version") {
+            *state = nullptr;
+            std::cout << "OpenT1 " << OPENT1_VERSION << " (" << OPENT1_GIT_COMMIT
+                      << ") - Tribes 1.11 compatibility target\n";
+            return SDL_APP_SUCCESS;
+        }
+    }
     return opent1::platform::initApplication<opent1::game::FearMainApplication>(state, argc, argv);
 }
 

@@ -7,6 +7,11 @@ platforms.
 
 ## Launching
 
+`opent1 --version` prints the OpenT1 release version, source commit and Tribes
+compatibility target without loading game data or initializing video/audio.
+Binary distributions also include `release.json` with their platform and build
+configuration. OpenT1's release version is separate from the Tribes 1.11 target.
+
 ```powershell
 .\build\x64-debug\opent1.exe --assets "C:\Games\Tribes"
 ```

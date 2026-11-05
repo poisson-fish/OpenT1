@@ -15,20 +15,24 @@ concurrency:
 
 jobs:
   build:
-    name: ${{ matrix.platform.name }}
+    name: ${{ matrix.platform.name }} ${{ matrix.configuration }}
     runs-on: ${{ matrix.platform.runner }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
+        configuration: [Debug, Release]
         platform:
           - name: Linux x64
+            package: linux-x64
             runner: ubuntu-24.04
             cmake_args: -DCMAKE_C_COMPILER=gcc-14 -DCMAKE_CXX_COMPILER=g++-14
           - name: macOS ARM64
+            package: macos-arm64
             runner: macos-15
-            cmake_args: -DCMAKE_OSX_ARCHITECTURES=arm64
+            cmake_args: -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0
           - name: Windows x64
+            package: windows-x64
             runner: windows-2025
             cmake_args: -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/msvc-x64.cmake
     defaults:
@@ -36,6 +40,11 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
       - name: Restore dependency downloads
         id: dependency-downloads
         uses: actions/cache/restore@v6
@@ -49,6 +58,7 @@ jobs:
         run: |
           brew install llvm@20
           llvm_prefix="$(brew --prefix llvm@20)"
+          echo "OPENT1_LLVM_ROOT=$llvm_prefix" >> "$GITHUB_ENV"
           # Use matching libc++ headers and runtime; Apple's library lacks jthread.
           echo "CC=$llvm_prefix/bin/clang" >> "$GITHUB_ENV"
           echo "CXX=$llvm_prefix/bin/clang++" >> "$GITHUB_ENV"
@@ -75,10 +85,11 @@ jobs:
       - name: Configure
         env:
           PLATFORM_CMAKE_ARGS: ${{ matrix.platform.cmake_args }}
+          CONFIGURATION: ${{ matrix.configuration }}
         run: |
           # All platform arguments are fixed values from the matrix above.
           read -r -a platform_options <<< "$PLATFORM_CMAKE_ARGS"
-          cmake -S . -B build/ci -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+          cmake -S . -B build/ci -G Ninja -DCMAKE_BUILD_TYPE="$CONFIGURATION" \
             -DBUILD_TESTING=ON -DOPENT1_BUILD_TERRAIN2=ON -DFETCHCONTENT_QUIET=OFF \
             -DOPENT1_BUILD_EXAMPLES=ON -DCMAKE_DISABLE_FIND_PACKAGE_SDL3=ON \
             "${platform_options[@]}"
@@ -89,8 +100,57 @@ jobs:
           path: build/ci/downloads
           key: ${{ steps.dependency-downloads.outputs.cache-primary-key }}
       - name: Build all targets
+        id: compile
         run: cmake --build build/ci --parallel 3
       - name: Test
         run: ctest --test-dir build/ci --output-on-failure --no-tests=error --parallel 3
       - name: Test diagnostic Python tools
         run: python -m unittest discover -s tests/tools -v
+      - name: Validate documentation
+        run: python tools/sync_wiki.py --check
+      - name: Package and test extracted downloads
+        id: package
+        if: matrix.configuration == 'Release' && !cancelled() && steps.compile.outcome == 'success'
+        env:
+          PACKAGE_PLATFORM: ${{ matrix.platform.package }}
+        run: |
+          source_option=()
+          if [ "$RUNNER_OS" = Linux ]; then source_option=(--source); fi
+          python tools/package_release.py --build build/ci --output build/dist \
+            --platform "$PACKAGE_PLATFORM" "${source_option[@]}"
+      - uses: actions/upload-artifact@v7
+        if: matrix.configuration == 'Release' && !cancelled() && steps.package.outcome == 'success'
+        with:
+          name: release-${{ matrix.platform.package }}
+          path: build/dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish release downloads
+    needs: build
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: release-publish
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: build/dist
+      - name: Publish complete tested artifact set
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_REF: ${{ github.ref }}
+        run: python tools/publish_release.py --directory build/dist --commit "$RELEASE_COMMIT" --ref "$RELEASE_REF"

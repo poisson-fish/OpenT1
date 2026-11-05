@@ -1,0 +1,35 @@
+name: Bug report
+description: Report a reproducible OpenT1 problem.
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Engine version and commit
+      description: Copy opent1 --version or the version/commit in release.json.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and game content
+      description: OS/architecture, GPU/driver, renderer, installation/mod revision and mission.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Launch arguments, numbered steps, and whether base content also reproduces it.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and observed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and regression information
+      description: Include sanitized diagnostics and the last known working commit, if known. Remove passwords and private data.

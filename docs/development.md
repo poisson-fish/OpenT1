@@ -363,7 +363,7 @@ zoom notifications triggered by input, and ferry waypoint arrival and reset.
 ## Continuous integration and validation limits
 
 The [CI workflow](../.github/workflows/build.yml) is configured to build and test
-the Debug configuration on Linux x64 (`ubuntu-24.04`, GCC 14), macOS
+both Debug and Release configurations on Linux x64 (`ubuntu-24.04`, GCC 14), macOS
 ARM64 (`macos-15`, Homebrew LLVM 20 and libc++ 20), and Windows x64 (`windows-2025`, MSVC).
 Jobs enable Terrain2 and all five demos, and
 build the default all-targets graph. Every job runs all applicable CTest suites
@@ -380,7 +380,13 @@ check count because CTest groups cases into subsystem suites.
 
 ## Distribution inputs
 
-The repository has no install rules or automated release-package workflow.
+The `Runtime` install component stages the game, asset tool, required runtime
+libraries, notices, wiki docs and original script examples. Release CI creates
+archives using `tools/package_release.py` and tests the extracted downloads.
+After all platform/configuration jobs pass, main pushes update the `continuous`
+prerelease; `vX.Y.Z` tags on main history publish numbered releases. See the
+[release guide](wiki/Releasing.md) for versioning, source bundles and acceptance.
+
 When preparing a binary distribution, include `LICENSE`, `THIRD_PARTY.md`, and
 the applicable files in `LICENSES/`, alongside the required runtime libraries.
 Provide corresponding source and dependency modifications as required by their

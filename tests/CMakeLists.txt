@@ -14,6 +14,7 @@ add_executable(
     math/geometry_test.cpp
     console/lexer_parser_test.cpp
     console/runtime_test.cpp
+    console/examples_test.cpp
     network/net_transport_test.cpp
     network/net_protocol_test.cpp
     simulation/sim_base_test.cpp
@@ -69,6 +70,8 @@ target_link_libraries(opent1_tests PRIVATE opent1_game)
 add_dependencies(opent1_tests opent1_ai_behavior_audit)
 target_include_directories(opent1_tests PRIVATE support)
 include(fixtures.cmake)
+target_compile_definitions(opent1_tests PRIVATE
+    OPENT1_SCRIPT_EXAMPLES="${PROJECT_SOURCE_DIR}/examples/scripts")
 
 set(suites
     core
@@ -176,6 +179,10 @@ endif()
 add_test(NAME runtime COMMAND opent1 --smoke --headless --no-audio --no-assets --spawn-demo
                               --frames 4
 )
+add_test(NAME runtime_version COMMAND opent1 --version)
+set_tests_properties(runtime_version PROPERTIES TIMEOUT 15 LABELS integration
+    PASS_REGULAR_EXPRESSION "OpenT1 ${PROJECT_VERSION}.*Tribes 1.11"
+    ENVIRONMENT "SDL_VIDEODRIVER=opent1-invalid-driver;ALSOFT_DRIVERS=null")
 set_tests_properties(
     runtime
     PROPERTIES TIMEOUT

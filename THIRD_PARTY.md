@@ -12,6 +12,7 @@ the pinned source builds; an installed SDL3 package can use different inputs.
 | Microsoft GSL | Headers included in the OpenAL Soft source package | [MIT license](LICENSES/OpenALSoft-GSL.txt) |
 | {fmt} 11.2.0 | Formatting fallback included in the OpenAL Soft source package | [MIT license and optional exception](LICENSES/OpenALSoft-fmt.txt) |
 | OpenAL API headers | Public interface headers in the OpenAL Soft source package | [Unlicense notice](LICENSES/OpenAL-headers.txt) |
+| LLVM libc++, libc++abi and libunwind 20 | Homebrew C++ runtime libraries collected for macOS binary packages | [libc++](LICENSES/LLVM-libcxx.txt), [libc++abi](LICENSES/LLVM-libcxxabi.txt), [libunwind](LICENSES/LLVM-libunwind.txt): Apache 2.0 with LLVM exceptions and additional notices |
 
 The library downloads are checked against the SHA-256 digests in
 `CMakeLists.txt` and `cmake/OpenALSoft.cmake`. The source archives also contain
@@ -44,6 +45,12 @@ library; copying its runtime library alone does not supply its license text or
 source. Platform libraries selected by SDL or OpenAL depend on the configuration
 and may have additional distribution requirements.
 
-There is no automated binary release packaging in this repository. See
-[distribution inputs](docs/development.md#distribution-inputs) before assembling
-a release.
+The Runtime install component and `tools/package_release.py` assemble explicit
+binary inputs. CI ships `OpenT1-source.tar.gz` with the tracked engine sources,
+exact original SDL/OpenAL source archives, and dependency alteration/build recipes
+under `cmake/`. macOS packaging collects and repairs Homebrew C++ runtime library
+references, retains the LLVM license texts above (from llvmorg-20.1.8), and ad-hoc
+signs the changed Mach-O files. LLVM sources are available from
+https://github.com/llvm/llvm-project/tree/llvmorg-20.1.8.
+See [distribution inputs](docs/development.md#distribution-inputs) and the
+[release guide](docs/wiki/Releasing.md) before publishing a release.

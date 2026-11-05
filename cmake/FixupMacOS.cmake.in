@@ -1,0 +1,20 @@
+# Run after installing, while build dependencies are still available. This also
+# collects Homebrew libc++/libc++abi rather than requiring Homebrew on user Macs.
+include(BundleUtilities)
+function(gp_item_default_embedded_path_override item result)
+    # These are relocatable command-line archives, not .app bundles. Keep every
+    # non-system dylib beside the executable instead of ../Frameworks.
+    set(${result} "@executable_path" PARENT_SCOPE)
+endfunction()
+set(BU_CHMOD_BUNDLE_ITEMS ON)
+fixup_bundle("${CMAKE_INSTALL_PREFIX}/opent1" ""
+    "@CMAKE_BINARY_DIR@;@CMAKE_BINARY_DIR@/_deps/openal_soft-build;$ENV{OPENT1_LLVM_ROOT}/lib/c++")
+fixup_bundle("${CMAKE_INSTALL_PREFIX}/opent1_asset_tool" ""
+    "@CMAKE_BINARY_DIR@;$ENV{OPENT1_LLVM_ROOT}/lib/c++")
+file(GLOB _binaries "${CMAKE_INSTALL_PREFIX}/*.dylib")
+list(APPEND _binaries "${CMAKE_INSTALL_PREFIX}/opent1" "${CMAKE_INSTALL_PREFIX}/opent1_asset_tool")
+foreach(_binary IN LISTS _binaries)
+    if(NOT IS_SYMLINK "${_binary}")
+        execute_process(COMMAND codesign --force --sign - "${_binary}" COMMAND_ERROR_IS_FATAL ANY)
+    endif()
+endforeach()

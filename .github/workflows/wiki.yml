@@ -1,0 +1,27 @@
+name: Publish wiki
+on:
+  push:
+    branches: [main]
+    paths: ['docs/wiki/**', 'tools/sync_wiki.py', '.github/workflows/wiki.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: wiki-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Validate and publish repo-owned pages
+        env:
+          GH_TOKEN: ${{ secrets.WIKI_TOKEN || github.token }}
+          WIKI_REPOSITORY: ${{ github.repository }}
+        run: python tools/sync_wiki.py --publish "$WIKI_REPOSITORY"

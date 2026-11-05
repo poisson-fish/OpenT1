@@ -208,6 +208,12 @@ maintains the object's controlling-client backlink. The legacy `Net::kick`
 command also handles the direct local connection: it defers world teardown until
 after the simulation frame, then runs the disconnect script callbacks.
 
+Remote disconnects, kicks, and timeouts run `Server::onClientDisconnect` once in
+the server world before removing the representative, owned body, and observer.
+The hook can release ownership to retain the body. Removed stream clients are
+detached before the hook, and failed outgoing disconnect sends are logged with
+the peer address and network result code.
+
 Regression cases cover selected event, ghost, control, discovery, and game
 handshake paths. The default suite runs against test peers and bundled records,
 so it does not establish interoperability with every live server or client.

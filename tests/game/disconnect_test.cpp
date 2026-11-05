@@ -1,9 +1,13 @@
 #include "test_registry.hpp"
 #include <ranges>
 #include "test_support.hpp"
+#include "net_test_support.hpp"
 #include <opent1/game/game_app.hpp>
 #include <opent1/game/shell_controls.hpp>
 #include <opent1/core/vol_stream.hpp>
+#include <opent1/game/player.hpp>
+#include <opent1/game/player_manager.hpp>
+#include <opent1/game/script_plugin.hpp>
 #include <chrono>
 #include <cstdlib>
 
@@ -22,6 +26,140 @@ struct TemporaryDirectory {
         std::filesystem::remove_all(path, ec);
     }
 };
+
+void disconnectSendFailures() {
+    for (const bool explicitDisconnect : {false, true}) {
+        net_test::Pair peers;
+        peers.connect();
+        Console console;
+        sim::SimWorld world(&console);
+        auto owned = std::make_unique<sim::network::PacketStream>(
+            std::make_shared<sim::network::Registry>(), false);
+        auto* stream = owned.get();
+        CHECK(world.manager().addObject(std::move(owned)));
+        stream->attach(peers.client, peers.clientId);
+        peers.a.sendResult = net::Result::IoError;
+        if (explicitDisconnect) {
+            stream->disconnect(32);
+            stream->disconnect(64);
+        }
+        CHECK(stream->deleteObject());
+        CHECK(console.log().size() == 1);
+        CHECK(console.log().front() ==
+              std::format("Failed to send disconnect to 1 (network result {}).",
+                          int(net::Result::IoError)));
+    }
+}
+
+void remoteDisconnect() {
+    enum class Termination { Command, Shutdown, Kick, Timeout };
+    for (const auto termination :
+         {Termination::Command, Termination::Shutdown, Termination::Kick, Termination::Timeout}) {
+        FearGameApp server, client;
+        CHECK(server.init() && client.init());
+        CHECK(server.fearPlugin().createServerWorld({}, true));
+        auto& sg = server.fearPlugin().serverGlobals();
+        CHECK(server.console()
+                  .evaluate(R"(
+            PlayerData DisconnectArmor { mass = 9; };
+            function Server::onClientDisconnect(%id) {
+                $DropCount++;
+                $DroppedId = %id;
+                $DroppedName = Client::getName(%id);
+                $DroppedBody = Client::getOwnedObject(%id);
+                $DroppedCamera = Client::getObserverCamera(%id);
+                $DroppedBodyType = getObjectType($DroppedBody);
+                Client::setGuiMode(%id, 1);
+                Client::setControlObject(%id, -1);
+                if ($DropMode == "delete")
+                    deleteObject($DroppedBody);
+                else if ($DropMode == "release")
+                    Client::setOwnedObject(%id, -1);
+            }
+        )")
+                  .ok());
+        // The callback may delete or retain the body, as vanilla leaveGame does.
+        server.console().setVariable("DropMode",
+                                     termination == Termination::Shutdown ? "delete"
+                                     : termination == Termination::Kick   ? "release"
+                                                                          : "");
+        const auto endpoint = net::parseIPv4Address(sg.csDelegate->delegate()->localAddress());
+        CHECK(endpoint);
+        const std::array<std::string, 1> address{"IP:127.0.0.1:" + std::to_string(endpoint->port)};
+        client.console().setVariable("PCFG::Name", "DepartingPlayer");
+        CHECK(client.console().execute("connect", address).value == "True");
+        double time = 0;
+        const auto advance = [&](int frames, bool advanceClient) {
+            for (int frame = 0; frame < frames; ++frame) {
+                time += .032;
+                CHECK(server.stepFrame(time, false));
+                if (advanceClient) {
+                    CHECK(client.stepFrame(time, false));
+                }
+            }
+        };
+        advance(64, true);
+        CHECK(client.fearPlugin().isConnected());
+        auto* rep = sg.playerManager->getClientList();
+        CHECK(rep && !rep->nextClient);
+        const auto id = rep->id;
+        const auto* state = server.scriptPlugin().findClient(id);
+        CHECK(state);
+        const auto camera = sg.manager->findObject(state->observerCameraId)->address();
+        const auto bodyId =
+            server.fearPlugin().spawnPlayer("DisconnectArmor", {10, 20, 30}, {}, id);
+        CHECK(bodyId);
+        const auto body = sg.manager->findObject(*bodyId)->address();
+        // Keep the client world focused so callback object lookup must explicitly
+        // select the server rather than accidentally using the active manager.
+        CHECK(server.fearPlugin().createClientWorld());
+        bool disconnected{}, timedOut{};
+        sg.csDelegate->onConnection = [&](const net::Event& event) {
+            disconnected |= event.type == net::EventType::Disconnected;
+            timedOut |= event.type == net::EventType::TimedOut;
+        };
+        switch (termination) {
+            case Termination::Command:
+                CHECK(client.console().execute("disconnect").value == "True");
+                break;
+            case Termination::Shutdown:
+                client.shutdown();
+                break;
+            case Termination::Kick:
+                CHECK(server.console()
+                          .evaluate(std::format("Net::kick({}, \"Disconnect regression\");", id))
+                          .value == "True");
+                break;
+            case Termination::Timeout:
+                // Stop polling the peer without closing its socket or sending a
+                // disconnect. Only the server's native timeout can retire it.
+                advance(1600, false);
+                break;
+        }
+        advance(16, termination == Termination::Kick);
+        CHECK(server.console().getVariable("DropCount") == "1");
+        CHECK(server.console().getVariable("DroppedId") == std::to_string(id));
+        CHECK(server.console().getVariable("DroppedName") == "DepartingPlayer");
+        CHECK(server.console().getVariable("DroppedBody") == std::to_string(*bodyId));
+        CHECK(server.console().getVariable("DroppedCamera") == std::to_string(camera.objectId));
+        CHECK(server.console().getVariable("DroppedBodyType") == "Player");
+        CHECK(!sg.playerManager->findBaseRep(id));
+        CHECK(!server.scriptPlugin().findClient(id));
+        CHECK(!camera.resolve(*sg.manager));
+        if (termination == Termination::Kick) {
+            const auto* retained = dynamic_cast<Player*>(body.resolve(*sg.manager));
+            CHECK(retained && retained->getOwnerClient() == 0);
+            CHECK(!client.fearPlugin().isConnected());
+            CHECK(client.console().getVariable("errorString") == "Disconnect regression");
+        } else {
+            CHECK(!body.resolve(*sg.manager));
+            CHECK(termination == Termination::Timeout ? timedOut : disconnected);
+        }
+        // Later frames must neither repeat the callback nor remove a retained body.
+        advance(16, false);
+        CHECK(server.console().getVariable("DropCount") == "1");
+    }
+}
 
 void disconnectShellResources() {
     TemporaryDirectory directory;
@@ -155,5 +293,15 @@ int opent1_test_installed_disconnect() {
     return opent1::test::run(installedDisconnect);
 }
 
+int opent1_test_remote_disconnect() {
+    return opent1::test::run(remoteDisconnect);
+}
+
+int opent1_test_disconnect_send_failures() {
+    return opent1::test::run(disconnectSendFailures);
+}
+
+OPENT1_REGISTER_TEST("game", "disconnect_send_failures", opent1_test_disconnect_send_failures);
+OPENT1_REGISTER_TEST("game", "remote_disconnect", opent1_test_remote_disconnect);
 OPENT1_REGISTER_TEST("game", "disconnect_shell_resources", opent1_test_disconnect_shell_resources);
 OPENT1_REGISTER_TEST("fixpack", "installed_disconnect", opent1_test_installed_disconnect);

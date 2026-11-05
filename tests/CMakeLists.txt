@@ -51,6 +51,7 @@ add_executable(
     game/model_rendering_test.cpp
     game/sky_test.cpp
     game/damage_flash_test.cpp
+    game/chat_history_test.cpp
     game/weather_test.cpp
     game/disconnect_test.cpp
     video/video_test.cpp

@@ -2707,6 +2707,15 @@ void FearPlugin::init(Console& console, sim::SimManager* manager) {
                                gb->setTeam(parseIntSv(argv[2]));
                                return "True";
                            }
+                           // Vanilla also accepts a client ID before it owns a
+                           // body. RPG assigns the team at that point in spawning,
+                           // before selecting the player's custom appearance.
+                           const auto clientId = parseIntSv(argv[1]);
+                           if (sg_.playerManager && sg_.playerManager->findBaseRep(clientId)) {
+                               sg_.playerManager->serverClientTeamChange(clientId,
+                                                                         parseIntSv(argv[2]));
+                               return "-1";
+                           }
                            return "False";
                        });
 

@@ -242,8 +242,12 @@ they do not auto-discover nearby installations during the standard test run.
 
 With the Wasteland RPG mod (including `RPG/SpecialArmors.cs`), the optional
 `skins` suite saves a DeathKnight character and checks its first controllable
-body after cold loopback joins and reconnects. It verifies the selected armor
-and actual skin textures using temporary write directories:
+body after cold loopback joins and reconnects. It also joins an OpenT1 server
+over native UDP, then uses a weapon through the installed scripts and checks
+that the Citizen team notification does not replace the custom skin. It verifies
+the selected armor and actual skin textures using temporary write directories.
+The ordinary `game` suite covers the same transition without installed assets,
+including vanilla's team assignment for a client that does not yet own a body:
 
 ```powershell
 .\build\x64-release\tests\opent1_tests.exe --suite skins

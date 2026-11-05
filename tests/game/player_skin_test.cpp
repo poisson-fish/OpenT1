@@ -1,5 +1,6 @@
 #include "test_registry.hpp"
 #include "ts_test_support.hpp"
+#include <opent1/game/fear_cs_delegate.hpp>
 #include <opent1/game/fear_player_psc.hpp>
 #include <opent1/game/game_app.hpp>
 #include <opent1/game/player.hpp>
@@ -64,6 +65,122 @@ void playerSkinRefresh() {
     CHECK(player->getTSShape()->materials->materials[0].mapFile == "base.body.bmp");
 }
 
+void preSpawnClientTeam() {
+    FearGameApp app;
+    CHECK(app.init());
+    auto& plugin = app.fearPlugin();
+    CHECK(plugin.createServerWorld({}, true));
+    auto& server = plugin.serverGlobals();
+    server.playerManager->teamAdded("Citizen", "rpghuman0");
+    server.playerManager->teamAdded("Elf", "rpgelf");
+    CHECK(server.playerManager->clientAdded("twin", "male1", "base", true, 2049) == 2049);
+    auto* representative = server.playerManager->findClient(2049);
+    CHECK(representative && !representative->ownedObject && representative->team == -1);
+
+    sim::SimManager client;
+    auto ownedPlayers = std::make_unique<PlayerManager>(false);
+    auto* players = ownedPlayers.get();
+    players->setId(PlayerManagerId);
+    CHECK(client.addObject(std::move(ownedPlayers)));
+    players->teamAdded("Citizen", "rpghuman0");
+    players->teamAdded("Elf", "rpgelf");
+    CHECK(players->clientAdded("twin", "male1", "base", true, 2049) == 2049);
+    std::vector<std::unique_ptr<sim::SimEvent>> pending;
+    server.playerManager->onLocalEvent = [&](auto event) {
+        CHECK(event && event->address.managerId == 2049);
+        pending.push_back(std::move(event));
+    };
+    const auto deliver = [&] {
+        auto events = std::move(pending);
+        pending.clear();
+        for (const auto& event : events) {
+            CHECK(players->processEvent(*event));
+        }
+    };
+    std::vector<std::string> messages;
+    players->onChatMessage = [&](Int32, std::string_view message) {
+        messages.emplace_back(message);
+    };
+
+    struct ResetDelivery {
+        PlayerManager* server;
+        PlayerManager* client;
+
+        ~ResetDelivery() {
+            server->onLocalEvent = {};
+            client->onChatMessage = {};
+        }
+    } resetDelivery{server.playerManager, players};
+
+    auto shape = test::ts::load(test::ts::shape());
+    CHECK(shape && shape->materials);
+    shape->materials->materials[0].mapFile = "base.body.bmp";
+    CHECK(app.resources().add("min.dts", std::move(shape)));
+    for (const auto name :
+         {"base.body.bmp", "rpghuman0.body.bmp", "cphoenix.body.bmp", "rpgelf.body.bmp"}) {
+        CHECK(app.resources().add(name, gfx::Bitmap::create(4, 4)));
+    }
+    auto* armor = dynamic_cast<PlayerData*>(
+        server.dbm->createDataBlock("DeathKnightArmor", DataBlockManager::PlayerDataType));
+    CHECK(armor);
+    armor->fileName = "min.dts";
+
+    // RPG's Game::playerSpawn calls UpdateTeam before assigning the owned body.
+    // Vanilla c_setTeam falls back to PlayerManager::setTeam in this case.
+    const auto beforeSpawn = app.console().evaluate("return GameBase::setTeam(2049, 0);");
+    CHECK(beforeSpawn.ok());
+    deliver();
+    auto body = std::make_unique<Player>();
+    auto* player = body.get();
+    player->bindDataBlockManager(server.dbm);
+    player->setDatFileName("DeathKnightArmor");
+    CHECK(server.manager->addObject(std::move(body)));
+    player->setTeam(representative->team);
+    player->setOwnerClient(2049);
+    auto ghost = std::make_unique<Player>();
+    auto* rendered = ghost.get();
+    CHECK(rendered->setNetFlags(rendered->netFlags() | sim::SimNetObject::IsGhost));
+    rendered->bindDataBlockManager(server.dbm);
+    rendered->setDatFileName("DeathKnightArmor");
+    CHECK(client.addObject(std::move(ghost)));
+    rendered->setOwnerClient(2049);
+    rendered->setPlayerControl(false);
+    CHECK(app.console().evaluate("Client::setSkin(2049, cphoenix);").ok());
+    deliver();
+    world::WorldShapeQuery initial;
+    CHECK(rendered->processQuery(initial) && initial.image);
+    CHECK(initial.image->resources.materials.list().materials[0].mapFile == "cphoenix.body.bmp");
+
+    // The installed Weapon::onUse later enforces Citizen for human clients.
+    // A correctly assigned spawn must make that operation a no-op, preserving
+    // the custom skin instead of sending a late team event that replaces it.
+    const auto messagesBeforeUse = messages.size();
+    CHECK(app.console()
+              .evaluate(R"(
+        if (GameBase::getTeam(2049) != 0)
+            GameBase::setTeam(2049, 0);
+    )")
+              .ok());
+    deliver();
+    world::WorldShapeQuery afterUse;
+    CHECK(rendered->processQuery(afterUse) && afterUse.image);
+    CHECK(afterUse.image->resources.materials.list().materials[0].mapFile == "cphoenix.body.bmp");
+    CHECK(messages.size() == messagesBeforeUse);
+    CHECK(messages == std::vector<std::string>{"twin joined team Citizen."});
+    CHECK(representative->team == 0 && representative->skinBase == "cphoenix");
+    CHECK(players->findClient(2049)->team == 0 &&
+          players->findClient(2049)->skinBase == "cphoenix");
+    CHECK(beforeSpawn.value == "-1"); // Vanilla's bodyless-client return value.
+
+    // An actual team change must retain vanilla's default-skin reset.
+    CHECK(app.console().evaluate("GameBase::setTeam(2049, 1);").ok());
+    deliver();
+    world::WorldShapeQuery changed;
+    CHECK(rendered->processQuery(changed) && changed.image);
+    CHECK(changed.image->resources.materials.list().materials[0].mapFile == "rpgelf.body.bmp");
+    server.playerManager->onLocalEvent = {};
+}
+
 void checkDeathKnightSkin(FearGameApp& app) {
     auto& globals = app.fearPlugin().clientGlobals();
     CHECK(globals.playerPSC);
@@ -115,7 +232,7 @@ void installedDeathKnightSkin() {
     const std::array<std::string_view, 2> args{"-mod", "RPG"};
     const auto init = [&](FearGameApp& app) {
         CHECK(app.init(args));
-        app.console().setVariable("PCFG::Name", "DeathKnightSkinTest");
+        app.console().setVariable("PCFG::Name", "SkinKnight");
         app.console().setVariable("PCFG::Script", "");
         app.console().setVariable("PCFG::Info", "skin-test-password");
         CHECK(app.loadMission("rpgmap5"));
@@ -139,7 +256,7 @@ void installedDeathKnightSkin() {
         checkDeathKnightSkin(app);
         CHECK(app.fearPlugin().focusServer());
         CHECK(app.console().evaluate("return SaveCharacter(2049);").value == "true");
-        CHECK(std::filesystem::is_regular_file(config.writeRoot / "temp/DeathKnightSkinTest.cs"));
+        CHECK(std::filesystem::is_regular_file(config.writeRoot / "temp/SkinKnight.cs"));
         app.shutdown();
     }
     // Recreate the application to exercise a cold resource cache and returning
@@ -164,6 +281,85 @@ void installedDeathKnightSkin() {
         CHECK(app.console().getVariable("OpenT1::LastRenderError").empty());
         app.shutdown();
     }
+
+    // Use the actual UDP path within one application's separate server/client
+    // worlds, so the localConnect team's preassignment cannot mask the bug.
+    FearGameApp app(config);
+    CHECK(app.init(args));
+    app.console().setVariable("PCFG::Name", "SkinKnight");
+    app.console().setVariable("PCFG::Script", "");
+    app.console().setVariable("PCFG::Info", "skin-test-password");
+    auto reservation = net::makeUdpTransport({{127, 0, 0, 1}, 0});
+    const auto reserved = net::parseIPv4Address(reservation->localAddress());
+    CHECK(reserved);
+    app.console().setVariable("Server::Port", std::to_string(reserved->port));
+    reservation.reset();
+    CHECK(app.fearPlugin().createServerWorld({}, true));
+    CHECK(app.fearPlugin().focusServer());
+    CHECK(app.loadMission("rpgmap5", true));
+    std::puts("Checking the returning DeathKnight through native UDP");
+    std::fflush(stdout);
+    CHECK(app.fearPlugin().serverGlobals().playerManager->getNumClients() == 0);
+    const auto endpoint = net::parseIPv4Address(
+        app.fearPlugin().serverGlobals().csDelegate->delegate()->localAddress());
+    CHECK(endpoint);
+    const std::array<std::string, 1> address{"IP:127.0.0.1:" + std::to_string(endpoint->port)};
+    CHECK(app.console().execute("connect", address).value == "True");
+    std::size_t citizenJoins = 0;
+
+    struct RestoreChat {
+        FearPlugin& plugin;
+        std::function<void(Int32, std::string_view)> previous;
+
+        ~RestoreChat() {
+            plugin.onChatMessage = std::move(previous);
+        }
+    } restoreChat{app.fearPlugin(), app.fearPlugin().onChatMessage};
+
+    app.fearPlugin().onChatMessage = [&](Int32 type, std::string_view message) {
+        if (message == "SkinKnight joined team Citizen.") {
+            ++citizenJoins;
+            std::printf("DeathKnight UDP event: %.*s\n", int(message.size()), message.data());
+        }
+        if (restoreChat.previous) {
+            restoreChat.previous(type, message);
+        }
+    };
+    int spawned = -1;
+    std::size_t joinsAtSpawn = 0;
+    bool verifiedAfterUse = false;
+    for (int frame = 0; frame < 1024; ++frame) {
+        CHECK(app.stepFrame(frame * .032, false));
+        auto* psc = app.fearPlugin().clientGlobals().playerPSC;
+        auto* player = psc ? dynamic_cast<Player*>(psc->getControlObject()) : nullptr;
+        if (player) {
+            checkDeathKnightSkin(app);
+            if (spawned < 0) {
+                spawned = frame;
+                joinsAtSpawn = citizenJoins;
+                const auto owner = player->getOwnerClient();
+                CHECK(app.fearPlugin().focusServer());
+                const auto* rep = app.fearPlugin().serverGlobals().playerManager->findClient(owner);
+                CHECK(rep);
+                std::printf("DeathKnight UDP first body: team=%d, skin=%s\n",
+                            rep->team,
+                            rep->skinBase.c_str());
+                CHECK(app.console()
+                          .evaluate(std::format(
+                              "Weapon::onUse(Client::getOwnedObject({}), PickAxe);", owner))
+                          .ok());
+            }
+            if (frame >= spawned + 32) {
+                verifiedAfterUse = true;
+                break;
+            }
+        }
+    }
+    CHECK(spawned >= 0 && verifiedAfterUse);
+    CHECK(citizenJoins == 1 && citizenJoins == joinsAtSpawn);
+    auto surface = gfx::SoftwareSurface::create(320, 240);
+    CHECK(surface && app.renderFrame(*surface));
+    CHECK(app.console().getVariable("OpenT1::LastRenderError").empty());
 }
 }
 
@@ -175,5 +371,10 @@ int opent1_test_installed_deathknight_skin() {
     return opent1::test::run(installedDeathKnightSkin);
 }
 
+int opent1_test_pre_spawn_client_team() {
+    return opent1::test::run(preSpawnClientTeam);
+}
+
 OPENT1_REGISTER_TEST("game", "player_skin_refresh", opent1_test_player_skin_refresh);
+OPENT1_REGISTER_TEST("game", "pre_spawn_client_team", opent1_test_pre_spawn_client_team);
 OPENT1_REGISTER_TEST("skins", "installed_deathknight_skin", opent1_test_installed_deathknight_skin);

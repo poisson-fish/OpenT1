@@ -46,6 +46,7 @@ bool Player::onAdd() {
         addToSet(TargetableSetId);
     } else {
         addToSet(SensorVisibleSetId);
+        addToSet(sim::LightSetId);
     }
     return true;
 }
@@ -169,6 +170,14 @@ bool Player::processEvent(const sim::SimEvent& event) {
 }
 
 bool Player::processQuery(sim::SimQuery& query) {
+    if (auto* lights = dynamic_cast<sim::SimLightQuery*>(&query)) {
+        for (Int32 slot = 0; slot < MaxImageSlots; ++slot) {
+            if (auto light = getImageLight(slot)) {
+                lights->lights.push_back(*light);
+            }
+        }
+        return true;
+    }
     if (auto* shapes = dynamic_cast<world::WorldShapeQuery*>(&query)) {
         reSkin();
         appendMountedImages(*shapes);

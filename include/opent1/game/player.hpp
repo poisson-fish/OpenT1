@@ -110,6 +110,13 @@ public:
         DiscLauncher = 3,
     };
 
+    enum LightType : Int32 {
+        NoLight = 0,
+        ConstantLight = 1,
+        PulsingLight = 2,
+        WeaponFireLight = 3,
+    };
+
     struct ItemTypeEntry {
         Int32 count{0};
         Int32 imageSlot{-1};
@@ -139,6 +146,7 @@ public:
         Int32 fireCount{0};
         bool triggerDown{false};
         bool ammo{false};
+        std::optional<sim::SimTime> lightStart;
         UInt32 animSound{0};
         bool animLoopingSound{false};
         sim::SimAddress sustainedProjectile{};
@@ -533,6 +541,7 @@ private:
     void stopJetSound();
     void appendJetFlame(world::WorldShapeQuery&);
     void stopImageSound(Int32 slot, bool loopingOnly = false);
+    [[nodiscard]] std::optional<sim::SimLight> getImageLight(Int32 slot) const;
     void setImageType(Int32 slot, Int32 type, Int32 team);
     void scriptItemCallback(Int32 type, std::string_view callback, bool deployment = false);
     PlayerData* playerData_{nullptr};

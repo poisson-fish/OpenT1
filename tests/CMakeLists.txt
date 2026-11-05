@@ -50,6 +50,7 @@ add_executable(
     game/shell_controls_test.cpp
     game/datablock_quantization_test.cpp
     game/model_rendering_test.cpp
+    game/image_lighting_test.cpp
     game/sky_test.cpp
     game/damage_flash_test.cpp
     game/chat_history_test.cpp

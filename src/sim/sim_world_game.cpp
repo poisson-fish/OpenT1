@@ -248,7 +248,7 @@ SimSceneLighting SimLightSet::getSceneLighting(std::optional<Point3F> camera, Fl
             if (!object->processQuery(query)) {
                 return;
             }
-            if (query.lights.size() > 5 || !finite(query.ambient)) {
+            if (query.lights.size() > SimLightQuery::MaxLights || !finite(query.ambient)) {
                 throw std::invalid_argument("invalid scene light provider");
             }
             result.ambient += query.ambient;

@@ -240,6 +240,15 @@ The optional cases do not bundle game assets or run unless this variable is set.
 The `game` suite's installed-content integration checks use the same variable;
 they do not auto-discover nearby installations during the standard test run.
 
+The optional `hosting` suite clicks the installed Host Game button with its UDP
+port occupied, renders and dismisses the error dialog, then releases the port
+and retries through to player control. It checks base Raindance and, when present,
+RPG rpgmap5 using a temporary write directory:
+
+```powershell
+.\build\x64-debug\tests\opent1_tests.exe --suite hosting
+```
+
 When the selected installation includes `RPG/scripts.vol`, the same `fixpack`
 suite also hosts `rpgmap5`, checks the mission terrain, advances eight simulation
 frames and renders their world geometry, prepares a hardware frame, switches

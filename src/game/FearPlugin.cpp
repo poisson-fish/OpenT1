@@ -86,6 +86,7 @@
 #include <sstream>
 #include <functional>
 #include <iostream>
+#include <stdexcept>
 #include <vector>
 
 namespace opent1::game {
@@ -844,8 +845,18 @@ bool FearPlugin::createServerWorld(std::string_view missionName, bool dedicated)
     const auto port = console_ && parseBoolSv(console_->getVariable("OpenT1::ConsoleCSExecuted"))
                           ? parseIntSv(console_->getVariable("Server::Port"))
                           : 0;
-    auto transport =
-        net::makeGameTransport({{0, 0, 0, 0}, static_cast<UInt16>(port > 0 ? port : 0)});
+    const auto listenPort = static_cast<UInt16>(port > 0 ? port : 0);
+    std::unique_ptr<net::Transport> transport;
+    try {
+        transport = net::makeGameTransport({{0, 0, 0, 0}, listenPort});
+    } catch (const std::runtime_error& error) {
+        game_.console().print(std::format(
+            "Server transport setup failed on UDP port {}: {}", listenPort, error.what()));
+        throw std::runtime_error(std::format(
+            "Cannot host game on UDP port {}. The port may already be in use. "
+            "Close the other server or choose a different server port, then retry.",
+            listenPort));
+    }
     auto csd = std::make_unique<FearCSDelegate>(true, banList_, netRegistry_, std::move(transport));
     csd->config().dedicated = dedicated;
     game_.console().setVariable("Server::Dedicated", dedicated ? "true" : "false");
@@ -3702,9 +3713,10 @@ public:
     ScriptShellDelegate(Console& console,
                         std::unique_ptr<ShellDialogDelegate> delegate,
                         std::weak_ptr<gui::Runtime> runtime,
-                        world::InputMaps& maps)
+                        world::InputMaps& maps,
+                        std::string& pendingGuiError)
         : console_(console), delegate_(std::move(delegate)), runtime_(std::move(runtime)),
-          maps_(maps) {}
+          maps_(maps), pendingGuiError_(pendingGuiError) {}
 
     void contentChanged(gui::Control*, gui::Control* root) noexcept override {
         if (!root) {
@@ -3915,7 +3927,31 @@ public:
             return std::nullopt;
         }
         const auto& script = delegate_->lastScriptAction();
-        return script.empty() || console_.evaluate(script).ok();
+        const bool hosting = dynamic_cast<CreateServerDelegate*>(delegate_.get()) &&
+                             (message == IDDLG_StartGame || message == 140120);
+        if (hosting) {
+            console_.setVariable("OpenT1::LastGuiError", "");
+            pendingGuiError_.clear();
+        }
+        if (script.empty()) {
+            return true;
+        }
+        const auto result = console_.evaluate(script);
+        if (hosting && !result.ok()) {
+            std::string error;
+            for (const auto& diagnostic : result.diagnostics) {
+                console_.print(diagnostic.format());
+                if (!error.empty()) {
+                    error += '\n';
+                }
+                error += diagnostic.message;
+            }
+            console_.setVariable("OpenT1::LastGuiError", error);
+            // Refuse the GUI transaction so queued Loading.gui changes are
+            // discarded. Publish the error after dispatch has rolled back.
+            pendingGuiError_ = std::move(error);
+        }
+        return result.ok();
     }
 
 private:
@@ -3923,6 +3959,7 @@ private:
     std::unique_ptr<ShellDialogDelegate> delegate_;
     std::weak_ptr<gui::Runtime> runtime_;
     world::InputMaps& maps_;
+    std::string& pendingGuiError_;
     std::map<std::string, std::shared_ptr<const sim::SimActionMap>> savedMaps_;
 };
 
@@ -4674,7 +4711,8 @@ void FearGameApp::installRuntimeServices() {
         return std::make_shared<ScriptShellDelegate>(game_.console(),
                                                      std::unique_ptr<ShellDialogDelegate>(delegate),
                                                      guiRuntime_,
-                                                     inputMaps_);
+                                                     inputMaps_,
+                                                     pendingGuiError_);
     };
     guiRuntime_->loadCursor = [this](std::string_view name) -> std::optional<gui::Canvas::Cursor> {
         auto bitmap = resources_->load<gfx::Bitmap>(name);
@@ -5088,6 +5126,14 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
                               Flt32 paletteGamma) {
     if (!std::isfinite(paletteGamma) || paletteGamma < .05f || paletteGamma > 20) {
         return false;
+    }
+    if (!pendingGuiError_.empty() && guiRuntime_ && !guiRuntime_->canvas.dispatching()) {
+        const auto error = std::move(pendingGuiError_);
+        pendingGuiError_.clear();
+        if (guiRuntime_->open("gui/MessageDialog.gui", true)) {
+            (void)guiRuntime_->command(
+                "Control::setValue", std::array<std::string, 2>{"MessageDialogTextFormat", error});
+        }
     }
     const auto frameStart = std::chrono::steady_clock::now();
     const auto elapsed = [](auto start) {
@@ -5971,6 +6017,7 @@ void FearGameApp::shutdown() noexcept {
         guiRuntime_.reset();
     }
     pendingMission_.reset();
+    pendingGuiError_.clear();
     shadowContext_.clear();
     softwareTextureCache_.clear();
     hardwareLayerCrops_.clear();

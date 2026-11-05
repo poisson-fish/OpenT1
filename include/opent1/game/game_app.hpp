@@ -293,6 +293,7 @@ private:
     bool deferMissionLoading_{};
     UInt32 gameplayGuiMode_{1};
     bool showingScores_{};
+    std::string pendingGuiError_;
     std::vector<std::string> consoleHistory_;
     std::deque<std::pair<Int32, std::string>> chatMessages_;
     std::weak_ptr<const void> chatDisplayLifetime_;

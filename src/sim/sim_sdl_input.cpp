@@ -133,9 +133,8 @@ struct CloseGamepad {
 };
 }
 
-struct SdlSimInput::Impl {
-    SimManager& manager;
-    SimAddress input;
+struct SdlSimInput::Impl : SimObject {
+    SimInputManager* input;
     platform::WindowId window;
     bool captured{true}, focused{true};
     std::array<bool, 32> active{};
@@ -149,12 +148,20 @@ struct SdlSimInput::Impl {
 
     std::vector<Pad> pads;
 
-    Impl(SimManager& m, SimAddress i, platform::WindowId w) : manager(m), input(i), window(w) {
+    Impl(SimInputManager& service, platform::WindowId w) : input(&service), window(w) {
+        deleteNotify(service);
         active.fill(true);
     }
 
+    void onDeleteNotify(SimObject& object) override {
+        if (&object == input) {
+            input = nullptr;
+        }
+        SimObject::onDeleteNotify(object);
+    }
+
     SimInputManager* service() const {
-        return dynamic_cast<SimInputManager*>(input.resolve(manager));
+        return input && !input->isRemoved() ? input : nullptr;
     }
 
     bool send(UInt8 type, UInt32 device, UInt8 object, UInt8 instance, UInt8 action, float value) {
@@ -199,7 +206,7 @@ SdlSimInput::SdlSimInput(SimInputManager& input, platform::WindowId window) {
     if (!input.getManager() || !window) {
         throw std::invalid_argument("SDL input requires a registered service and window");
     }
-    impl_ = std::make_unique<Impl>(*input.getManager(), input.address(), window);
+    impl_ = std::make_unique<Impl>(input, window);
     if (!SDL_InitSubSystem(SDL_INIT_GAMEPAD)) {
         throw std::runtime_error(SDL_GetError());
     }

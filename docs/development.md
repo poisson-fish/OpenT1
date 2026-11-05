@@ -240,6 +240,15 @@ The optional cases do not bundle game assets or run unless this variable is set.
 The `game` suite's installed-content integration checks use the same variable;
 they do not auto-discover nearby installations during the standard test run.
 
+The optional `disconnect_assets` suite uses that installation to connect separate
+client/server apps over UDP, click the base and RPG Disconnect buttons, and check
+input capture, subsequent frames, the join menu, and server cleanup. It uses an
+ephemeral server port so an existing dedicated server can keep running:
+
+```powershell
+.\build\x64-debug\tests\opent1_tests.exe --suite disconnect_assets
+```
+
 With the Wasteland RPG mod (including `RPG/SpecialArmors.cs`), the optional
 `skins` suite saves a DeathKnight character and checks its first controllable
 body after cold loopback joins and reconnects. It also joins an OpenT1 server

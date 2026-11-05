@@ -4,8 +4,8 @@
 #include <memory>
 
 namespace opent1::sim {
-// Main-thread SDL input owner/adapter. The manager must outlive this object;
-// its input service may be removed/replaced (generation checks reject stale IDs).
+// Main-thread SDL input owner/adapter. Removal of its input service detaches the
+// adapter, so the simulation manager may be destroyed before the host rebinds it.
 // Route the application's owned platform events here; UTF-8 TextEvent remains a
 // separate UI event and is never synthesized from the US-ASCII compatibility API.
 class SdlSimInput {

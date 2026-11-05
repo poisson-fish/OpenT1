@@ -653,8 +653,7 @@ void terrainSeamCoverage(platform::SdlWindow& window) {
     // A continuous opaque plane must cover the frame at these downward views,
     // even at large world coordinates and across independently drawn patches.
     for (int angle = 0; angle < 12; ++angle) {
-        view.shapeToCamera.set(EulerF{-.9f, 0, Flt32(angle) * .173f},
-                               {-2293.5f, -455, 102.5f});
+        view.shapeToCamera.set(EulerF{-.9f, 0, Flt32(angle) * .173f}, {-2293.5f, -455, 102.5f});
         view.shapeToCamera.inverse();
         const auto polygons = mesh.hardwareInterior(view, palette);
         CHECK(polygons);
@@ -668,6 +667,127 @@ void terrainSeamCoverage(platform::SdlWindow& window) {
         if (holes)
             std::printf("Terrain seam coverage: angle %d, %u uncovered pixels\n", angle, holes);
         CHECK(holes == 0);
+    }
+}
+
+void terrainFlightCoverage(platform::SdlWindow& window) {
+    ResourceManager manager;
+    auto grid = std::make_unique<world::TerrainGridFile>();
+    grid->scale = 3;
+    grid->detailCount = 9;
+    grid->size = {3, 3};
+    grid->minimumHeight = -10.0775f;
+    grid->maximumHeight = 701;
+    grid->blocks = {{0, "flight"}};
+    grid->blockMap.resize(9, 0);
+    CHECK(manager.add("flight.dtf", std::move(grid)));
+    auto block = std::make_unique<world::TerrainGridBlock>();
+    block->width = 256;
+    block->detailCount = 9;
+    block->minimumHeight = block->maximumHeight = 65;
+    block->heights.resize(257 * 257, 65);
+    block->materials.resize(256 * 256);
+    CHECK(manager.add("flight#0.dtb", std::move(block)));
+    auto bitmap = gfx::Bitmap::create(16, 16);
+    CHECK(bitmap);
+    bitmap->detailLevels = 5;
+    bitmap->pixels.resize(256 + 64 + 16 + 4 + 1);
+    std::ranges::fill(bitmap->pixels, std::byte{1});
+    CHECK(manager.add("flight.bmp", std::move(bitmap)));
+    world::TerrainGridResources resources;
+    resources.grid = manager.load<world::TerrainGridFile>("flight.dtf");
+    resources.blocks = {manager.load<world::TerrainGridBlock>("flight#0.dtb")};
+    world::TsMaterialResources::Data materials;
+    materials.list.details = materials.list.materialsPerDetail = 1;
+    materials.list.materials.resize(1);
+    materials.list.materials[0].flags = 0x103;
+    materials.textures = {manager.load<gfx::Bitmap>("flight.bmp")};
+    resources.materials = world::TsMaterialResources(std::move(materials));
+    world::TerrainLodView policy;
+    policy.compositeTextures = policy.nativeTraversal = true;
+    policy.nativeGeometry.emplace();
+    policy.nativeVisibility.emplace();
+    policy.nativeGeometry = world::TerrainGeometryView{200, 45, 1.6f, .5f, 1500, true};
+    policy.nativeVisibility->nearDistance = .5f;
+    policy.nativeVisibility->halfExtent = {.5f, .3f};
+    gfx::Palette palette;
+    palette.palettes[0].colors[1] = {100, 60, 30, 255};
+    constexpr int width = 400, height = 240;
+    auto surface = gfx::SdlGpuSurface::create(window, width, height);
+    CHECK(surface);
+    gfx::GpuFrameConfig frame;
+    frame.clearColor = {1, 0, 1};
+    std::vector<std::byte> pixels(width * height * 4);
+    // A plane below this camera must cover the foreground throughout these
+    // tiny rotations. Previously one angle dropped a large footprint corner.
+    for (const bool retained : {false, true}) {
+        for (const bool low : {false, true}) {
+            for (int step = -2; step <= 2; ++step) {
+                const Point3F position =
+                    low ? Point3F{0x1.50648cp+12f, 0x1.e1bae8p+11f, 0x1.1de8dap+6f}
+                        : Point3F{0x1.3b072p+9f, 0x1.6ab2dep+11f, 0x1.ce0802p+7f};
+                const EulerF rotation{low ? -0x1.4a618p-3f : -0x1.075ecp-1f,
+                                      0,
+                                      (low ? 0x1.1be2d2p+1f : 0x1.4fcf7ap+1f) +
+                                          Flt32(step) * .00001f};
+                TMat3F cameraToGrid(rotation, position);
+                policy.camera = position;
+                policy.nativeVisibility->cameraToGrid.set(rotation);
+                policy.retainedPatches = retained;
+                const auto mesh = world::WorldSurfaceMesh::terrainLod(resources, policy, false);
+                CHECK(mesh);
+                world::TsStaticView view;
+                view.shapeToCamera = cameraToGrid;
+                view.shapeToCamera.inverse();
+                view.width = width;
+                view.height = height;
+                view.center = {width * .5f, height * .5f};
+                view.focal = {200, 200};
+                view.nearDistance = .5f;
+                view.farDistance = 1500;
+                std::optional<gfx::HardwareBatch> batch;
+                if (retained) {
+                    CHECK(mesh->terrainPatches);
+                    const auto polygons = mesh->hardwareInterior(view, palette);
+                    CHECK(polygons);
+                    batch = gfx::HardwareBatch::prepare(*polygons, &palette);
+                } else {
+                    const auto projected = mesh->prepare(view);
+                    CHECK(projected);
+                    batch = projected->hardware(&palette);
+                }
+                CHECK(batch && surface->render(*batch, frame) && surface->readback(pixels));
+                unsigned uncovered{}, expected{};
+                for (int y = 0; y < height; ++y) {
+                    for (int x = 0; x < width; ++x) {
+                        Point3F ray;
+                        m_mul(Point3F{(Flt32(x) + .5f - view.center.x) / view.focal.x,
+                                      1,
+                                      (view.center.y - Flt32(y) - .5f) / view.focal.y},
+                              static_cast<const RMat3F&>(cameraToGrid),
+                              ray);
+                        const auto t = (65 - position.z) / ray.z;
+                        if (!std::isfinite(t) || t <= .5f || (ray * t).len() > 1000)
+                            continue;
+                        const auto hit = position + ray * t;
+                        if (hit.x < 8 || hit.x > 6136 || hit.y < 8 || hit.y > 6136)
+                            continue;
+                        ++expected;
+                        const auto offset = (std::size_t(y) * width + x) * 4;
+                        uncovered += pixels[offset] == std::byte{255} &&
+                                     pixels[offset + 1] == std::byte{0} &&
+                                     pixels[offset + 2] == std::byte{255};
+                    }
+                }
+                CHECK(expected > 40000);
+                if (uncovered)
+                    std::printf("Terrain flight coverage: retained=%d step=%d uncovered=%u\n",
+                                retained,
+                                step,
+                                uncovered);
+                CHECK(uncovered == 0);
+            }
+        }
     }
 }
 
@@ -1064,7 +1184,8 @@ void shapeReadbacks(platform::SdlWindow& window) {
                 for (Flt32 depth : {.08f, 1.f, 5.f, 19.8f, 21.f}) {
                     auto replacementMaterials = resources->materials.data();
                     replacementMaterials.list.materials[0].flags = shading | alpha | 3;
-                    resources->materials = world::TsMaterialResources(std::move(replacementMaterials));
+                    resources->materials =
+                        world::TsMaterialResources(std::move(replacementMaterials));
                     world::TsStaticView view;
                     view.width = view.height = 64;
                     view.focal = {32, 32};
@@ -1174,6 +1295,7 @@ int runGpuCache(bool requireGpu) {
         arrayReadbacks(window);
         terrainReadbacks(window);
         terrainSeamCoverage(window);
+        terrainFlightCoverage(window);
         terrainSubmission(window);
         fogReadbacks(window);
         fogBlendReadbacks(window);

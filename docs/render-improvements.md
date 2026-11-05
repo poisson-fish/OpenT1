@@ -746,6 +746,32 @@ Terrain-only sweeps through 360 moving/rotating views at both 800x600 and
 texture speck remains visible with solid terrain coverage, so eliminating it
 would require changing the artwork or its filtering rather than seam projection.
 
+## Transient terrain coverage during rotation (2026-11-04)
+
+Issue #15's large, brief missing regions were a separate CPU visibility defect.
+When a footprint vertex lay on intersecting camera planes, `PlaneF::split` could
+classify it outside but reject the corresponding segment intersections because
+the independently rounded float calculations disagreed. Dropping both crossings
+removed a whole corner of the visible ground footprint. A tiny camera rotation
+restored it, explaining why fast flight or looking around exposed the background.
+
+Terrain footprint clipping now computes signed distances in double precision and
+uses those same distances to interpolate crossings. It does not discard a crossing
+after rounding its position. Projecting the height range onto the ground plane
+also consistently negates the selected height extremum, including negative minima.
+The general-purpose plane/collision implementation remains unchanged.
+
+An asset-free CPU regression checks ground-ray admission through nearby rotated
+views at every LOD. A real-device regression independently intersects screen rays
+with a known plane, then checks both projected and retained terrain readbacks.
+The original implementation exposes 60,400 expected ground pixels in a 400x240
+frame at the failing angle. The fixed implementation has zero uncovered expected
+ground pixels throughout the tested rotations on D3D12 and Vulkan. A diagnostic
+sweep of 40,000 camera poses also reports zero rejected in-view ground samples.
+
+All 16 Release CTest checks pass. These cases exercise terrain selection, unlike
+the earlier seam coverage regression, which constructs already-selected patches.
+
 ## Reproduction
 
 ```powershell

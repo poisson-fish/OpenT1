@@ -51,6 +51,39 @@ bool rotation(const RMat3F& m) {
     return std::abs(m.determinant() - 1.f) < 1e-4f;
 }
 
+// Footprint vertices often lie on two view planes at once. Classifying an
+// endpoint and then independently intersecting its edge in float can disagree
+// about whether the crossing is on the segment. Losing both crossings removes
+// an entire corner of the footprint, including otherwise visible near terrain.
+// Use the same signed distances for admission and interpolation, and keep the
+// crossing even when its rounded position lands just outside the next plane.
+std::vector<Point3F> clipFootprint(std::span<const Point3F> points, const PlaneF& plane) {
+    std::vector<Point3F> result;
+    if (points.empty())
+        return result;
+    result.reserve(points.size() + 1);
+    const auto distance = [&](Point3F point) {
+        return Flt64(plane.x) * point.x + Flt64(plane.y) * point.y + Flt64(plane.z) * point.z +
+               plane.d;
+    };
+    auto previous = points.back();
+    auto previousDistance = distance(previous);
+    for (const auto point : points) {
+        const auto currentDistance = distance(point);
+        if ((previousDistance < 0) != (currentDistance < 0)) {
+            const auto t = previousDistance / (previousDistance - currentDistance);
+            result.push_back({Flt32(Flt64(previous.x) + (Flt64(point.x) - previous.x) * t),
+                              Flt32(Flt64(previous.y) + (Flt64(point.y) - previous.y) * t),
+                              Flt32(Flt64(previous.z) + (Flt64(point.z) - previous.z) * t)});
+        }
+        if (currentDistance >= 0)
+            result.push_back(point);
+        previous = point;
+        previousDistance = currentDistance;
+    }
+    return result;
+}
+
 // Preserve truncating division, arithmetic right shift and inclusive boundary
 // rules without the original signed-left-shift / accumulator overflow.
 struct Raster {
@@ -199,8 +232,9 @@ std::optional<TerrainVisibility> terrainVisibility(Int32 scale,
         if (!finite(dx) || !finite(dy)) {
             return {};
         }
-        // Native clipGround shifts plane Z by authored height extrema, and
-        // clips left/right/top/bottom/front (the octagon supplies the back).
+        // Project the frustum over the authored height range onto Z=0, then
+        // clip left/right/top/bottom/front (the octagon supplies the back).
+        // Both extrema translate by their negated height: d += normal.z * h.
         std::array<PlaneF, 5> planes{PlaneF(rotate({-expand, 0, 0}), rotate({distance, dx, 0})),
                                      PlaneF(rotate({expand, 0, 0}), rotate({-distance, dx, 0})),
                                      PlaneF(rotate({0, 0, expand}), rotate({0, dy, -distance})),
@@ -208,9 +242,9 @@ std::optional<TerrainVisibility> terrainVisibility(Int32 scale,
                                      PlaneF(rotate({0, -expand, 0}), rotate({0, distance, 0}))};
         for (auto& plane : planes) {
             if (!plane.isVertical()) {
-                plane.shiftZ(plane.z > 0 ? -heights.y : heights.x);
+                plane.shiftZ(plane.z > 0 ? -heights.y : -heights.x);
             }
-            points = plane.split(points).front;
+            points = clipFootprint(points, plane);
             if (points.empty()) {
                 return result;
             }

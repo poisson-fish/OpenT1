@@ -24,6 +24,7 @@ add_executable(
     graphics/software_rasterizer_test.cpp
     graphics/hardware_batch_test.cpp
     world/terrain_grid_test.cpp
+    world/terrain_visibility_test.cpp
     world/ts_shape_test.cpp
     world/collision_test.cpp
     world/mission_test.cpp

@@ -179,9 +179,8 @@ bool FearGameApp::gameplayInputActive() const {
     if (!root) {
         return false;
     }
-    if (auto* chat = findGameplayControl<FearGuiChat>(root); chat && chat->visible()) {
-        return false;
-    }
+    // Chat owns keyboard focus without changing Play mode's mouse look.
+    // gameplayKeyboardActive() keeps typed keys out of the action maps.
     return !showingScores_ && root->getName() == "playGui";
 }
 

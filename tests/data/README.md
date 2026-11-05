@@ -28,7 +28,7 @@ followed directly by a record count.
 | `gui-editor-failures-v1.bin` | B7EF v1: editor file-operation failure results | `gui/editor_test.cpp` |
 | `gui-editor-v1.bin` | B7GE v2: 64 editor histories, control state, and run-length-encoded 160-by-100 test frames | `support/gui_editor_support.hpp`, used by `gui/editor_test.cpp` |
 | `gui-routing-v1.bin` | B7WH v1: text-wrap routing/visibility results for 256 histories | `gui/routing_test.cpp` |
-| `interior-assets-v1.bin` | O1TI v1: five serialized objects covering room geometry, shape, and three lighting cases | `world/mission_test.cpp` |
+| `interior-assets-v1.bin` | O1TI v1: five serialized objects covering room geometry, shape, and three lighting cases | `world/mission_test.cpp`, `game/image_lighting_test.cpp` |
 | `material-v1.dml` | One serialized TS material-list payload, version 1, with a filename-length test value | `world/ts_shape_test.cpp` |
 | `smacker-v1.bin` | SMK1 v1: 14 short SMK2/SMK4 streams, each eight frames, plus expected frame/audio hashes | `video/video_test.cpp` |
 | `software-2d-v1.bin` | Indexed pixel results for deterministic line and bitmap operations | `graphics/software_rasterizer_test.cpp` |

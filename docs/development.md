@@ -240,6 +240,19 @@ The optional cases do not bundle game assets or run unless this variable is set.
 The `game` suite's installed-content integration checks use the same variable;
 they do not auto-discover nearby installations during the standard test run.
 
+The optional `lumos` suite uses Wasteland's Ancient Crypt and rock assets through
+the gameplay interior renderer. It checks that mounting, removing and remounting
+Lumos changes lightmaps and rendered pixels. `lumos_gpu` repeats the pixel checks
+with a hidden native GPU window; select a backend with `SDL_GPU_DRIVER` and leave
+`SDL_VIDEODRIVER=dummy` unset for that suite:
+
+```powershell
+$env:OPENT1_TEST_ASSETS = 'C:\Games\Wasteland'
+.\build\x64-release\tests\opent1_tests.exe --suite lumos
+$env:SDL_GPU_DRIVER = 'direct3d12' # or vulkan; Metal on macOS
+.\build\x64-release\tests\opent1_tests.exe --suite lumos_gpu
+```
+
 The optional `disconnect_assets` suite uses that installation to connect separate
 client/server apps over UDP, click the base and RPG Disconnect buttons, and check
 input capture, subsequent frames, the join menu, and server cleanup. It uses an

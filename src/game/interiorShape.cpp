@@ -491,12 +491,29 @@ bool InteriorShape::processQuery(sim::SimQuery& query) {
             wsq->failed = true;
             return true;
         }
+        TMat3F placement(shapeRotation_, shapePosition_);
+        placement.flags = RMat3F::Matrix_HasRotation | RMat3F::Matrix_HasTranslation;
+        std::optional<world::TsLighting> sceneLights;
+        if (wsq->lighting) {
+            sceneLights = world::tsSceneLighting(*wsq->lighting, placement);
+            if (!sceneLights) {
+                wsq->failed = true;
+                wsq->image.reset();
+                return true;
+            }
+            // Native interior merging does nothing for ambient-only input.
+            if (sceneLights->lights.empty()) {
+                sceneLights.reset();
+            }
+        }
         if (!cachedSurfaceMesh_ || lightMapsInvalidated_ ||
+            cachedSurfaceMesh_->interiorSceneLighting != sceneLights ||
             (lightPlayer_ && !std::ranges::equal(lightPlayer_->slots(), cachedLightSlots_))) {
             world::InteriorSurfaceLighting lighting;
             lighting.previous = cachedSurfaceMesh_.get();
             lighting.refreshMaps = lightMapsInvalidated_;
             lighting.seconds = static_cast<Flt32>(lastUpdatedTime_) * 0.001f;
+            lighting.scene = sceneLights ? &*sceneLights : nullptr;
             if (lightPlayer_) {
                 lighting.slots = lightPlayer_->slots();
             }
@@ -518,8 +535,6 @@ bool InteriorShape::processQuery(sim::SimQuery& query) {
             wsq->failed = true;
             return true;
         }
-        TMat3F placement(shapeRotation_, shapePosition_);
-        placement.flags = RMat3F::Matrix_HasRotation | RMat3F::Matrix_HasTranslation;
         wsq->image = world::WorldSurfaceInstance{cachedSurfaceMesh_, placement};
         if (wsq->camera && !shapeResources_->geometry.empty() &&
             shapeResources_->geometry.front()) {

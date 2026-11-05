@@ -1335,6 +1335,8 @@ std::size_t FearPlugin::syncLoopbackState(bool deliverMoves) {
 
     // 2. Replicate server PlayerManager teams and clients to client PlayerManager
     if (sg_.playerManager && cg_.playerManager) {
+        const auto* localClient = sg_.playerManager->findClient(localClientId_);
+        const bool scoresFrozen = localClient && localClient->curGuiMode == 5;
         cg_.playerManager->setTeamScoreHeading(sg_.playerManager->teamScoreHeading());
         cg_.playerManager->setClientScoreHeading(sg_.playerManager->clientScoreHeading());
         if (sg_.playerManager->getNumTeams() <= 0) {
@@ -1364,8 +1366,10 @@ std::size_t FearPlugin::syncLoopbackState(bool deliverMoves) {
             }
             if (auto* cliTeam = cg_.playerManager->findTeam(t)) {
                 cliTeam->score = srvTeam->score;
-                cliTeam->scoreString = srvTeam->scoreString;
-                cliTeam->scoreSortValue = srvTeam->scoreSortValue;
+                if (!scoresFrozen) {
+                    cliTeam->scoreString = srvTeam->scoreString;
+                    cliTeam->scoreSortValue = srvTeam->scoreSortValue;
+                }
                 cliTeam->objectives = srvTeam->objectives;
             }
         }
@@ -1396,8 +1400,10 @@ std::size_t FearPlugin::syncLoopbackState(bool deliverMoves) {
             if (auto* cliRep = cg_.playerManager->findBaseRep(srvRep->id)) {
                 cliRep->team = srvRep->team;
                 cliRep->score = srvRep->score;
-                cliRep->scoreString = srvRep->scoreString;
-                cliRep->scoreSortValue = srvRep->scoreSortValue;
+                if (!scoresFrozen) {
+                    cliRep->scoreString = srvRep->scoreString;
+                    cliRep->scoreSortValue = srvRep->scoreSortValue;
+                }
                 cliRep->ping = srvClient->ping;
                 cliRep->packetLoss = srvClient->packetLoss;
             }

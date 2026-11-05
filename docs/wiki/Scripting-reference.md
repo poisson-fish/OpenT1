@@ -140,8 +140,16 @@ This table highlights a few verified contracts:
 | Call | Meaning |
 | --- | --- |
 | `Client::sendMessage(%client, %type, %text [, %sender])` | Server-side message delivery to a client; missing/disconnected targets can be silently ignored |
+| `Client::setMenuScoreVis(%client, %visible)` | Server-side score visibility for a connected player; enabling sends current headings and rows, then streams changes while visible; victory mode freezes row updates |
 | `GameBase::getPosition(%object)` | Obtain a game object's position through its native binding |
 | `remoteEval(%peer, %command, ...)` | Dispatch a remote console event; the receiving function is named `remote` followed by the command, with the sender supplied first |
+
+Set score headings and player/team scores on the server. The engine delivers
+them through native score events; assigning client globals does not replace
+that delivery. Opening scores catches up changes made while hidden, including
+for late joins and reconnects. AI representatives do not appear in the human
+player score list. Objective mode (3) keeps the normal visibility behavior;
+victory mode (5) captures final scores and freezes row updates until it is left.
 
 An engine callback runs only where native code or a loaded script explicitly
 invokes it. A function named `Example::onAward` is just a function until your mod

@@ -263,6 +263,9 @@ private:
     void unlinkClientRep(ClientRep* cr) noexcept;
     void teamAddedInternal(Int32 teamId);
     void sendPlayerEvent(ClientRep&, std::unique_ptr<sim::SimEvent>);
+    void sendScore(
+        ClientRep& receiver, bool isTeam, Int32 id, std::string_view score, Int32 sortValue = 0);
+    void sendScoreSnapshot(ClientRep& receiver);
     void sendCommand(ClientRep& receiver,
                      const ClientRep& target,
                      const std::optional<std::string_view>& message,

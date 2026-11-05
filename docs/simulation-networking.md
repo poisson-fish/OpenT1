@@ -70,6 +70,24 @@ only their source's control client. See the
 [vanilla bot comparison](vanilla-bot-lifecycle.md) for the source audit and
 regression coverage.
 
+Score headings and rows use the existing guaranteed, ordered `DeltaScoreEvent`
+format. Heading changes reach every connected player. Enabling score display
+sends both current headings, all playable team rows and all human player rows;
+this full snapshot also catches up late joins, hidden lists and reused client
+IDs. Subsequent text or sort changes go only to viewers with scores enabled.
+Unchanged values do not generate row events. The neutral team is excluded because
+team ID -1 denotes the heading on this wire.
+
+Objective mode (3) keeps the ordinary score visibility contract. Entering victory
+mode (5) takes a final snapshot for a hidden list, then freezes row updates.
+Leaving victory catches up a list that is still enabled. Mission reset clears
+server row text/sort values and refreshes active viewers; hidden or victory
+clients retain their last player rows until the next catch-up snapshot. Both
+packet-stream and event-manager sends, plus local event delivery, share the
+same score path. Synthetic tests exercise independent managers and rebuild
+`ScoreListCtrl`; they do not establish the reporter's installed Tab GUI layout
+or vanilla server interoperability.
+
 The delegate owns transport/session state and removes all its streams on removal.
 Each stream is an owning simulation group for its registered packet clients.
 Ghost managers own staged bootstrap objects, then transfer ownership to the

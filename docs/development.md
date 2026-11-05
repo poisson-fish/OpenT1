@@ -289,6 +289,15 @@ including vanilla's team assignment for a client that does not yet own a body:
 .\build\x64-release\tests\opent1_tests.exe --suite skins
 ```
 
+The optional `profile_skins` suite opens Player Setup through the installed shell,
+clicks skin entries, compares rendered pixels, and checks saving, reopening and
+gender changes. It covers base skins and, when installed, RPG skins that only
+provide light-armor textures:
+
+```powershell
+.\build\x64-release\tests\opent1_tests.exe --suite profile_skins
+```
+
 The `game` suite also checks enemy popup acquisition and rendered names, health,
 and markers through loopback and UDP visibility replication, including low cover,
 solid occluders, team changes and hidden/dead targets. With an installed RPG mod,

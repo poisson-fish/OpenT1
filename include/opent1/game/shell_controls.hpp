@@ -848,7 +848,7 @@ public:
 private:
     std::string skinName_{"base"};
     bool male_{true};
-    ArmorType curArmor_{Medium};
+    ArmorType curArmor_{Light};
     std::shared_ptr<ResourceManager> resources_;
     mutable std::optional<world::TsShapeResources> preview_;
     mutable std::string previewKey_;

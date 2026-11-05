@@ -8,7 +8,7 @@
 namespace opent1::game {
 
 SkinView::SkinView() {
-    shapeName_ = "marmor.dts";
+    shapeName_ = resolvedShapeFilename();
     active = true;
     autoRotate_ = false;
     rotation_ = {-.25f, 0, 3.14159265f};
@@ -72,8 +72,25 @@ bool SkinView::draw(gfx::SoftwareSurface& surface, Point2I offset, RectI clip) c
         if (!shape || !shape->materials) {
             return false;
         }
-        auto materials = world::TsMaterialResources::loadSkin(
-            *resources_, *shape->materials, skinName_, shapeName);
+        // Vanilla previews use one undamaged armor bitmap for every textured
+        // slot. Gameplay skins instead preserve each authored texture suffix.
+        auto list = resources_->load<world::TsMaterialList>(resolvedMaterialListName());
+        auto materials = list ? world::TsMaterialResources::load(*resources_, *list)
+                              : std::optional<world::TsMaterialResources>{};
+        if (!materials) {
+            auto previewList = *shape->materials;
+            const auto base = shapeName.substr(0, shapeName.find_last_of('.'));
+            auto bitmapName = std::format("{}.{}.bmp", skinName_, base);
+            if (!resources_->contains(bitmapName)) {
+                bitmapName = std::format("base.{}.bmp", base);
+            }
+            for (auto& material : previewList.materials) {
+                if (material.type() == 3) {
+                    material.mapFile = bitmapName;
+                }
+            }
+            materials = world::TsMaterialResources::load(*resources_, previewList);
+        }
         if (!materials) {
             return false;
         }

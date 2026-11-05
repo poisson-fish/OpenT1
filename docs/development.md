@@ -240,6 +240,18 @@ The optional cases do not bundle game assets or run unless this variable is set.
 The `game` suite's installed-content integration checks use the same variable;
 they do not auto-discover nearby installations during the standard test run.
 
+The optional `camera_assets` suite checks third-person camera clearance and near
+plane clipping against all four Keldrin mine sections from Wasteland's rpgmap5.
+It also renders each section through the player camera. `camera_gpu` submits
+those views to a hidden GPU window and reads back the frames:
+
+```powershell
+$env:OPENT1_TEST_ASSETS = 'C:\Games\Wasteland'
+.\build\x64-release\tests\opent1_tests.exe --suite camera_assets
+$env:SDL_GPU_DRIVER = 'direct3d12' # or vulkan; leave SDL_VIDEODRIVER=dummy unset
+.\build\x64-release\tests\opent1_tests.exe --suite camera_gpu
+```
+
 The optional `lumos` suite uses Wasteland's Ancient Crypt and rock assets through
 the gameplay interior renderer. It checks that mounting, removing and remounting
 Lumos changes lightmaps and rendered pixels. `lumos_gpu` repeats the pixel checks

@@ -33,8 +33,9 @@ the latest stable release.
    git push origin v0.1.0
    ```
 
-4. The tag rebuilds/tests/packages that exact revision and publishes a numbered
-   release with generated change notes. Use `v0.1.0-alpha.1`, `v0.1.0-beta.1`, or
+4. The tag promotes the exact artifacts from that successful main build into a
+   numbered release with generated change notes. It checks the full commit/version
+   identity of every binary archive. Use `v0.1.0-alpha.1`, `v0.1.0-beta.1`, or
    `v0.1.0-rc.1` for a numbered prerelease. The numeric part must match `VERSION`;
    tags outside main history are rejected.
 5. Confirm all downloads/checksums and append the manual validation/known-issues
@@ -42,7 +43,10 @@ the latest stable release.
 
 An existing published numbered release is not overwritten by rerunning its job.
 Use a new version/tag for corrections. A failed upload can leave a draft that a
-rerun completes. The workflow can also be dispatched on `main` to refresh rolling
+rerun completes. If a tag was pushed before its main build completed, rerun the
+numbered-release workflow after main succeeds. Build artifacts are retained for
+14 days; rerun the exact main build to regenerate expired inputs before promoting
+an older main commit. The build workflow can also be dispatched on `main` to refresh rolling
 downloads. It uses the repository's standard `GITHUB_TOKEN` with contents-write
 permission only in the publishing job; no personal token is needed for releases.
 
@@ -66,7 +70,7 @@ downloads are development prereleases and state their limited CI coverage.
 ## Build packages locally
 
 ```sh
-cmake --preset x64-release
+cmake --preset x64-release -DCMAKE_DISABLE_FIND_PACKAGE_SDL3=ON
 cmake --build --preset x64-release --parallel 8
 ctest --preset x64-release
 python tools/package_release.py --build build/x64-release --output build/dist --platform windows-x64

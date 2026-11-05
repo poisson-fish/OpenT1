@@ -79,7 +79,7 @@ def smoke(stage: Path, platform: str) -> None:
     for name in ("LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH"):
         env.pop(name, None)
     if platform.startswith("windows"):
-        env["PATH"] = str(Path(env["SystemRoot"]) / "System32")
+        env["PATH"] = str(Path(os.environ["SystemRoot"]) / "System32")
     env.update(SDL_VIDEODRIVER="opent1-invalid-driver", ALSOFT_DRIVERS="null")
     with tempfile.TemporaryDirectory(prefix="opent1-smoke-") as working:
         version = run(str(executable), "--version", cwd=working, env=env, timeout=30)

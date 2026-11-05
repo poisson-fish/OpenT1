@@ -41,7 +41,7 @@ void previewMaterials() {
         CHECK(resources->add(std::format("listed.{}.dml", base), std::move(list)));
         CHECK(resources->add(name, std::move(shape)));
     }
-    for (const auto [name, color] :
+    for (const auto& [name, color] :
          {std::pair{"authored.bmp", 20}, {"base.larmor.bmp", 40}, {"storm.larmor.bmp", 80},
           {"base.marmor.bmp", 40}, {"storm.marmor.bmp", 80},
           {"base.harmor.bmp", 40}, {"storm.harmor.bmp", 80},

@@ -85,16 +85,18 @@ void dedicatedStartupPort() {
     };
     CHECK(browser.ping("IP:127.0.0.1:" + std::to_string(port)));
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    for (UInt32 frame = 0; !replied; ++frame) {
-        CHECK(std::chrono::steady_clock::now() < deadline);
+    for (UInt32 frame = 0; std::chrono::steady_clock::now() < deadline; ++frame) {
         CHECK(app.stepFrame(frame * .032, false));
         browser.process(frame * 32);
         net::Datagram packet;
         while (client->receive(packet) == net::Result::Ok) {
             CHECK(browser.receive(packet.address, packet.data(), frame * 32));
         }
+        if (replied)
+            break;
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
+    CHECK(replied);
     // Later hosted worlds also honor the selected installation's port even
     // though console.cs is outside the active resource search directories.
     CHECK(app.fearPlugin().createServerWorld({}, true));

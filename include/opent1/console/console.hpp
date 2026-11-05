@@ -59,6 +59,8 @@ public:
     [[nodiscard]] script::ExecutionResult execute(std::string_view name,
                                                   std::span<const std::string> arguments = {});
     [[nodiscard]] script::ExecutionResult executeFile(std::string_view name);
+    // Read through the resource/search-path host without evaluating the script.
+    [[nodiscard]] std::optional<std::string> readScript(std::string_view name) const;
     void addCommand(Int32 id, std::string_view name, Command command);
     // An exclusive registration lease. Releasing it removes only this exact
     // registration, and is safe after replacement or Console destruction.

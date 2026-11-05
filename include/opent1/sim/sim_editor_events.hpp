@@ -5,6 +5,18 @@
 namespace opent1::sim {
 inline constexpr SimObjectId MissionEditorId = 30;
 
+struct SimLoseFocusEvent : SimEvent {
+    SimLoseFocusEvent() {
+        type = EventTypeFirst + 2;
+    }
+};
+
+struct SimGainFocusEvent : SimEvent {
+    SimGainFocusEvent() {
+        type = EventTypeFirst + 3;
+    }
+};
+
 struct SimObjectTransformEvent : SimEvent {
     SimObjectTransformEvent() {
         type = EventTypeFirst + 5;

@@ -4,6 +4,9 @@
 #include <array>
 #include <deque>
 #include <map>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 
 namespace opent1::audio {
 // Only interleaved PCM WAV, mono/stereo, unsigned 8 or signed little-endian 16.
@@ -36,6 +39,7 @@ struct Profile {
     float baseVolume{}, coneOutsideVolume{}, minDistance{1}, maxDistance{100};
     UInt32 coneInsideAngle{360}, coneOutsideAngle{360};
     Point3F coneVector{0, 1, 0};
+    bool operator==(const Profile&) const = default;
 };
 
 struct Listener {
@@ -137,6 +141,7 @@ public:
     // Loopback is real OpenAL Soft mixing, stereo signed 16; no sound card needed.
     [[nodiscard]] std::vector<Int16> render(UInt32 frames);
     [[nodiscard]] std::string renderer() const;
+    [[nodiscard]] bool loopback() const;
 
 private:
     std::shared_ptr<BackendState> state_;
@@ -184,14 +189,17 @@ struct VoiceSnapshot {
     Spatial spatial;
 };
 
-// Single simulation thread, externally synchronized. Handles never recycle.
-// Limits: 256 definitions, 128 live voices, 256 queued entries per channel.
+// Simulation operations are synchronized with the device's streaming worker.
+// Handles never recycle. Suspended voices retain no native source; the native
+// device limit is separate from the number of logical looping voices.
+// Limits: 256 definitions, 256 queued entries per channel.
 // Each device also caps resident PCM at 128 MiB and buffers at 512. Streaming
 // definitions retain their PCM resource, but only a two-second window resides in
 // the device. Completed half-second chunks are refilled using its play cursor.
 class Runtime {
 public:
-    explicit Runtime(Device device) : device_(std::move(device)) {}
+    explicit Runtime(Device device);
+    ~Runtime();
 
     bool define(UInt32, Resource<Wave>, Profile, float priority = 1);
     bool define(UInt32, std::shared_ptr<const Wave>, Profile, float priority = 1);
@@ -200,6 +208,7 @@ public:
     // Native preference is off by default. Newly defined hardware profiles fall
     // back to software when disabled; active voices retain their selected mode.
     void setHardware3D(bool enabled) {
+        std::lock_guard lock(mutex_);
         hardware3D_ = enabled;
     }
 
@@ -214,6 +223,7 @@ public:
     bool setListener(const Listener&);
     bool setMaster(float twoD, float threeD);
     bool setMaxBuffers(UInt32); // native inclusive admission; 0 means one voice
+    [[nodiscard]] UInt32 maxBuffers() const;
     bool prioritize();
     bool advance(double seconds); // bounded <= 1 day; no partial publication
     bool queue(Int32 channel, UInt32, const TMat3F& transform = {}, bool spatial = false);
@@ -226,6 +236,7 @@ public:
     [[nodiscard]] std::size_t queued(std::size_t channel) const;
 
     [[nodiscard]] std::size_t voiceCount() const {
+        std::lock_guard lock(mutex_);
         return voices_.size();
     }
 
@@ -240,6 +251,7 @@ private:
         Profile profile;
         float priority{};
         std::shared_ptr<const Wave> wave;
+        std::weak_ptr<const Wave> original;
     };
 
     struct Voice {
@@ -274,6 +286,8 @@ private:
             } else if (stream) {
                 stream->stop();
             }
+            source.reset();
+            stream.reset();
         }
     };
 
@@ -301,6 +315,7 @@ private:
                                    const Point3F* = nullptr) const;
     void startVoice(Voice&);
     bool serviceStream(Voice&);
+    mutable std::recursive_mutex mutex_;
     Device device_;
     std::map<UInt32, Definition> definitions_;
     std::map<Handle, Voice> voices_;
@@ -308,7 +323,9 @@ private:
     Listener listener_;
     float twoD_{1}, threeD_{1};
     Handle next_{1};
-    UInt32 maxBuffers_{127};
+    UInt32 maxBuffers_{16};
     bool muted_{}, hardware3D_{};
+    std::condition_variable_any wake_;
+    std::jthread worker_;
 };
 } // namespace opent1::audio

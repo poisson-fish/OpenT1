@@ -1,4 +1,5 @@
 #include <opent1/sim/sim_world_game.hpp>
+#include <opent1/sim/sim_editor_events.hpp>
 #include <opent1/sim/common_irc_shadow.hpp>
 #include <opent1/sim/sim_irc.hpp>
 #include <opent1/sim/sim_palette.hpp>
@@ -937,8 +938,11 @@ SimGame::invokeCommand(Console& console, Int32 id, std::span<const std::string> 
         if (!object || !object->getManager()) {
             return "False";
         }
-        auto event = std::make_unique<SimEvent>();
-        event->type = EventTypeFirst + (id == ObjectFocus ? 3 : 2);
+        std::unique_ptr<SimEvent> event;
+        if (id == ObjectFocus)
+            event = std::make_unique<SimGainFocusEvent>();
+        else
+            event = std::make_unique<SimLoseFocusEvent>();
         return yes(object->postEvent(std::move(event), true));
     }
     if (id == LoadObject) {
@@ -1081,7 +1085,18 @@ SimGame::invokeCommand(Console& console, Int32 id, std::span<const std::string> 
         const auto result =
             std::from_chars(args[2].data(), args[2].data() + args[2].size(), action);
         auto value = real(args[3]);
-        if (result.ec != std::errc{} || result.ptr != args[2].data() + args[2].size() || !value ||
+        if (result.ec != std::errc{} || result.ptr != args[2].data() + args[2].size()) {
+            const auto name = canonical(args[2]);
+            if (name == "attach") action = 103;
+            else if (name == "nextcamera") action = 101;
+            else return "False";
+        }
+        if (!value) {
+            if (auto* reference = object->getManager()->findObject(args[3])) {
+                value = double(reference->getId());
+            }
+        }
+        if (!value ||
             std::abs(*value) > std::numeric_limits<float>::max()) {
             return "False";
         }

@@ -10,6 +10,65 @@ namespace {
 inline constexpr Int32 kIdItgChatDisplayLines = 200110;
 inline constexpr Int32 kIdStrCommanderVersion = 132105;
 inline constexpr Int32 kDisplayBorderY = 6;
+
+Int32 fontHeight(const gfx::BitmapFont& font) {
+    return std::max(1, Int32((Int64(font.info.height) * font.info.scale.y) >> 16));
+}
+
+std::vector<std::string>
+wrapMessage(std::string_view text, const gfx::BitmapFont& font, Int32 width) {
+    std::string cleaned;
+    for (const char ch : text) {
+        if (static_cast<unsigned char>(ch) >= 32 || ch == '\n') {
+            cleaned.push_back(ch);
+        } else if (ch == '\t') {
+            cleaned.push_back(' ');
+        }
+    }
+
+    std::vector<std::string> lines;
+    std::size_t paragraph = 0;
+    do {
+        const auto newline = cleaned.find('\n', paragraph);
+        const auto stop = newline == std::string::npos ? cleaned.size() : newline;
+        auto end = stop;
+        while (end > paragraph && cleaned[end - 1] == ' ') {
+            --end;
+        }
+        const auto part = std::string_view(cleaned).substr(paragraph, end - paragraph);
+        std::size_t start = 0;
+        do {
+            auto next = start;
+            auto space = start;
+            while (next < part.size()) {
+                auto boundary = next + 1;
+                while (boundary < part.size() && (UInt8(part[boundary]) & 0xc0) == 0x80) {
+                    ++boundary;
+                }
+                // An over-wide glyph still consumes one complete character.
+                if (next > start && font.textWidth(part.substr(start, boundary - start)) > width) {
+                    break;
+                }
+                if (part[next] == ' ' && next > start) {
+                    space = next;
+                }
+                next = boundary;
+            }
+            if (next < part.size() && part[next] != ' ' && space > start) {
+                next = space;
+            }
+            auto line = part.substr(start, next - start);
+            while (!line.empty() && line.back() == ' ') {
+                line.remove_suffix(1);
+            }
+            lines.emplace_back(line);
+            // Like vanilla, the space at a wrap belongs to the next line.
+            start = next;
+        } while (start < part.size());
+        paragraph = stop + 1;
+    } while (paragraph <= cleaned.size());
+    return lines;
+}
 } // namespace
 
 FearGuiChatDisplay::FearGuiChatDisplay() {
@@ -44,28 +103,13 @@ bool FearGuiChatDisplay::draw(gfx::SoftwareSurface& surface, Point2I offset, Rec
                                                                      : 0;
         return fonts[index] ? fonts[index].get() : hudFont.get();
     };
-    const auto width = std::max(1, fields_.extent.x - 24);
+    const auto borderX = lowResMode_ ? 12 : 8;
+    const auto width = std::max(1, fields_.extent.x - 2 * borderX);
     for (const auto& entry : messages_) {
         const auto* font = fontFor(entry.type);
-        std::string line;
-        for (const char ch : entry.text) {
-            if (ch == '\n') {
-                lines.push_back({std::move(line), font});
-                line.clear();
-                continue;
-            }
-            if (static_cast<unsigned char>(ch) < 32 && ch != '\t') {
-                continue;
-            }
-            line.push_back(ch == '\t' ? ' ' : ch);
-            if (font->textWidth(line) > width && line.size() > 1) {
-                const char last = line.back();
-                line.pop_back();
-                lines.push_back({std::move(line), font});
-                line.assign(1, last);
-            }
+        for (auto& line : wrapMessage(entry.text, *font, width)) {
+            lines.push_back({std::move(line), font});
         }
-        lines.push_back({std::move(line), font});
     }
     const auto end = std::max(0, static_cast<Int32>(lines.size()) - pgUpCount_);
     const bool command = !commandSlot_.text.empty();
@@ -94,23 +138,23 @@ bool FearGuiChatDisplay::draw(gfx::SoftwareSurface& surface, Point2I offset, Rec
     // above the command slot even while the history contains only a few lines.
     auto y = offset.y + fields_.extent.y - (lowResMode_ ? 0 : 4);
     if (command) {
-        y -= fontFor(MSG_Command)->info.height;
-        if (!surface.text(*fontFor(MSG_Command), {offset.x + 6, y}, commandSlot_.text)) {
+        y -= fontHeight(*fontFor(MSG_Command));
+        if (!surface.text(*fontFor(MSG_Command), {offset.x + borderX / 2, y}, commandSlot_.text)) {
             return false;
         }
     }
     for (auto i : std::views::iota(start) | std::views::take_while([&](auto i) {
                       return i < end;
                   })) {
-        y -= lines[i].font->info.height;
+        y -= fontHeight(*lines[i].font);
     }
     for (auto i : std::views::iota(start) | std::views::take_while([&](auto i) {
                       return i < end;
                   })) {
-        if (!surface.text(*lines[i].font, {offset.x + 6, y}, lines[i].text)) {
+        if (!surface.text(*lines[i].font, {offset.x + borderX / 2, y}, lines[i].text)) {
             return false;
         }
-        y += lines[i].font->info.height;
+        y += fontHeight(*lines[i].font);
     }
     surface.setClip(saved);
     return drawChildren(surface, offset, clip);
@@ -118,10 +162,19 @@ bool FearGuiChatDisplay::draw(gfx::SoftwareSurface& surface, Point2I offset, Rec
 
 bool FearGuiChatDisplay::layout(Point2I extent) {
     const bool small = extent.x < 512 || extent.y < 384;
-    const auto& font = small ? smallMessageFonts[2] : messageFonts[2];
-    fields_.extent = {std::min(small ? 184 : 370, std::max(1, extent.x - 12)),
-                      lineCount_ * (font ? font->info.height : 12) + kDisplayBorderY};
+    const auto& selected = small ? smallMessageFonts[2] : messageFonts[2];
+    const auto& font = selected ? selected : hudFont;
+    const auto minimum = small ? 240 : 370;
+    const auto width = small != lowResMode_ ? minimum : std::max(minimum, fields_.extent.x);
+    fields_.extent = {std::min(width, std::max(1, extent.x - 1)),
+                      lineCount_ * (font ? fontHeight(*font) : 12) + kDisplayBorderY};
     return Parent::parentResized(extent, extent);
+}
+
+void FearGuiChatDisplay::wake() {
+    if (parent()) {
+        (void)layout(parent()->fields().extent);
+    }
 }
 
 void FearGuiChatDisplay::clear() noexcept {

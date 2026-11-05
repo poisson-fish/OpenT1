@@ -204,6 +204,8 @@ protected:
     void setAnimationState(State state);
     void advanceAnimation(Flt32 interval);
     void playFireAnimation();
+    void updateTurretSounds(bool turning);
+    void updateTurretFireSound();
     void serverProcessWaiting(Flt32 in_deltaT, UInt32 in_currTime);
     void serverProcessReloading(Flt32 in_deltaT, UInt32 in_currTime);
     void serverProcessFiring(Flt32 in_deltaT, UInt32 in_currTime);

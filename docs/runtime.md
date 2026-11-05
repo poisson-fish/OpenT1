@@ -43,6 +43,28 @@ initialize SDL's event subsystem only, so they require neither a GPU nor a
 display server. SDL and OpenAL runtime libraries are still part of the normal
 binary distribution; `--no-audio` disables playback-device initialization.
 
+Standalone `--headless` and `-dedicated` launches stream script and server logs
+to stdout from the beginning of startup. Windows uses the attached terminal,
+or attaches to the parent console or opens one when no usable output handles
+exist. Redirected stdout and stderr stay redirected. The game remains headless
+when its Windows text console is visible; no SDL video driver or GPU is needed.
+
+Enter one line of Tribes script per command, including its semicolon:
+
+```text
+echo($Server::Port);
+$Server::HostName = "Wasteland RPG";
+listPlayers();
+quit();
+```
+
+Commands execute on the simulation thread between frames. Expression return
+values and script diagnostics appear on stdout. Input supports terminals,
+pipes, and files; EOF stops reading without stopping the server. A final line
+without a newline is evaluated at EOF. Commands over 65536 bytes or containing
+NUL are discarded in full. Embedded `runFearMain` callers retain control of
+their own process streams.
+
 ## Data paths and startup
 
 `--assets PATH` explicitly selects the installation and requests mounting.

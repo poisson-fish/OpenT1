@@ -946,7 +946,9 @@ bool SimMissionTerrain::processQuery(sim::SimQuery& query) {
     if (auto* q = dynamic_cast<sim::SimCollisionImageQuery*>(&query)) {
         q->images.clear();
         if (collision_) {
-            q->images.push_back(std::make_shared<SimTerrainCollisionImage>(*collision_));
+            auto image = std::make_shared<SimTerrainCollisionImage>(*collision_);
+            image->editor = q->detail == sim::SimCollisionImageQuery::Editor;
+            q->images.push_back(std::move(image));
         }
         return true;
     }

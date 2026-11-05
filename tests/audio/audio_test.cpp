@@ -514,9 +514,9 @@ void rollback() {
     for ([[maybe_unused]] auto i : std::views::iota(1, 128)) {
         CHECK(r.play(1));
     }
-    CHECK(!r.play(1));
+    CHECK(r.play(1));
     r.stopAll();
-    CHECK(r.purge() == 128);
+    CHECK(r.purge() == 129);
     r.clearSequences();
     CHECK(r.queue(0, 1));
     r.mute(true);
@@ -645,7 +645,8 @@ void streamingAudio() {
                          })) {
             const auto pcm = runtime.device().render(4000);
             CHECK(runtime.advance(.5));
-            CHECK(control->buffers == 4 && control->sources == 1);
+            CHECK(control->buffers == (tick < 8 ? 4U : 0U) &&
+                  control->sources == (tick < 8 ? 1U : 0U));
             if (tick <= 5) {
                 CHECK(std::ranges::any_of(pcm, [](auto value) {
                     return value != 0;
@@ -705,6 +706,82 @@ void zeroSoundIdAndRepeatedEffects() {
         CHECK(runtime.voiceCount() == 0 && control->sources == 0);
     }
 }
+
+void loopAdmissionAndStreamingClock() {
+    auto control = std::make_shared<BackendControl>();
+    {
+        Runtime runtime(Device({true, 48000, {}, control}));
+        Profile profile;
+        profile.flags = Loop;
+        CHECK(runtime.define(1, tone(), profile));
+        std::vector<Handle> handles;
+        for (int i = 0; i < 40; ++i) {
+            handles.push_back(runtime.play(1));
+            CHECK(handles.back());
+        }
+        const auto playing = [&] {
+            return std::ranges::count_if(handles, [&](auto handle) {
+                return runtime.snapshot(handle).status == Status::Playing;
+            });
+        };
+        CHECK(runtime.maxBuffers() == 16 && runtime.advance(0));
+        CHECK(playing() == 17 && control->sources == 17);
+        CHECK(runtime.setMaxBuffers(100) && runtime.maxBuffers() == 32);
+        CHECK(playing() == 33 && control->sources == 33);
+        CHECK(runtime.setMaxBuffers(0) && playing() == 1 && control->sources == 1);
+    }
+    CHECK(control->sources == 0 && control->buffers == 0);
+    {
+        Runtime runtime(Device({true, 48000, {}, control}));
+        Profile profile;
+        profile.flags = Loop | Software3D;
+        ResourceManager resources;
+        CHECK(resources.add<Wave>("loop.wav", std::make_unique<Wave>(*tone())));
+        auto wave = resources.load<Wave>("loop.wav");
+        TMat3F far;
+        far.p = {200, 0, 0};
+        std::vector<Handle> loops;
+        for (int i = 0; i < 300; ++i) {
+            CHECK(runtime.define(1, wave, profile, 0));
+            loops.push_back(runtime.play(1, far, true));
+            CHECK(loops.back());
+        }
+        CHECK(runtime.advance(0));
+        CHECK(control->sources == 0 && control->buffers == 1);
+        CHECK(runtime.define(2, tone(), {}, 1));
+        const auto effect = runtime.play(2);
+        CHECK(effect && runtime.snapshot(effect).status == Status::Playing);
+        CHECK(runtime.move(loops.front(), {}) && runtime.advance(0));
+        CHECK(runtime.snapshot(loops.front()).status == Status::Playing);
+        CHECK(control->sources == 2);
+        CHECK(runtime.stop(loops.front()) && runtime.purge() == 1);
+        CHECK(runtime.snapshot(loops.front()).status == Status::Stopped);
+    }
+    CHECK(control->sources == 0 && control->buffers == 0);
+    {
+        // A real null-driver device consumes PCM on its own clock. Do not
+        // advance simulation or service audio from the host during this wait.
+        Runtime runtime(Device({false, 48000, {}, control}));
+        auto shortWave = tone();
+        auto wave = std::make_shared<Wave>(*shortWave);
+        wave->samples.resize(6 * wave->rate * 2);
+        CHECK(shortWave->readFrames(0, wave->samples, true));
+        Profile profile;
+        profile.flags = Loop | Stream;
+        CHECK(runtime.define(1, wave, profile));
+        const auto handle = runtime.play(1);
+        CHECK(handle);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2800));
+        const auto state = runtime.snapshot(handle);
+        CHECK(state.status == Status::Playing && state.frame > 2 * wave->rate &&
+              state.frame < 4 * wave->rate);
+        CHECK(runtime.stop(handle) && runtime.purge() == 1);
+        CHECK(control->sources == 0 && control->buffers == 0);
+    }
+    CHECK(control->devices == 0 && control->contexts == 0);
+    std::puts("loops: vanilla voice limits, virtual distant loops, shared PCM, autonomous "
+              "streaming and cleanup");
+}
 }
 
 int opent1_test_audio() {
@@ -714,6 +791,7 @@ int opent1_test_audio() {
     positionalAudio();
     streamingAudio();
     zeroSoundIdAndRepeatedEffects();
+    loopAdmissionAndStreamingClock();
     return 0;
 }
 

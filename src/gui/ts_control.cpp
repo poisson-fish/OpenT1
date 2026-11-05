@@ -9,13 +9,13 @@ bool finite(Point3F p) {
     return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z);
 }
 
-std::optional<sim::EnvironmentCamera> cameraFor(sim::SimWorld& model,
+std::optional<sim::EnvironmentCamera> cameraFor(sim::SimManager& manager,
                                                 sim::SimAddress source,
                                                 Point2I e,
                                                 Point2I origin,
                                                 sim::SimCameraQuery& query) {
-    if (!source.resolve(model.manager()) || !model.manager().sendQuery(source, query) ||
-        !source.resolve(model.manager())) {
+    if (!source.resolve(manager) || !manager.sendQuery(source, query) ||
+        !source.resolve(manager)) {
         return {};
     }
     if (e.x < 1 || e.y < 1 || !std::isfinite(query.nearPlane) || !std::isfinite(query.farPlane) ||
@@ -233,7 +233,7 @@ bool TSControl::attach(sim::SimWorld& model, sim::SimObject* object, sim::SimObj
                     value = false;
                 }
             } reset{switching_};
-            view = cameraFor(model, source, fields_.extent, localToGlobal({}), query);
+            view = cameraFor(model.manager(), source, fields_.extent, localToGlobal({}), query);
             if (!view || isRemoved() || !staged.resize({}, fields_.extent) ||
                 !staged.prepare(model, *view)) {
                 return;
@@ -265,13 +265,15 @@ bool TSControl::queryCamera(sim::SimWorld& model) {
         return nextCamera(model);
     }
     bool accepted = false;
-    model.manager().dispatch([&] {
-        if (!observed_ || observed_->getManager() != &model.manager() || !attached_.objectId ||
-            !attached_.resolve(model.manager())) {
+    auto* owner = observed_ ? observed_->getManager() : getManager();
+    if (!owner) owner = &model.manager();
+    owner->dispatch([&] {
+        if (!observed_ || observed_->getManager() != owner || !attached_.objectId ||
+            !attached_.resolve(*owner)) {
             return;
         }
         sim::SimCameraQuery query;
-        auto view = cameraFor(model, attached_, fields_.extent, localToGlobal({}), query);
+        auto view = cameraFor(*owner, attached_, fields_.extent, localToGlobal({}), query);
         if (view && !isRemoved()) {
             accepted = prepare(model, *view);
             if (accepted) {
@@ -311,6 +313,7 @@ bool TSControl::processEvent(const sim::SimEvent& event) {
 }
 
 void TSControl::onRemove() {
+    close();
     switching_ = true;
     std::exception_ptr error;
     try {
@@ -322,6 +325,14 @@ void TSControl::onRemove() {
     switching_ = false;
     if (error) {
         std::rethrow_exception(error);
+    }
+}
+
+void TSControl::close() {
+    if (input) {
+        Event event;
+        event.type = EventType::Cancel;
+        (void)input(event);
     }
 }
 
@@ -417,7 +428,10 @@ TSControl::pick(sim::SimWorld& model, const Event& e, UInt32 mask) const {
     m_mul(farPoint, inverse, end);
     sim::SimContainerQuery query;
     query.mask = mask;
-    query.box = {r->origin, end};
+    // Box3F's two-point constructor sorts its coordinates. LOS needs the
+    // original ordered endpoints, especially when looking down at terrain.
+    query.box.fMin = r->origin;
+    query.box.fMax = end;
     sim::SimCollisionInfo result;
     return root->findLOS(query, result, sim::SimCollisionImageQuery::Editor)
                ? std::optional(std::move(result))
@@ -425,8 +439,14 @@ TSControl::pick(sim::SimWorld& model, const Event& e, UInt32 mask) const {
 }
 
 void TSControl::tick(double) {
-    auto model = world.lock();
+    auto retained = world.lock();
+    auto* model = sceneWorld ? sceneWorld() : retained.get();
     if (!model) {
+        if (sceneWorld) {
+            frame_.reset();
+            camera_.reset();
+            renderedCamera_.reset();
+        }
         return;
     }
     if (camera) {
@@ -435,7 +455,9 @@ void TSControl::tick(double) {
             throw std::runtime_error("GUI viewport preparation");
         }
     } else if (attached_.objectId) {
-        if (!attached_.resolve(model->manager())) {
+        auto* owner = observed_ ? observed_->getManager() : getManager();
+        if (!owner) owner = &model->manager();
+        if (!attached_.resolve(*owner)) {
             attached_ = {};
             return;
         }
@@ -446,6 +468,9 @@ void TSControl::tick(double) {
 }
 
 bool TSControl::event(const Event& e) {
+    if (input && input(e)) {
+        return true;
+    }
     if (produce3DMouseEvents && mouse &&
         (e.type == EventType::Move || e.type == EventType::Down || e.type == EventType::Drag ||
          e.type == EventType::Up)) {
@@ -457,7 +482,7 @@ bool TSControl::event(const Event& e) {
 
 bool TSControl::draw(gfx::SoftwareSurface& s, Point2I p, RectI clip) const {
     if (sceneRenderedExternally) {
-        return drawChildren(s, p, clip);
+        return (!overlay || overlay(s, p, clip)) && drawChildren(s, p, clip);
     }
     const auto before = s.clip();
 
@@ -518,7 +543,8 @@ bool TSControl::draw(gfx::SoftwareSurface& s, Point2I p, RectI clip) const {
     } else {
         s.fill({p.x, p.y, p.x + fields_.extent.x - 1, p.y + fields_.extent.y - 1}, 0);
     }
-    if (!Control::draw(s, p, clip)) {
+    renderedCamera_ = displayed;
+    if ((overlay && !overlay(s, p, clip)) || !Control::draw(s, p, clip)) {
         return false;
     }
     renderedCamera_ = displayed;

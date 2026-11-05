@@ -7,6 +7,8 @@
 #include <cmath>
 #include <format>
 #include <map>
+#include <opent1/core/text.hpp>
+#include <opent1/sim/sim_palette.hpp>
 #include <set>
 #include <opent1/game/game_base.hpp>
 
@@ -19,8 +21,21 @@ namespace {
         return fallback;
     }
     Flt32 val = fallback;
-    std::from_chars(sv.data(), sv.data() + sv.size(), val);
-    return val;
+    const auto result = std::from_chars(sv.data(), sv.data() + sv.size(), val);
+    return result.ec == std::errc{} && result.ptr == sv.data() + sv.size() && std::isfinite(val)
+               ? val
+               : fallback;
+}
+
+bool selectedAncestor(const FearMissionEditor::SelectionSet& selection,
+                      const sim::SimObject& object) {
+    std::set<const sim::SimObject*> seen;
+    for (auto* group = object.getGroup(); group && seen.insert(group).second;
+         group = group->getGroup()) {
+        if (std::ranges::find(selection.objects(), group) != selection.objects().end())
+            return true;
+    }
+    return false;
 }
 
 std::string quoteScript(std::string_view value) {
@@ -72,13 +87,18 @@ bool appendObjectScript(sim::SimGame& game,
         return false;
     }
     const auto* descriptor = game.classes().find(typeid(object));
+    // The game factory supplies a palette subclass with a render callback. Its
+    // on-disk identity and fields remain those of the native SimPalette.
+    if (!descriptor && dynamic_cast<const sim::SimPalette*>(&object)) {
+        descriptor = game.classes().find("SimPalette");
+    }
     if (!descriptor || !fieldIdentifier(descriptor->name)) {
         return false;
     }
     std::map<std::string, std::string> fields(object.dynamicFields().begin(),
                                               object.dynamicFields().end());
     std::vector<std::pair<std::string, std::string>> arrays;
-    for (const auto& field : game.classes().fields(object)) {
+    for (const auto& field : descriptor->fields) {
         if (!fieldIdentifier(field.name)) {
             return false;
         }
@@ -179,7 +199,11 @@ bool FearMissionEditor::SelectionSet::removeObject(sim::SimObject& obj) {
         (void)Parent::removeObject(obj);
     }
     if (parentEditor) {
-        parentEditor->clearNotify(obj);
+        if (std::ranges::none_of(parentEditor->undoEntries(), [&](const InfoEntry& entry) {
+                return entry.object == &obj;
+            })) {
+            parentEditor->clearNotify(obj);
+        }
     } else {
         clearNotify(obj);
     }
@@ -293,11 +317,26 @@ bool FearMissionEditor::onAdd() {
 }
 
 void FearMissionEditor::onRemove() {
+    if (focused_ && targetManager()) {
+        sim::SimLoseFocusEvent event;
+        processEvent(event);
+    }
     selection_.clearSet();
+    undoBuffer_.clear();
+    targetManager_ = nullptr;
+    teardownObject_ = nullptr;
     Parent::onRemove();
 }
 
 void FearMissionEditor::onDeleteNotify(sim::SimObject& object) {
+    if (&object == teardownObject_) {
+        teardownObject_ = nullptr;
+        selection_.clearSet();
+        undoBuffer_.clear();
+        targetManager_ = nullptr;
+        deleteObject();
+        return;
+    }
     selection_.removeObject(object);
     for (auto& entry : undoBuffer_) {
         if (entry.object == &object) {
@@ -308,13 +347,72 @@ void FearMissionEditor::onDeleteNotify(sim::SimObject& object) {
 }
 
 bool FearMissionEditor::init() {
-    targetManager_ = getManager();
     getConsoleOptions();
     return true;
 }
 
+bool FearMissionEditor::processEvent(const sim::SimEvent& event) {
+    const bool gain = dynamic_cast<const sim::SimGainFocusEvent*>(&event) != nullptr;
+    const bool lose = dynamic_cast<const sim::SimLoseFocusEvent*>(&event) != nullptr;
+    if (!gain && !lose)
+        return Parent::processEvent(event);
+    auto* manager = targetManager();
+    if (!manager)
+        return false;
+    focused_ = gain;
+    sim::SimEditEvent edit;
+    edit.state = focused_;
+    std::vector<sim::SimAddress> objects;
+    std::set<sim::SimObject*> seen;
+    const auto collect = [&](auto&& self, sim::SimObject* object) -> void {
+        if (!object || !seen.insert(object).second)
+            return;
+        objects.push_back(object->address());
+        if (auto* group = dynamic_cast<sim::SimGroup*>(object)) {
+            for (auto* child : group->objects())
+                self(self, child);
+        }
+    };
+    collect(collect, manager->findObject("MissionGroup"));
+    for (const auto& address : objects)
+        manager->sendEvent(address, edit);
+    return true;
+}
+
+void FearMissionEditor::setTargetManager(sim::SimManager* manager) {
+    selection_.clearSet();
+    undoBuffer_.clear();
+    if (teardownObject_) {
+        clearNotify(*teardownObject_);
+    }
+    targetManager_ = manager;
+    serverTarget_ = game_ && game_->world(sim::WorldType::Server) &&
+                    &game_->world(sim::WorldType::Server)->manager() == manager;
+    targetRevision_ = game_ ? game_->worldRevision(sim::WorldType::Server) : 0;
+    teardownObject_ = manager ? manager->findObject("ConsoleScheduler") : nullptr;
+    if (!teardownObject_ && manager != getManager())
+        teardownObject_ = manager;
+    if (teardownObject_) {
+        deleteNotify(*teardownObject_);
+    }
+}
+
+sim::SimManager* FearMissionEditor::targetManager() const {
+    if (serverTarget_ &&
+        (!game_ || game_->worldRevision(sim::WorldType::Server) != targetRevision_ ||
+         !game_->world(sim::WorldType::Server))) {
+        return nullptr;
+    }
+    return targetManager_;
+}
+
+EditCamera* FearMissionEditor::camera() const {
+    return getManager() ? dynamic_cast<EditCamera*>(getManager()->findObject("editCamera"))
+                        : nullptr;
+}
+
 sim::SimGroup* FearMissionEditor::getAddGroup() const {
-    if (!targetManager_) {
+    if (!targetManager()) {
         return nullptr;
     }
     for (auto* obj : selection_.objects()) {
@@ -322,14 +420,14 @@ sim::SimGroup* FearMissionEditor::getAddGroup() const {
             return grp;
         }
     }
-    if (auto* mg = dynamic_cast<sim::SimGroup*>(targetManager_->findObject("MissionGroup"))) {
+    if (auto* mg = dynamic_cast<sim::SimGroup*>(targetManager()->findObject("MissionGroup"))) {
         return mg;
     }
-    return targetManager_;
+    return targetManager();
 }
 
 sim::SimObject* FearMissionEditor::addObject(sim::SimObject* obj) {
-    if (!obj || !targetManager_) {
+    if (!obj || !targetManager()) {
         return nullptr;
     }
     if (auto* grp = getAddGroup()) {
@@ -345,10 +443,10 @@ sim::SimObject* FearMissionEditor::addObject(sim::SimObject* obj) {
 }
 
 sim::SimObject* FearMissionEditor::getObject(UInt32 id) const {
-    if (!targetManager_) {
+    if (!targetManager()) {
         return nullptr;
     }
-    return targetManager_->findObject(id);
+    return targetManager()->findObject(id);
 }
 
 bool FearMissionEditor::registerType(UInt32 mask,
@@ -372,42 +470,110 @@ bool FearMissionEditor::registerType(UInt32 mask,
     return true;
 }
 
+bool FearMissionEditor::registerClassType(std::string_view className,
+                                          UInt32 mask,
+                                          std::string_view selectedBmp,
+                                          std::string_view unselectedBmp) {
+    if (className.empty() || std::ranges::any_of(typeInfos_, [&](const TypeInfo& info) {
+            return equalIgnoreCase(info.className, className);
+        })) {
+        return false;
+    }
+    TypeInfo info;
+    info.className = className;
+    info.mask = mask;
+    info.lockedBmpName = selectedBmp;
+    info.unlockedBmpName = unselectedBmp;
+    typeInfos_.push_back(std::move(info));
+    return true;
+}
+
+bool FearMissionEditor::setClassPlaceMask(std::string_view className, std::optional<UInt32> mask) {
+    const auto it = std::ranges::find_if(typeInfos_, [&](const TypeInfo& info) {
+        return equalIgnoreCase(info.className, className);
+    });
+    if (it == typeInfos_.end()) {
+        return !mask;
+    }
+    if (mask) {
+        it->mask = *mask;
+    } else {
+        typeInfos_.erase(it);
+    }
+    return true;
+}
+
 const FearMissionEditor::TypeInfo* FearMissionEditor::getTypeInfo(sim::SimObject* obj) const {
     if (!obj) {
         return nullptr;
     }
     const UInt32 objType = obj->getType();
+    if (game_) {
+        const auto* descriptor = game_->classes().find(typeid(*obj));
+        if (descriptor) {
+            for (const auto& ti : typeInfos_) {
+                if (equalIgnoreCase(ti.className, descriptor->name)) {
+                    return &ti;
+                }
+            }
+        }
+    }
     for (const auto& ti : typeInfos_) {
-        if ((ti.mask & objType) != 0) {
+        if (ti.className.empty() && (ti.mask & objType) != 0) {
             return &ti;
         }
     }
     return nullptr;
 }
 
-void FearMissionEditor::saveInfo() {
+UInt32 FearMissionEditor::placementMask(sim::SimObject* object) const {
+    const auto* info = getTypeInfo(object);
+    return info ? info->mask : defaultPlaceMask_;
+}
+
+void FearMissionEditor::saveInfo(sim::SimObject* object) {
+    for (const auto& entry : undoBuffer_) {
+        if (entry.object &&
+            std::ranges::find(selection_.objects(), entry.object) == selection_.objects().end()) {
+            clearNotify(*entry.object);
+        }
+    }
     undoBuffer_.clear();
-    for (auto* obj : selection_.objects()) {
-        if (!obj) {
-            continue;
+    std::set<sim::SimObject*> seen;
+    const auto visit = [&](const auto& self, sim::SimObject* obj) -> void {
+        if (!obj || !seen.insert(obj).second) {
+            return;
         }
         sim::SimObjectTransformQuery query{};
         if (obj->processQuery(query)) {
-            undoBuffer_.push_back(InfoEntry{obj->getId(), obj, query.transform});
+            undoBuffer_.push_back(InfoEntry{obj->getId(), obj, query.transform, obj->getNumber()});
+            deleteNotify(*obj);
+        } else if (auto* group = dynamic_cast<sim::SimGroup*>(obj)) {
+            for (auto* child : group->objects()) {
+                self(self, child);
+            }
+        }
+    };
+    if (object) {
+        visit(visit, object);
+    } else {
+        for (auto* obj : selection_.objects()) {
+            visit(visit, obj);
         }
     }
 }
 
 void FearMissionEditor::restoreInfo() {
-    for (const auto& entry : undoBuffer_) {
-        sim::SimObject* obj = nullptr;
-        if (targetManager_ && entry.id != 0) {
-            obj = targetManager_->findObject(entry.id);
+    const auto entries = std::exchange(undoBuffer_, {});
+    for (const auto& entry : entries) {
+        // Undo may outlive selection and IDs may have been reused. Resolve in
+        // the original world and verify the instance before restoring anything.
+        auto* manager = targetManager();
+        auto* obj = manager ? manager->findObject(entry.id) : nullptr;
+        if (obj != entry.object && getManager()) {
+            obj = getManager()->findObject(entry.id);
         }
-        if (!obj) {
-            obj = entry.object;
-        }
-        if (obj) {
+        if (obj && obj == entry.object && obj->getNumber() == entry.number) {
             sim::SimObjectTransformEvent ev{};
             ev.transform = entry.transform;
             obj->processEvent(ev);
@@ -417,10 +583,10 @@ void FearMissionEditor::restoreInfo() {
 }
 
 void FearMissionEditor::placeBookmark(Int32 index) {
-    if (index < 0 || index >= 10 || !targetManager_) {
+    if (index < 0 || index >= 10 || !targetManager()) {
         return;
     }
-    if (auto* cam = dynamic_cast<EditCamera*>(targetManager_->findObject("editCamera"))) {
+    if (auto* cam = camera()) {
         bookmarks_[static_cast<std::size_t>(index)].valid = true;
         bookmarks_[static_cast<std::size_t>(index)].pos = cam->movement.pos;
         bookmarks_[static_cast<std::size_t>(index)].rot = EulerF{
@@ -432,14 +598,14 @@ void FearMissionEditor::placeBookmark(Int32 index) {
 }
 
 void FearMissionEditor::gotoBookmark(Int32 index) {
-    if (index < 0 || index >= 10 || !targetManager_) {
+    if (index < 0 || index >= 10 || !targetManager()) {
         return;
     }
     const Bookmark& bm = bookmarks_[static_cast<std::size_t>(index)];
     if (!bm.valid) {
         return;
     }
-    if (auto* cam = dynamic_cast<EditCamera*>(targetManager_->findObject("editCamera"))) {
+    if (auto* cam = camera()) {
         cam->setPosition(bm.pos, bm.rot);
     }
 }
@@ -452,8 +618,33 @@ void FearMissionEditor::moveObjectRelative(sim::SimObject* obj, const Point3F& d
         if (selection_.objectLocked()) {
             return;
         }
+        Point3F movement = delta;
+        const bool snap = flags_.test(SnapToGrid);
+        if (snap) {
+            for (std::size_t axis = 0; axis < 3; ++axis) {
+                if (granularity_[axis] > 0) {
+                    const auto current = selection_.centroid()[axis];
+                    movement[axis] =
+                        std::floor((current + movement[axis]) / granularity_[axis] + .5f) *
+                            granularity_[axis] -
+                        current;
+                }
+            }
+            flags_.clear(SnapToGrid);
+        }
+
+        struct RestoreSnap {
+            BitSet32& flags;
+            bool enabled;
+
+            ~RestoreSnap() {
+                flags.set(SnapToGrid, enabled);
+            }
+        } restore{flags_, snap};
+
         for (auto* child : selection_.objects()) {
-            moveObjectRelative(child, delta);
+            if (!selectedAncestor(selection_, *child))
+                moveObjectRelative(child, movement);
         }
         selection_.calcCentroid();
         return;
@@ -539,7 +730,10 @@ void FearMissionEditor::moveObjectAbsolute(sim::SimObject* obj, const Point3F& p
     selection_.calcCentroid();
 }
 
-void FearMissionEditor::rotateObject(sim::SimObject* obj, const Point3F& anchor, Flt32 rot) {
+void FearMissionEditor::rotateObject(sim::SimObject* obj,
+                                     const Point3F& anchor,
+                                     Flt32 rot,
+                                     UInt32 axes) {
     if (!obj) {
         return;
     }
@@ -548,7 +742,8 @@ void FearMissionEditor::rotateObject(sim::SimObject* obj, const Point3F& anchor,
             return;
         }
         for (auto* child : selection_.objects()) {
-            rotateObject(child, selection_.centroid(), rot);
+            if (!selectedAncestor(selection_, *child))
+                rotateObject(child, anchor, rot, axes);
         }
         selection_.calcCentroid();
         return;
@@ -558,18 +753,23 @@ void FearMissionEditor::rotateObject(sim::SimObject* obj, const Point3F& anchor,
     }
     sim::SimObjectTransformQuery query{};
     if (!obj->processQuery(query)) {
+        if (auto* group = dynamic_cast<sim::SimGroup*>(obj))
+            for (auto* child : group->objects())
+                rotateObject(child, anchor, rot, axes);
         return;
     }
 
     TMat3F tmat = query.transform;
     EulerF rotStep{0.0f, 0.0f, 0.0f};
-    if (flags_.test(RotateX)) {
+    if (!axes)
+        axes = flags_.mask() & (RotateX | RotateY | RotateZ);
+    if (axes & RotateX) {
         rotStep.x = rot;
     }
-    if (flags_.test(RotateY)) {
+    if (axes & RotateY) {
         rotStep.y = rot;
     }
-    if (flags_.test(RotateZ) || !flags_.test(RotateX | RotateY | RotateZ)) {
+    if ((axes & RotateZ) || !axes) {
         rotStep.z = rot;
     }
 
@@ -591,13 +791,13 @@ void FearMissionEditor::rotateObject(sim::SimObject* obj, const Point3F& anchor,
 }
 
 bool FearMissionEditor::dropObjectDown(sim::SimObject* obj) {
-    if (!obj || !targetManager_) {
+    if (!obj || !targetManager()) {
         return false;
     }
     if (&selection_ == obj) {
         bool anyDropped = false;
         for (auto* child : selection_.objects()) {
-            if (dropObjectDown(child)) {
+            if (!selectedAncestor(selection_, *child) && dropObjectDown(child)) {
                 anyDropped = true;
             }
         }
@@ -609,16 +809,20 @@ bool FearMissionEditor::dropObjectDown(sim::SimObject* obj) {
     }
     sim::SimObjectTransformQuery query{};
     if (!obj->processQuery(query)) {
-        return false;
+        bool dropped = false;
+        if (auto* group = dynamic_cast<sim::SimGroup*>(obj))
+            for (auto* child : group->objects())
+                dropped = dropObjectDown(child) || dropped;
+        return dropped;
     }
-    auto* root = dynamic_cast<sim::SimContainer*>(targetManager_->findObject(SimRootContainerId));
+    auto* root = dynamic_cast<sim::SimContainer*>(targetManager()->findObject(SimRootContainerId));
     if (!root) {
         return false;
     }
     sim::SimContainerQuery cq{};
     cq.id = obj->getId();
     cq.type = static_cast<UInt32>(-1);
-    cq.mask = placeMask_;
+    cq.mask = placementMask(obj);
     cq.box.fMin = query.transform.p;
     cq.box.fMax = query.transform.p;
     cq.box.fMax.z -= 2000.0f;
@@ -637,34 +841,88 @@ bool FearMissionEditor::dropObjectDown(sim::SimObject* obj) {
     return true;
 }
 
-void FearMissionEditor::onDrop(sim::SimObject* obj) {
-    if (!obj || !targetManager_) {
+void FearMissionEditor::onDrop(sim::SimObject* obj, UInt32 dropType) {
+    if (!obj || !targetManager()) {
         return;
     }
-    if (flags_.test(DropAtCamera)) {
-        if (auto* cam = dynamic_cast<EditCamera*>(targetManager_->findObject("editCamera"))) {
-            sim::SimObjectTransformEvent ev{};
-            ev.transform = cam->getTransform();
-            obj->processEvent(ev);
+    if (obj->isLocked()) {
+        return;
+    }
+    if (!dropType) {
+        // Vanilla chooses the last enabled drop option in this order.
+        dropType = DropToScreenCenter;
+        for (const auto flag : {DropAtCamera,
+                                DropWithRotAtCamera,
+                                DropBelowCamera,
+                                DropToScreenCenter,
+                                DropToSelectedObject}) {
+            if (flags_.test(flag)) {
+                dropType = flag;
+            }
         }
     }
+    if (auto* group = dynamic_cast<sim::SimGroup*>(obj)) {
+        for (auto* child : group->objects()) {
+            onDrop(child, dropType);
+        }
+        return;
+    }
+    auto* cam = camera();
+    sim::SimObjectTransformQuery query;
+    if (!cam || !obj->processQuery(query)) {
+        return;
+    }
+    auto& transform = query.transform;
+    const auto& cameraTransform = cam->getTransform();
+    if (dropType == DropWithRotAtCamera) {
+        const auto pos = transform.p + cameraTransform.p;
+        transform = cameraTransform;
+        transform.p = pos;
+    } else if (dropType == DropToSelectedObject) {
+        transform.p += selection_.centroid();
+    } else if (dropType == DropToScreenCenter) {
+        Point3F end;
+        m_mul(Point3F{0, 200, 0}, cameraTransform, end);
+        auto* root =
+            dynamic_cast<sim::SimContainer*>(targetManager()->findObject(SimRootContainerId));
+        sim::SimContainerQuery ray;
+        ray.id = cam->getId();
+        ray.type = ~0U;
+        ray.mask = placementMask(obj);
+        ray.box.fMin = cameraTransform.p;
+        ray.box.fMax = end;
+        sim::SimCollisionInfo hit;
+        if (root && root->findLOS(ray, hit) && !hit.surfaces.surfaces.empty()) {
+            m_mul(hit.surfaces.surfaces.front().position, hit.surfaces.tWorld, end);
+        }
+        transform.p += end;
+    } else {
+        transform.p += cameraTransform.p;
+        if (dropType == DropBelowCamera) {
+            transform.p.z -= 15.f;
+        }
+    }
+    transform.flags |= TMat3F::Matrix_HasTranslation;
+    sim::SimObjectTransformEvent event;
+    event.transform = transform;
+    obj->processEvent(event);
     selection_.calcCentroid();
 }
 
 void FearMissionEditor::objectsToCamera() {
-    if (!targetManager_) {
+    if (!targetManager()) {
         return;
     }
-    if (auto* cam = dynamic_cast<EditCamera*>(targetManager_->findObject("editCamera"))) {
+    if (auto* cam = camera()) {
         moveObjectAbsolute(&selection_, cam->getPos());
     }
 }
 
 void FearMissionEditor::cameraToObjects() {
-    if (!targetManager_ || selection_.objects().empty()) {
+    if (!targetManager() || selection_.objects().empty()) {
         return;
     }
-    if (auto* cam = dynamic_cast<EditCamera*>(targetManager_->findObject("editCamera"))) {
+    if (auto* cam = camera()) {
         selection_.calcCentroid();
         cam->setPos(selection_.centroid());
     }
@@ -674,12 +932,8 @@ void FearMissionEditor::deleteObjectRecursive(sim::SimObject* obj) {
     if (!obj || obj == &selection_ || obj->isLocked()) {
         return;
     }
-    if (auto* grp = dynamic_cast<sim::SimGroup*>(obj)) {
-        const std::vector<sim::SimObject*> copy(grp->objects().begin(), grp->objects().end());
-        for (auto* child : copy) {
-            deleteObjectRecursive(child);
-        }
-    }
+    // SimManager deletes a group's children in one protected dispatch. Walking
+    // borrowed child pointers here would outlive siblings deleted by callbacks.
     obj->deleteObject();
 }
 
@@ -687,11 +941,19 @@ void FearMissionEditor::deleteSelection() {
     if (selection_.objectLocked()) {
         return;
     }
-    const std::vector<sim::SimObject*> copy(selection_.objects().begin(),
-                                            selection_.objects().end());
+    auto* manager = targetManager();
+    if (!manager)
+        return;
+    std::vector<sim::SimAddress> copy;
+    for (auto* object : selection_.objects()) {
+        if (!selectedAncestor(selection_, *object))
+            copy.push_back(object->address());
+    }
     selection_.clearSet();
-    for (auto* obj : copy) {
-        deleteObjectRecursive(obj);
+    for (const auto& address : copy) {
+        if (targetManager() != manager)
+            break;
+        deleteObjectRecursive(address.resolve(*manager));
     }
 }
 
@@ -723,8 +985,16 @@ bool FearMissionEditor::copySelection() {
 }
 
 bool FearMissionEditor::pasteSelection() {
-    if (!game_ || !targetManager_ || game_->manager() != targetManager_ ||
-        clipboardScript_.empty()) {
+    return pasteScript(clipboardScript_, false);
+}
+
+bool FearMissionEditor::pasteFile(std::string_view file) {
+    const auto source = game_ ? game_->console().readScript(file) : std::nullopt;
+    return source && pasteScript(*source, true);
+}
+
+bool FearMissionEditor::pasteScript(std::string_view source, bool drop) {
+    if (!game_ || !targetManager() || source.empty()) {
         return false;
     }
     auto* destination = getAddGroup();
@@ -732,15 +1002,23 @@ bool FearMissionEditor::pasteSelection() {
         return false;
     }
     std::string temporaryName = "MissionClipboard";
-    while (targetManager_->findObject(temporaryName)) {
+    while (targetManager()->findObject(temporaryName)) {
         temporaryName += '_';
     }
     // A single declaration makes adoption transactional, including child onAdd
     // failure. It also keeps pasted objects out of the old selection's groups.
-    const auto result = game_->console().evaluate("instant SimGroup " + quoteScript(temporaryName) +
-                                                      " {\r\n" + clipboardScript_ + "};\r\n",
-                                                  "<mission clipboard>");
-    auto* group = dynamic_cast<sim::SimGroup*>(targetManager_->findObject(temporaryName));
+    script::ExecutionResult result;
+    const auto evaluate = [&] {
+        result = game_->console().evaluate("instant SimGroup " + quoteScript(temporaryName) +
+                                               " {\r\n" + std::string(source) + "};\r\n",
+                                           "<mission clipboard>");
+    };
+    if (serverTarget_) {
+        game_->withWorld(sim::WorldType::Server, evaluate);
+    } else {
+        evaluate();
+    }
+    auto* group = dynamic_cast<sim::SimGroup*>(targetManager()->findObject(temporaryName));
     if (!result.ok() || !group) {
         if (group) {
             group->deleteObject();
@@ -748,6 +1026,18 @@ bool FearMissionEditor::pasteSelection() {
         return false;
     }
     const std::vector<sim::SimObject*> pasted(group->objects().begin(), group->objects().end());
+    if (pasted.empty()) {
+        group->deleteObject();
+        return false;
+    }
+    // The old selection defines DropToSelectedObject's destination.
+    selection_.calcCentroid();
+    if (drop)
+        for (auto* object : pasted) {
+            onDrop(object);
+            if (flags_.test(DropToGround))
+                dropObjectDown(object);
+        }
     const auto uniqueName = [&](sim::SimObject& object) {
         const std::string original(object.getName());
         if (!original.empty()) {
@@ -762,6 +1052,9 @@ bool FearMissionEditor::pasteSelection() {
             object.assignName(name);
         }
     };
+    auto& console = game_->console();
+    if (console.isFunction("MissionObjectList::ClearSelection"))
+        (void)console.execute("MissionObjectList::ClearSelection");
     selection_.clearSet();
     for (auto* object : pasted) {
         uniqueName(*object);
@@ -776,17 +1069,17 @@ bool FearMissionEditor::pasteSelection() {
             return false;
         }
         selection_.addObject(*object);
+        sim::SimEditEvent edit;
+        edit.state = focused_;
+        object->processEvent(edit);
+        if (console.isFunction("MissionObjectList::SelectObject"))
+            (void)console.execute("MissionObjectList::SelectObject",
+                                  std::array<std::string, 2>{"1", std::to_string(object->getId())});
     }
     group->deleteObject();
     selection_.calcCentroid();
-    if (flags_.test(DropAtCamera)) {
-        if (auto* camera = dynamic_cast<EditCamera*>(targetManager_->findObject("editCamera"))) {
-            moveObjectRelative(&selection_, camera->getPos() - copyPosition_);
-        }
-    }
-    if (flags_.test(DropToGround)) {
-        dropObjectDown(&selection_);
-    }
+    // Vanilla clipboard paste restores the copied world positions regardless
+    // of the creator's current drop mode. Only PasteFile uses that mode.
     return !pasted.empty();
 }
 
@@ -807,17 +1100,18 @@ bool FearMissionEditor::duplicateSelection() {
 }
 
 void FearMissionEditor::getConsoleOptions() {
-    if (!targetManager_) {
+    if (!targetManager()) {
         return;
     }
-    auto* con = targetManager_->console();
+    auto* con = targetManager()->console();
     if (!con) {
         return;
     }
 
-    auto setFlagFromVar = [this, con](UInt32 flag, std::string_view varName) {
+    auto setFlagFromVar = [this,
+                           con](UInt32 flag, std::string_view varName, bool fallback = false) {
         const std::string v = con->getVariable(varName);
-        const bool isTrue = (v == "1" || v == "true" || v == "True" || v == "TRUE");
+        const bool isTrue = con->hasVariable(varName) ? script::toBool(v) : fallback;
         flags_.set(flag, isTrue);
     };
 
@@ -826,29 +1120,55 @@ void FearMissionEditor::getConsoleOptions() {
     setFlagFromVar(ConstrainZ, "$ME::ConstrainZ");
     setFlagFromVar(RotateX, "$ME::RotateXAxis");
     setFlagFromVar(RotateY, "$ME::RotateYAxis");
-    setFlagFromVar(RotateZ, "$ME::RotateZAxis");
-    setFlagFromVar(DropToGround, "$ME::DropToGround");
+    setFlagFromVar(RotateZ, "$ME::RotateZAxis", true);
+    setFlagFromVar(DropToGround,
+                   con->hasVariable("ME::ObjectsSnapToTerrain") ? "ME::ObjectsSnapToTerrain"
+                                                                : "ME::DropToGround");
     setFlagFromVar(SnapToGrid, "$ME::SnapToGrid");
     setFlagFromVar(SnapRotations, "$ME::SnapRotations");
     setFlagFromVar(DropAtCamera, "$ME::DropAtCamera");
     setFlagFromVar(DropWithRotAtCamera, "$ME::DropWithRotAtCamera");
     setFlagFromVar(DropBelowCamera, "$ME::DropBelowCamera");
-    setFlagFromVar(DropToScreenCenter, "$ME::DropToScreenCenter");
+    setFlagFromVar(DropToScreenCenter, "$ME::DropToScreenCenter", true);
     setFlagFromVar(DropToSelectedObject, "$ME::DropToSelectedObject");
     setFlagFromVar(UsePlaneMovement, "$ME::UsePlaneMovement");
     setFlagFromVar(AxisFollowsCamera, "$ME::AxisFollowsCamera");
-    setFlagFromVar(ShowEditObjects, "$ME::ShowEditObjects");
-    setFlagFromVar(ShowHandles, "$ME::ShowHandles");
+    setFlagFromVar(ShowEditObjects, "$ME::ShowEditObjects", true);
+    setFlagFromVar(ShowHandles,
+                   con->hasVariable("ME::ShowGrabHandles") ? "ME::ShowGrabHandles"
+                                                           : "ME::ShowHandles",
+                   true);
 
     granularity_.set(parseFloatVar(con->getVariable("$ME::XGridSnap"), 1.0f),
                      parseFloatVar(con->getVariable("$ME::YGridSnap"), 1.0f),
-                     parseFloatVar(con->getVariable("$ME::ZGridSnap"), 1.0f));
-    rotationSnap_ = parseFloatVar(con->getVariable("$ME::RotationSnap"), 15.0f);
+                     parseFloatVar(con->getVariable("$ME::ZGridSnap"), 0.001f));
+    rotationSnap_ = parseFloatVar(con->getVariable("$ME::RotationSnap"), 90.0f);
 }
 
 void FearMissionEditor::rebuildCommandMap() {
-    if (targetManager_ && targetManager_->console()) {
-        (void)targetManager_->console()->execute("rebuildCommandMap");
+    if (targetManager() && targetManager()->console()) {
+        const auto oldFlags = flags_;
+        const bool oldFocus = focused_;
+        flags_.clear(ShowEditObjects | ShowHandles);
+        sim::SimLoseFocusEvent lose;
+        if (oldFocus)
+            processEvent(lose);
+
+        struct Restore {
+            FearMissionEditor& editor;
+            BitSet32 flags;
+            bool focus;
+
+            ~Restore() {
+                editor.flags_ = flags;
+                if (focus) {
+                    sim::SimGainFocusEvent gain;
+                    editor.processEvent(gain);
+                }
+            }
+        } restore{*this, oldFlags, oldFocus};
+
+        (void)targetManager()->console()->execute("rebuildCommandMap");
     }
 }
 

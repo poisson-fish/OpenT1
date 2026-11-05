@@ -17,6 +17,7 @@
 #include <opent1/game/explosion.hpp>
 #include <opent1/game/f_base.hpp>
 #include <opent1/game/fear_mission_editor.hpp>
+#include <opent1/game/mission_editor_controls.hpp>
 #include <opent1/game/fear_player_psc.hpp>
 #include <opent1/game/fear_plugin.hpp>
 #include <opent1/game/flying_camera.hpp>
@@ -1074,6 +1075,11 @@ bool FearPlugin::createClientWorld() {
 }
 
 void FearPlugin::destroyServerWorld() {
+    if (console_) console_->setVariable("ME::Loaded", "False");
+    if (terrainEditor_) {
+        terrainEditor_->focused = false;
+        terrainEditor_->detach();
+    }
     localClientId_ = 0;
     pendingLocalKick_.reset();
     if (scriptPlugin_) {
@@ -1756,9 +1762,12 @@ void FearPlugin::installTerrainEditing(Console& console) {
     };
     terrainEditor_->terrainLoader =
         [this](std::string_view name) -> std::optional<world::TerrainDocument> {
-        auto* activeManager = game_.manager();
-        auto* terrain =
-            dynamic_cast<world::SimMissionTerrain*>(resolveSimObject(activeManager, name));
+        // The normal ted.cs attach has no name and runs with client focus.
+        auto* server = game_.world(sim::WorldType::Server);
+        auto* activeManager = server ? &server->manager() : game_.manager();
+        auto* terrain = dynamic_cast<world::SimMissionTerrain*>(
+            name.empty() ? (activeManager ? activeManager->findObject(sim::TerrainId) : nullptr)
+                         : resolveSimObject(activeManager, name));
         if (!terrain) {
             return std::nullopt;
         }
@@ -1782,6 +1791,27 @@ void FearPlugin::installTerrainEditing(Console& console) {
             activeManager == sg_.manager ? sim::WorldType::Server : sim::WorldType::Client;
         editedTerrainWorldRevision_ = game_.worldRevision(editedTerrainWorld_);
         editedTerrain_ = terrain->address();
+        // currFile names the enclosing terrain volume, not its .dtf entry.
+        // Keep writes under the configured write root, using the mission's
+        // relative directory instead of an installed asset's absolute path.
+        const auto source = resources_ ? resources_->getFullPath(document.gridName) : std::nullopt;
+        FileName mission(console_->getVariable("missionFile"));
+        auto filename = source ? source->filename()
+                               : std::filesystem::path(document.gridName).replace_extension(".ted");
+        terrainEditor_->attachedFile =
+            (FileName(mission.getPath()).toFilesystemPath() / filename).generic_string();
+        if (source) {
+            const auto assetRoot = console_->getVariable("OpenT1::AssetRoot");
+            if (!assetRoot.empty()) {
+                for (const auto& root : {std::filesystem::path(assetRoot), console_->filePath("")}) {
+                    const auto relative = source->lexically_relative(root);
+                    if (!relative.empty() && !relative.is_absolute() && *relative.begin() != "..") {
+                        terrainEditor_->attachedFile = relative.generic_string();
+                        break;
+                    }
+                }
+            }
+        }
         return document;
     };
     terrainEditor_->publisher([selected](const world::TerrainDocument& document) {
@@ -1860,6 +1890,7 @@ void FearPlugin::installTerrainEditing(Console& console) {
         return world::relightTerrainDetailed(document, *lighting, options);
     };
     world::installTerrainEditorCommands(console, terrainEditor_);
+    installTerrainEditorFocus(game_, terrainEditor_);
 }
 
 void FearPlugin::init(Console& console, sim::SimManager* manager) {
@@ -3203,6 +3234,7 @@ void FearGameApp::registerGameClassesAndFactories() {
     registerFlierClass(classes);
     registerExplosionClass(classes);
     registerFearGuiClasses(classes);
+    registerMissionEditorGuiClasses(classes);
     gui::registerViewportClass(classes);
 
     classes.registerClass<Sky>("Sky", TribesSkyPersTag);
@@ -3393,8 +3425,12 @@ void FearGameApp::registerGameClassesAndFactories() {
     game_.registerFactory("ObserverCamera", []() {
         return std::make_unique<ObserverCamera>();
     });
-    game_.registerFactory("EditCamera", []() {
-        return std::make_unique<EditCamera>();
+    game_.registerFactory("EditCamera", [this]() {
+        auto camera = std::make_unique<EditCamera>();
+        camera->loadActionMap = [this](std::string_view name) {
+            return inputMaps_.find(name);
+        };
+        return camera;
     });
     game_.registerFactory("AIManager", []() {
         return std::make_unique<AIManager>();
@@ -3922,6 +3958,10 @@ void FearGameApp::installRuntimeServices() {
     auto tags = std::shared_ptr<const TagDictionary>(&console.tags(), [](const TagDictionary*) {});
     auto bindings = gui::resourceBindings(resources_, tags);
     bindings.custom = [this](gui::Control& control) {
+        if (!bindMissionEditorGuiControl(control, game_, *resources_)) {
+            return false;
+        }
+        bindMissionEditorViewport(control, game_, fearPlugin_->terrainEditor());
         if (auto* button = dynamic_cast<FGUniversalButton*>(&control)) {
             button->playSound = [this](std::string_view name) {
                 if (playShellSound) {
@@ -4649,6 +4689,7 @@ void FearGameApp::installRuntimeServices() {
     console.removeCommand("cursorOn");
     console.removeCommand("cursorOff");
     guiRuntime_->install();
+    installMissionEditorGuiCommands(console, guiRuntime_, game_);
     installShellCommands();
     legacySound.install(console);
     // Track explicitly required exec failures without replacing script functions.
@@ -5059,6 +5100,7 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
     game_.console().setVariable("OpenT1::LastRenderError", "");
     std::optional<gfx::HardwareBatch> background;
     std::optional<gfx::HardwareBatch> worldBatch;
+    std::optional<gfx::HardwareBatch> damageFlash;
     std::optional<gfx::HardwareBatch> hardwareForeground;
     std::vector<gfx::HardwareBatch> guiLayers;
     ensureFallbackRenderAssets();
@@ -5198,9 +5240,12 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
         }
 
         const GameBase* ctrlObj = cg.playerPSC ? cg.playerPSC->getControlObject() : nullptr;
+        Flt32 flash = ctrlObj ? cg.playerPSC->damageFlash() : 0.f;
         if (!ctrlObj && sg.playerPSC) {
             ctrlObj = sg.playerPSC->getControlObject();
+            flash = ctrlObj ? ctrlObj->getDamageFlash() : 0.f;
         }
+        flash = std::clamp(flash, 0.f, .76f);
         TMat3F camToWorld;
         camToWorld.identity();
         if (ctrlObj) {
@@ -5415,6 +5460,42 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
             return false;
         }
 
+        // Native camera damage tint covers the completed scene (including
+        // translucent effects), before HUD text and panels are composited.
+        if (flash > 0.f) {
+            if (hardware) {
+                const std::array<gfx::PolygonVertex, 4> quad{
+                    {{{0, 0}}, {{Flt32(w), 0}}, {{Flt32(w), Flt32(h)}}, {{0, Flt32(h)}}}};
+                gfx::HardwareMaterial material;
+                material.color = {1, 0, 0};
+                material.opacity = flash;
+                material.alphaSource = gfx::HardwareAlphaSource::Constant;
+                material.blend = gfx::HardwareBlend::Alpha;
+                material.depth = gfx::HardwareDepth::Disabled;
+                material.perspective = false;
+                const gfx::HardwarePolygon polygon{quad, material};
+                damageFlash = gfx::HardwareBatch::prepare(std::span(&polygon, 1));
+                if (!damageFlash) {
+                    return false;
+                }
+            } else {
+                // Quantize the scene back into its active indexed palette;
+                // changing the palette itself would also tint the later HUD.
+                std::array<std::byte, 256> remap;
+                const auto& colors = surface.palette()->find().colors;
+                for (std::size_t i = 0; i < remap.size(); ++i) {
+                    const auto& color = colors[i];
+                    remap[i] = std::byte(surface.palette()->nearest(
+                        {UInt8(color.red * (1.f - flash) + 255.f * flash),
+                         UInt8(color.green * (1.f - flash)),
+                         UInt8(color.blue * (1.f - flash)),
+                         0}));
+                }
+                for (auto& pixel : surface.pixels()) {
+                    pixel = remap[std::to_integer<UInt8>(pixel)];
+                }
+            }
+        }
     } else {
         MMShellBorder border;
         border.setBitmapName("MainMenuBkgnd.bmp");
@@ -5637,6 +5718,9 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
             std::vector<const gfx::HardwareBatch*> layers{&*background};
             if (worldBatch) {
                 layers.push_back(&*worldBatch);
+            }
+            if (damageFlash) {
+                layers.push_back(&*damageFlash);
             }
             for (const auto& guiLayer : guiLayers) {
                 layers.push_back(&guiLayer);

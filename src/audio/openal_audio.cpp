@@ -35,6 +35,7 @@ bool finite(const Point3F& v) {
 }
 
 struct BackendState {
+    mutable std::recursive_mutex mutex;
     ALCdevice* device{};
     ALCcontext* context{};
     PFNALCSETTHREADCONTEXTPROC setThread{};
@@ -62,7 +63,7 @@ struct BackendState {
 namespace {
 class Context {
 public:
-    explicit Context(const BackendState& s) : s_(s), previous_(s.getThread()) {
+    explicit Context(const BackendState& s) : lock_(s.mutex), s_(s), previous_(s.getThread()) {
         if (!s_.setThread(s_.context)) {
             throw std::runtime_error("cannot select OpenAL context");
         }
@@ -74,6 +75,7 @@ public:
     }
 
 private:
+    std::unique_lock<std::recursive_mutex> lock_;
     const BackendState& s_;
     ALCcontext* previous_{};
 };
@@ -390,6 +392,10 @@ std::string Device::renderer() const {
     const auto* s = alGetString(AL_RENDERER);
     check();
     return s ? s : "";
+}
+
+bool Device::loopback() const {
+    return state_ && state_->render;
 }
 
 QueuedSource::QueuedSource(std::shared_ptr<BackendState> state,

@@ -181,7 +181,7 @@ if(NOT SDL3_FOUND)
     fetchcontent_makeavailable(SDL3)
     include(cmake/SDL3EventWatch.cmake)
 endif()
-add_library(opent1_platform STATIC src/platform/sdl_window.cpp)
+add_library(opent1_platform STATIC src/platform/sdl_window.cpp src/platform/process_console.cpp)
 target_link_libraries(opent1_platform PUBLIC opent1_core opent1_net SDL3::SDL3)
 
 # -----------------------------------------------------------------------------
@@ -438,6 +438,8 @@ add_library(
     src/game/FearMissionEditor.cpp
     src/game/fearMissionPlugin.cpp
     src/game/MissionObjectList.cpp
+    src/game/missionEditorControls.cpp
+    src/game/missionEditorViewport.cpp
     src/game/HudManager.cpp
     src/game/fearGuiHudCtrl.cpp
     src/game/FearGuiHudArrayCtrl.cpp

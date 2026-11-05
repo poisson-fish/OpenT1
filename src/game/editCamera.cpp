@@ -27,9 +27,20 @@ EditCamera::~EditCamera() = default;
 
 void EditCamera::setActionMap(std::string_view fileName) {
     if (auto* mgr = getManager()) {
-        auto mapRes = sim::SimResource::loadByName<sim::SimActionMap>(*mgr, fileName);
-        if (mapRes) {
-            actionMap_ = std::make_shared<sim::SimActionMap>(*mapRes);
+        auto map = loadActionMap ? loadActionMap(fileName) : nullptr;
+        if (!map) {
+            auto mapRes = sim::SimResource::loadByName<sim::SimActionMap>(*mgr, fileName);
+            if (mapRes)
+                map = std::make_shared<sim::SimActionMap>(*mapRes);
+        }
+        if (map) {
+            if (actionMap_) {
+                if (auto* ah =
+                        dynamic_cast<sim::SimActionHandler*>(mgr->findObject(SimActionHandlerId))) {
+                    ah->pop(*this, actionMap_.get());
+                }
+            }
+            actionMap_ = std::move(map);
             if (hasFocus_) {
                 if (auto* ah =
                         dynamic_cast<sim::SimActionHandler*>(mgr->findObject(SimActionHandlerId))) {
@@ -126,7 +137,7 @@ Flt32 EditCamera::getFarPlane() const {
             return terr->state().visibleDistance * 1.1f;
         }
     }
-    return 100000.0f;
+    return 65536.0f;
 }
 
 bool EditCamera::onSimTimerEvent(const sim::SimTimerEvent& event) {

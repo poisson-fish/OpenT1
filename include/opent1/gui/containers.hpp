@@ -123,6 +123,9 @@ public:
     void onRemove() override;
     bool draw(gfx::SoftwareSurface&, Point2I, RectI) const override;
 
+protected:
+    virtual void selectionCommitted() {}
+
 private:
     class Popup;
     std::unique_ptr<Popup> popup_;

@@ -34,17 +34,8 @@ inline constexpr Int32 SimLoseFocusEventType = sim::EventTypeFirst + 2;
 inline constexpr Int32 SimGainFocusEventType = sim::EventTypeFirst + 3;
 inline constexpr Int32 SimFrameEndNotifyEventType = sim::EventTypeFirst + 6;
 
-struct SimLoseFocusEvent : sim::SimEvent {
-    SimLoseFocusEvent() {
-        type = SimLoseFocusEventType;
-    }
-};
-
-struct SimGainFocusEvent : sim::SimEvent {
-    SimGainFocusEvent() {
-        type = SimGainFocusEventType;
-    }
-};
+using SimLoseFocusEvent = sim::SimLoseFocusEvent;
+using SimGainFocusEvent = sim::SimGainFocusEvent;
 
 struct SimFrameEndNotifyEvent : sim::SimEvent {
     SimFrameEndNotifyEvent() {

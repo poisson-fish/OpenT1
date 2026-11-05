@@ -1,4 +1,5 @@
 #include <opent1/game/legacy_sound.hpp>
+#include <algorithm>
 #include <cmath>
 
 namespace opent1::game {
@@ -9,7 +10,9 @@ void LegacySound::install(Console& console) {
                             "sfxAdd3DProfile",
                             "sfxAddPair",
                             "sfxPlay",
-                            "sfxStop"}) {
+                            "sfxStop",
+                            "sfxSetMaxBuffers",
+                            "sfxGetMaxBuffers"}) {
         console.addCommand(
             0,
             name,
@@ -30,6 +33,21 @@ void LegacySound::install(Console& console) {
                 }
                 if (!initialized_) {
                     return "False";
+                }
+                if (command == "sfxSetMaxBuffers") {
+                    if (args.size() != 2 || script::toInteger(args[1]) < 0)
+                        return "False";
+                    const auto count = UInt32(std::min<Int64>(script::toInteger(args[1]), 32));
+                    if (setMaxBuffers && !setMaxBuffers(count))
+                        return "False";
+                    maxBuffers_ = count;
+                    return "True";
+                }
+                if (command == "sfxGetMaxBuffers") {
+                    if (args.size() != 1)
+                        return "False";
+                    con.print("Sfx::Manager::maxBuffers = " + std::to_string(maxBuffers_));
+                    return std::to_string(maxBuffers_);
                 }
                 if (command == "sfxSetFormat") {
                     if (args.size() != 4) {

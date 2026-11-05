@@ -8,6 +8,11 @@ class LegacySound {
 public:
     std::function<UInt64(UInt32, std::string_view, const audio::Profile&, float)> play;
     std::function<bool(UInt64)> stop;
+    std::function<bool(UInt32)> setMaxBuffers;
+
+    [[nodiscard]] UInt32 maxBuffers() const {
+        return maxBuffers_;
+    }
     void install(Console&);
 
 private:
@@ -20,5 +25,6 @@ private:
     std::map<UInt32, audio::Profile> profiles_;
     std::map<UInt32, Pair> pairs_;
     bool initialized_{};
+    UInt32 maxBuffers_{16};
 };
 } // namespace opent1::game

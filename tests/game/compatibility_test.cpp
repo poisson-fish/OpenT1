@@ -16,6 +16,7 @@
 #include <opent1/core/filename.hpp>
 #include <opent1/sim/sim_interior_grouping.hpp>
 #include <opent1/sim/sim_editor_events.hpp>
+#include <opent1/sim/sim_net.hpp>
 #include <opent1/world/interior_shape.hpp>
 #include <opent1/world/interior_links.hpp>
 #include <opent1/world/world_surfaces.hpp>
@@ -101,6 +102,7 @@ void compatibility() {
     game::FearGameApp::Config config;
     config.assetRoot = root;
     game::FearGameApp app(config);
+    app.console().setVariable("Server::Port", "0");
 
     struct NeedsArchive : sim::SimObject {
         ResourceManager* resources{};
@@ -237,10 +239,16 @@ void compatibility() {
         sfxAddPair(42,100,"UI.wav",0.3);
         $SoundHandle = sfxPlay(42);
         $SoundStopped = sfxStop($SoundHandle);
+        sfxSetMaxBuffers(999);
+        $SoundMaxBuffers = sfxGetMaxBuffers();
+        $InvalidSoundLimit = sfxSetMaxBuffers(-1);
     )")
               .ok());
     CHECK(played == 1 && app.console().getVariable("SoundHandle") == "99" &&
           app.console().getVariable("SoundStopped") == "True");
+    CHECK(app.legacySound.maxBuffers() == 32 &&
+          app.console().getVariable("SoundMaxBuffers") == "32" &&
+          app.console().getVariable("InvalidSoundLimit") == "False");
     app.shutdown();
     CHECK(!app.resources().contains("server.cs"));
 }
@@ -339,6 +347,71 @@ void legacyInteriorFaceMasks() {
     instances[0].linkableFaces = 256;
     CHECK(!world::InteriorLinkGraph::prepare(instances));
 }
+
+void interiorBuildingChecks() {
+    ResourceManager manager;
+    auto shape = std::make_unique<world::InteriorShape>();
+    shape->states = {{"normal", 0, 2}, {"damaged", 2, 1}};
+    shape->lods = {{0, 2, 0, ""}, {0, 4, 0, ""}, {0, 0, 0, ""}};
+    shape->lightStateNames = {"day", "night"};
+    CHECK(manager.add("checks.dis", std::move(shape)));
+    auto resources = std::make_shared<world::InteriorShapeResources>();
+    resources->shape = manager.load<world::InteriorShape>("checks.dis");
+    const std::array<UInt32, 3> builds{0x11223344U, 0x89abcdefU, 7};
+    for (auto i : std::views::iota(std::size_t{}, builds.size())) {
+        auto geometry = std::make_unique<world::InteriorGeometry>();
+        geometry->buildId = std::bit_cast<Int32>(builds[i]);
+        const auto name = std::format("checks{}.dig", i);
+        CHECK(manager.add(name, std::move(geometry)));
+        resources->geometry.push_back(manager.load<world::InteriorGeometry>(name));
+    }
+    for (auto i : std::views::iota(0, 6)) {
+        auto light = std::make_unique<world::InteriorLighting>();
+        if (i == 2) {
+            light->mapData = {std::byte{0x80}, std::byte{1}};
+            light->names = {std::byte{0x41}, std::byte{0}};
+        } else if (i == 4) {
+            light->mapData = {std::byte{0x10}, std::byte{0x20}, std::byte{0x30}};
+            light->names = {std::byte{0x42}, std::byte{0}};
+        } else if (i != 0) {
+            light->mapData = {std::byte{0xf0}};
+            light->names = {std::byte{0xaa}};
+        }
+        const auto name = std::format("checks{}.dil", i);
+        CHECK(manager.add(name, std::move(light)));
+        resources->lighting.push_back(manager.load<world::InteriorLighting>(name));
+    }
+    auto override = std::make_unique<world::InteriorLighting>();
+    override->mission = true;
+    override->mapData = {std::byte{0xff}};
+    CHECK(manager.add("override.dil", std::move(override)));
+    resources->missionLighting.assign(6, manager.load<world::InteriorLighting>("override.dil"));
+
+    game::InteriorShape server;
+    server.setFileName("checks.dis");
+    server.setShapeResources(resources);
+    const std::vector<UInt32> expected{
+        builds[0], builds[1], builds[2], 0x01010082U, 0x00300084U, 0};
+    // Vanilla verifies all geometry IDs, then one base-lighting check per LOD.
+    // Alternate light states and mission-lighting overrides are not included.
+    CHECK(server.checkVals() == expected);
+    server.setShapeResources(resources);
+    CHECK(server.checkVals() == expected);
+
+    sim::network::GhostManager ghosts;
+    std::array<std::byte, 1024> packet{};
+    BitStream out{std::span(packet)};
+    CHECK(server.packUpdate(ghosts, game::InteriorShape::InitialUpdate, out) == 0);
+    CHECK(out.isValid());
+    const auto bits = out.getCurPos();
+    BitStream in{std::span<const std::byte>(packet)};
+    in.setLimits(bits, 0);
+    game::GameBase parent;
+    CHECK(parent.unpackUpdate(ghosts, in));
+    world::InteriorMissionState received;
+    CHECK(received.unpack(in) && in.getCurPos() == bits);
+    CHECK(received.filename == "checks.dis" && received.checks == expected);
+}
 }
 
 int opent1_test_asset_compatibility() {
@@ -347,6 +420,7 @@ int opent1_test_asset_compatibility() {
         largeInteriorMeshes();
         emptyMissionLighting();
         legacyInteriorFaceMasks();
+        interiorBuildingChecks();
     });
 }
 

@@ -3,6 +3,7 @@
 #include <opent1/gui/containers.hpp>
 #include <opent1/gui/text_format.hpp>
 #include <opent1/core/mem_stream.hpp>
+#include <opent1/core/text.hpp>
 #include <charconv>
 #include <cmath>
 #include <unordered_set>
@@ -773,6 +774,22 @@ void Runtime::delegate(std::shared_ptr<Delegate> next) {
 }
 
 bool Runtime::open(std::string_view path, bool dialog, UInt32 message) {
+    bool accepted = false;
+
+    struct ReportFailure {
+        Runtime& runtime;
+        std::string_view path;
+        bool& accepted;
+
+        ~ReportFailure() {
+            if (!accepted && runtime.loadFailed) {
+                try {
+                    runtime.loadFailed(path);
+                } catch (...) {
+                }
+            }
+        }
+    } report{*this, path, accepted};
     if (stopped_ || changing_ || path.empty() || path.size() > 240 ||
         path.find('\0') != std::string_view::npos || !loadFile) {
         return false;
@@ -823,15 +840,20 @@ bool Runtime::open(std::string_view path, bool dialog, UInt32 message) {
         if (weak.expired()) {
             return false;
         }
-        canvas.afterDispatch(
-            [weak, graph = std::move(graph), next = std::move(next), dialog, message] {
-                if (auto self = weak.lock()) {
-                    self->show(graph, dialog, next, message);
-                }
-            });
-        return true;
+        canvas.afterDispatch([weak,
+                              graph = std::move(graph),
+                              next = std::move(next),
+                              dialog,
+                              message,
+                              path = std::string(path)] {
+            if (auto self = weak.lock()) {
+                if (!self->show(graph, dialog, next, message) && self->loadFailed)
+                    self->loadFailed(path);
+            }
+        });
+        return accepted = true;
     }
-    return show(std::move(graph), dialog, std::move(next), message);
+    return accepted = show(std::move(graph), dialog, std::move(next), message);
 }
 
 bool Runtime::routeEvent(const Event& e) {
@@ -1091,7 +1113,7 @@ Control* Runtime::findControl(std::string_view key) const {
                 return found;
             }
         }
-        if (root.getName() == key) {
+        if (equalIgnoreCase(root.getName(), key)) {
             return &root;
         }
         return root.findNamed(key);

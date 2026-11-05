@@ -172,6 +172,19 @@ bool FearPlugin::configureRemoteStream(sim::network::PacketStream& stream) {
                 representative.observerCameraId = added->getId();
             }
         }
+        // Native clients need the team skins before roster entries and ghosts:
+        // static NPCs use the team directly, and AI team changes copy its skin.
+        for (Int32 teamId = -1; teamId < sg_.playerManager->getNumTeams(); ++teamId) {
+            const auto* team = sg_.playerManager->findTeam(teamId);
+            if (!team) {
+                return false;
+            }
+            auto event = std::make_unique<TeamAddEvent>(*team);
+            event->flags = sim::SimEvent::Guaranteed | sim::SimEvent::Ordered;
+            if (!stream.sendRemoteEvent(std::move(event))) {
+                return false;
+            }
+        }
         const auto publish = [](PlayerManager::ClientRep& source,
                                 sim::network::PacketStream& destination) {
             auto event = std::make_unique<PlayerAddEvent>();

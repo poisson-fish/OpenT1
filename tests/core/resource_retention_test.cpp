@@ -90,6 +90,45 @@ int sourceRetention() {
         std::filesystem::remove_all(root);
     });
 }
+
+int volumeReplacementRetention() {
+    return test::run([] {
+        const auto root = std::filesystem::absolute(
+            "volume-refresh-" +
+            std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        std::filesystem::create_directories(root / "installed");
+        std::filesystem::create_directories(root / "writable");
+        struct Cleanup {
+            std::filesystem::path path;
+            ~Cleanup() {
+                std::error_code ec;
+                std::filesystem::remove_all(path, ec);
+            }
+        } cleanup{root};
+        archive(root / "installed/mission.ted", "height.dat", "original");
+        archive(root / "writable/mission.ted", "height.dat", "edited");
+        ResourceManager manager;
+        CHECK(manager.setSearchPaths(std::array{root / "installed"}));
+        CHECK(manager.addVolume("mission.ted") && manager.addVolume("mission.ted"));
+        const auto original = manager.load<RawData>("height.dat");
+        CHECK(original && value(*original) == "original");
+        const std::array paths{root / "writable", root / "installed"};
+        CHECK(manager.setSearchPaths(paths) && manager.addVolume("mission.ted"));
+        const auto edited = manager.load<RawData>("height.dat");
+        CHECK(edited && value(*edited) == "edited" && value(*original) == "original");
+        // Atomic replacement of the same physical path must also remount.
+        archive(root / "writable/replacement.ted", "height.dat", "second edit");
+        std::filesystem::rename(root / "writable/mission.ted", root / "previous.ted");
+        std::filesystem::rename(root / "writable/replacement.ted", root / "writable/mission.ted");
+        CHECK(manager.setSearchPaths(paths) && manager.addVolume("mission.ted"));
+        CHECK(value(*manager.load<RawData>("height.dat")) == "second edit");
+        CHECK(value(*edited) == "edited" && value(*original) == "original");
+        for (int i = 0; i < 3; ++i)
+            CHECK(manager.removeVolume("mission.ted") && manager.contains("height.dat"));
+        CHECK(manager.removeVolume("mission.ted") && !manager.contains("height.dat"));
+    });
+}
 }
 
 OPENT1_REGISTER_TEST("core", "source_resolution_retention", sourceRetention);
+OPENT1_REGISTER_TEST("core", "volume_replacement_retention", volumeReplacementRetention);

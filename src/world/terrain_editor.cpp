@@ -364,7 +364,7 @@ bool TerrainEditor::settings(const TerrainEditorSettings& s) {
         std::abs(s.adjust) > 1e6f || std::abs(s.scale) > 1e6f || s.smooth < 0 || s.smooth > 1 ||
         std::abs(s.mouseAdjust) > 1000 || s.brushDetail > 10 || s.pinDetail < 1 ||
         s.pinDetail >= 10 || s.pinMax < s.pinDetail || s.pinMax > 11 ||
-        s.leftAction >= actionNames.size() || s.rightAction >= actionNames.size() ||
+        s.leftAction > actionNames.size() || s.rightAction > actionNames.size() ||
         (s.paste & ~3U)) {
         return false;
     }
@@ -1336,6 +1336,17 @@ bool TerrainEditor::applyTextures() {
 
 namespace {
 constexpr std::array commands{"initTed",
+                              "GetConsoleOptions",
+                              "setSelectShow",
+                              "setSelectFrameColor",
+                              "setSelectFillColor",
+                              "setHilightShow",
+                              "setHilightFrameColor",
+                              "setHilightFillColor",
+                              "setShadowShow",
+                              "setShadowFrameColor",
+                              "setShadowFillColor",
+                              "setBlockOutline",
                               "quitTed",
                               "close",
                               "setSnap",
@@ -1423,6 +1434,41 @@ std::optional<std::string> TerrainEditor::command(std::string_view name,
     const auto yes = [](bool b) {
         return std::optional<std::string>(b ? "True" : "False");
     };
+    if (a == "setblockoutline") {
+        const auto value = argv.size() == 1 ? boolean(argv[0]) : std::nullopt;
+        if (!value)
+            return yes(false);
+        blockOutline = *value != 0;
+        return yes(true);
+    }
+    for (auto [prefix, display] : {std::pair{"setselect", &selectionDisplay},
+                                   std::pair{"sethilight", &highlightDisplay},
+                                   std::pair{"setshadow", &shadowDisplay}}) {
+        if (!a.starts_with(prefix))
+            continue;
+        const auto suffix = a.substr(std::string_view(prefix).size());
+        if (suffix == "show") {
+            if (argv.size() != 3)
+                return yes(false);
+            UInt8 mask{};
+            for (UInt32 i = 0; i < 3; ++i) {
+                const auto value = boolean(argv[i]);
+                if (!value)
+                    return yes(false);
+                if (*value)
+                    mask |= UInt8(1U << i);
+            }
+            display->show = mask;
+            return yes(true);
+        }
+        if (suffix == "framecolor" || suffix == "fillcolor") {
+            const auto value = argv.size() == 1 ? number(argv[0]) : std::nullopt;
+            if (!value || *value < 0 || *value > 255 || *value != std::floor(*value))
+                return yes(false);
+            (suffix == "framecolor" ? display->frameColor : display->fillColor) = UInt8(*value);
+            return yes(true);
+        }
+    }
     if (a == "setsnap" || a == "setfeather") {
         const auto n = argv.size() == 1 ? boolean(argv[0]) : std::nullopt;
         if (!n) {
@@ -1433,10 +1479,10 @@ std::optional<std::string> TerrainEditor::command(std::string_view name,
         return yes(settings(s));
     }
     if (a == "attachtoterrain") {
-        if (argv.size() != 1 || !terrainLoader || working_) {
+        if (argv.size() > 1 || !terrainLoader || working_) {
             return yes(false);
         }
-        auto d = terrainLoader(argv[0]);
+        auto d = terrainLoader(argv.empty() ? std::string_view{} : std::string_view(argv[0]));
         return yes(d && attach(std::move(*d)));
     }
     if (a == "floatselection" || a == "floatpaste") {
@@ -1450,7 +1496,8 @@ std::optional<std::string> TerrainEditor::command(std::string_view name,
             return lower(n) == lower(argv[0]);
         });
         if (at == actionNames.end()) {
-            return yes(false);
+            if (!argv[0].empty())
+                return yes(false);
         }
         auto s = settings_;
         (a == "setlbuttonaction" ? s.leftAction : s.rightAction) = UInt32(at - actionNames.begin());
@@ -1659,7 +1706,7 @@ std::optional<std::string> TerrainEditor::command(std::string_view name,
         return yes(true);
     }
     if (a == "initted") {
-        return yes(true);
+        return yes(argv.empty() && (!initialize || initialize()));
     }
     if (a == "quitted" || a == "close") {
         if (!argv.empty()) {
@@ -2039,14 +2086,86 @@ void installTerrainEditorCommands(Console& console, const std::shared_ptr<Terrai
     for (std::string_view command : commands) {
         const auto name =
             command.starts_with("LS::") ? std::string(command) : "Ted::" + std::string(command);
-        console.addCommand(id++,
-                           name,
-                           [weak, command](Console&, Int32, std::span<const std::string> argv)
-                               -> std::optional<std::string> {
-                               const auto editor = weak.lock();
-                               return editor ? editor->command(command, argv.subspan(1))
-                                             : std::optional<std::string>("False");
-                           });
+        console.addCommand(
+            id++,
+            name,
+            [weak, command](Console& con,
+                            Int32,
+                            std::span<const std::string> argv) -> std::optional<std::string> {
+                const auto editor = weak.lock();
+                std::vector<std::string> args(argv.begin() + 1, argv.end());
+                if (command == "GetConsoleOptions" && editor && args.empty()) {
+                    const auto flag = [&](std::string_view name, bool fallback) {
+                        const auto value = con.getVariable("TED::" + std::string(name));
+                        return con.hasVariable("TED::" + std::string(name))
+                                   ? boolean(value).value_or(0) != 0
+                                   : fallback;
+                    };
+                    const auto value = [&](std::string_view name, float fallback) {
+                        return float(number(con.getVariable("TED::" + std::string(name)))
+                                         .value_or(fallback));
+                    };
+                    auto settings = editor->settings();
+                    settings.height = value("heightVal", 50);
+                    settings.adjust = value("adjustVal", 5);
+                    settings.scale = value("scaleVal", 1);
+                    settings.smooth = std::clamp(value("smoothVal", .5f), 0.f, 1.f);
+                    settings.pinDetail = UInt32(std::clamp(value("pinDetailVal", 1), 1.f, 9.f));
+                    settings.pinMax =
+                        UInt32(std::clamp(value("pinMaxVal", 8), float(settings.pinDetail), 11.f));
+                    settings.snap = flag("brushSnap", true);
+                    settings.feather = flag("brushFeather", true);
+                    settings.paste = UInt8((flag("pasteMaterial", true) ? 1 : 0) |
+                                           (flag("pasteHeight", true) ? 2 : 0));
+                    settings.flags = 0;
+                    for (auto [name, mask] : {std::pair{"flagCorner", 128},
+                                              {"flagEdit", 64},
+                                              {"flagEmpty1", 8},
+                                              {"flagEmpty2", 16},
+                                              {"flagEmpty3", 32},
+                                              {"flagFlipX", 1},
+                                              {"flagFlipY", 2},
+                                              {"flagRotate", 4}})
+                        if (flag(name, false))
+                            settings.flags |= UInt8(mask);
+                    if (!editor->settings(settings)) {
+                        con.setVariable("TED::success", "False");
+                        return "False";
+                    }
+                    for (auto [name, display] : {std::pair{"selection", &editor->selectionDisplay},
+                                                 {"hilight", &editor->highlightDisplay},
+                                                 {"shadow", &editor->shadowDisplay}}) {
+                        display->show =
+                            UInt8((flag(std::string(name) + "DisplayFrame", true) ? 1 : 0) |
+                                  (flag(std::string(name) + "DisplayFill", true) ? 2 : 0) |
+                                  (flag(std::string(name) + "DisplayOutline", false) ? 4 : 0));
+                    }
+                    editor->blockOutline = flag("blockDisplayOutline", false);
+                    con.setVariable("TED::success", "True");
+                    return "True";
+                }
+                if (command == "save" && args.size() == 1) {
+                    args[0] = con.filePath(args[0]).string();
+                    std::error_code ec;
+                    const auto parent = std::filesystem::path(args[0]).parent_path();
+                    if (!parent.empty())
+                        std::filesystem::create_directories(parent, ec);
+                    if (ec) {
+                        con.setVariable("TED::success", "False");
+                        return "False";
+                    }
+                }
+                auto result =
+                    editor ? editor->command(command, args) : std::optional<std::string>("False");
+                const bool success = result && lower(*result) != "false";
+                con.setVariable("TED::success", success ? "True" : "False");
+                if (command == "attachToTerrain" && success && editor->snapshot()) {
+                    con.setVariable("TED::currFile",
+                                    editor->attachedFile.empty() ? editor->snapshot()->gridName
+                                                                 : editor->attachedFile);
+                }
+                return result;
+            });
     }
 }
 

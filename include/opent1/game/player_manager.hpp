@@ -444,6 +444,13 @@ struct TeamAddEvent final : sim::SimEvent {
         type = TeamAddEventType;
     }
 
+    explicit TeamAddEvent(const PlayerManager::TeamRep& team) : TeamAddEvent() {
+        energy = team.energy;
+        id = team.id;
+        name = team.name;
+        skinBase = team.skinBase;
+    }
+
     void pack(BitStream& stream) const;
     bool unpack(BitStream& stream);
 };

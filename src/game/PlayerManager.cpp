@@ -608,6 +608,11 @@ void PlayerManager::teamAdded(Int32 teamId) {
         obj.seqNum = 1;
         obj.text.clear();
     }
+    if (isServer_) {
+        for (auto* client = getClientList(); client; client = client->nextClient) {
+            sendPlayerEvent(*client, std::make_unique<TeamAddEvent>(team));
+        }
+    }
 }
 
 void PlayerManager::teamAdded(std::string_view teamName, std::string_view skinBase) {
@@ -634,6 +639,11 @@ void PlayerManager::teamAdded(std::string_view teamName, std::string_view skinBa
     for (auto& obj : team->objectives) {
         obj.seqNum = 1;
         obj.text.clear();
+    }
+    if (isServer_) {
+        for (auto* client = getClientList(); client; client = client->nextClient) {
+            sendPlayerEvent(*client, std::make_unique<TeamAddEvent>(*team));
+        }
     }
     buildCommandTrees();
 }
@@ -1633,8 +1643,14 @@ bool PlayerManager::processEvent(const sim::SimEvent& event) {
             return false;
         }
         case TeamAddEventType: {
+            if (isServer_) {
+                return false;
+            }
             if (const auto* ev = dynamic_cast<const TeamAddEvent*>(&event)) {
                 if (ev->id == -1) {
+                    if (numTeams_ == -1) {
+                        teamAdded(-1);
+                    }
                     if (TeamRep* tr = findTeam(-1)) {
                         tr->energy = ev->energy;
                         tr->name = ev->name;

@@ -23,6 +23,7 @@ public:
     ~EditCamera() override;
 
     void setActionMap(std::string_view fileName);
+    std::function<std::shared_ptr<const sim::SimActionMap>(std::string_view)> loadActionMap;
 
     void setActionMapResource(std::shared_ptr<const sim::SimActionMap> map) noexcept {
         actionMap_ = std::move(map);

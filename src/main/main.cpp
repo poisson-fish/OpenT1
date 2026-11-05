@@ -16,6 +16,7 @@
 
 #include <opent1/gfx/sdl_gpu_surface.hpp>
 #include <opent1/platform/sdl_window.hpp>
+#include <opent1/platform/process_console.hpp>
 #include <opent1/gui/sdl_gui.hpp>
 #include <opent1/sim/sim_sdl_input.hpp>
 
@@ -257,6 +258,13 @@ protected:
         opts_ = parseRuntimeOptions(userArgs, includesProgramName_);
         opts_.exePath = exeDir;
 
+        if (includesProgramName_ && (opts_.headless || opts_.dedicated)) {
+            processConsole_ = std::make_unique<platform::ProcessConsole>();
+            consoleOutput_ = app_.console().subscribeOutput([this](std::string_view line) {
+                processConsole_->writeLine(line);
+            });
+        }
+
         (void)audio::registerWaveLoader(app_.resources());
         app_.bindMovieAudio = [service = movieAudio_](SmackerCtrl& control) {
             service->bind(control);
@@ -481,6 +489,10 @@ protected:
                     dev.emplace(devOpts);
                 }
                 audioRuntime_ = std::make_unique<audio::Runtime>(std::move(*dev));
+                (void)audioRuntime_->setMaxBuffers(app_.legacySound.maxBuffers());
+                app_.legacySound.setMaxBuffers = [this](UInt32 count) {
+                    return audioRuntime_ && audioRuntime_->setMaxBuffers(count);
+                };
                 app_.legacySound.play = [this](UInt32 id,
                                                std::string_view file,
                                                const audio::Profile& profile,
@@ -549,6 +561,10 @@ protected:
             };
         }
         startTicksMs_ = SDL_GetTicks();
+        if (processConsole_) {
+            processConsole_->writeLine("OpenT1 script console ready. Enter quit(); to stop.");
+            processConsole_->showPrompt(app_.console().getVariable("Console::Prompt"));
+        }
         return true;
     }
 
@@ -628,6 +644,10 @@ protected:
                     (void)audioRuntime_->stop(handle);
                 }
             };
+            playback->done = [this](SoundHandle handle) {
+                return !audioRuntime_ ||
+                       audioRuntime_->snapshot(handle).status == audio::Status::Stopped;
+            };
             playback->playRelative =
                 [this, play = playback->play](UInt32 id, const Point3F& relative) -> SoundHandle {
                 TMat3F transform;
@@ -682,6 +702,19 @@ protected:
         return root && root->getName() == "commandGui";
     }
 
+    bool editorMouseLook() const {
+        const auto* runtime = app_.guiRuntime().get();
+        const auto* root = runtime ? runtime->canvas.top() : nullptr;
+        return root && (root->getName() == "editorGui" || root->getName() == "EditorGui") && !app_.consoleVisible() &&
+               script::toBool(app_.console().getVariable("ME::MouseLook"));
+    }
+
+    bool editorKeyboardActive() const {
+        const auto* runtime = app_.guiRuntime().get();
+        const auto* root = runtime ? runtime->canvas.top() : nullptr;
+        return root && (root->getName() == "editorGui" || root->getName() == "EditorGui") && !app_.consoleVisible();
+    }
+
     void bindInput() {
         auto& cg = app_.fearPlugin().clientGlobals();
         (void)app_.bindGameplayActions();
@@ -721,7 +754,7 @@ protected:
                 if (auto* psc = app_.fearPlugin().clientGlobals().playerPSC) {
                     psc->resetInput();
                 }
-                actionInputCaptured_ = app_.gameplayKeyboardActive() ||
+                actionInputCaptured_ = app_.gameplayKeyboardActive() || editorKeyboardActive() ||
                                        (commanderInputActive() && !app_.consoleVisible());
                 if (gameInput_) {
                     gameInput_->capture(actionInputCaptured_);
@@ -753,6 +786,12 @@ protected:
         const bool commanding = commanderInputActive();
         if (const auto* key = std::get_if<platform::KeyEvent>(&ev.data);
             key && key->down && !key->repeat && key->key == SDLK_ESCAPE) {
+            const auto* runtime = app_.guiRuntime().get();
+            const auto* root = runtime ? runtime->canvas.top() : nullptr;
+            if (root && (root->getName() == "editorGui" || root->getName() == "EditorGui")) {
+                if (guiInput_) (void)guiInput_->process(ev);
+                return;
+            }
             if (cg.playerPSC) {
                 (void)app_.escapeGameplay();
                 actionInputCaptured_ = app_.gameplayKeyboardActive() || commanderInputActive();
@@ -773,8 +812,8 @@ protected:
         // PDA actions share the keyboard action map while the tactical screen
         // keeps an absolute mouse for selecting units and placing waypoints.
         const bool commandKey =
-            (commanding || app_.gameplayKeyboardActive()) && key && (!editing || !key->down);
-        if (gameInput_ && (playing || lifecycle || commandKey)) {
+            (commanding || editorKeyboardActive() || app_.gameplayKeyboardActive()) && key && (!editing || !key->down);
+        if (gameInput_ && (playing || editorMouseLook() || lifecycle || commandKey)) {
             (void)gameInput_->process(ev);
         }
         if (guiInput_ && (!playing || lifecycle)) {
@@ -783,6 +822,25 @@ protected:
     }
 
     void onIdle() override {
+        if (processConsole_) {
+            const auto commands = processConsole_->poll();
+            for (const auto& command : commands) {
+                const auto result = app_.console().evaluate(command, "<stdin>");
+                for (const auto& diagnostic : result.diagnostics) {
+                    app_.console().print(diagnostic.format());
+                }
+                if (result.ok() && !result.value.empty()) {
+                    app_.console().print(result.value);
+                }
+                if (app_.fearPlugin().quitRequested()) {
+                    requestQuit(0);
+                    return;
+                }
+            }
+            if (!commands.empty()) {
+                processConsole_->showPrompt(app_.console().getVariable("Console::Prompt"));
+            }
+        }
         if (loadingPresented_ && app_.missionPending()) {
             (void)app_.loadPendingMission();
             loadingPresented_ = false;
@@ -790,9 +848,9 @@ protected:
         bindInput();
         bindGameplayAudio();
         auto& cg = app_.fearPlugin().clientGlobals();
-        const bool capture = app_.gameplayInputActive() && (foreground() || opts_.verifyInput);
+        const bool capture = (app_.gameplayInputActive() || editorMouseLook()) && (foreground() || opts_.verifyInput);
         const bool actionCapture =
-            (app_.gameplayKeyboardActive() || (commanderInputActive() && !app_.consoleVisible())) &&
+            (app_.gameplayKeyboardActive() || editorKeyboardActive() || (commanderInputActive() && !app_.consoleVisible())) &&
             (foreground() || opts_.verifyInput);
         if (actionCapture != actionInputCaptured_) {
             actionInputCaptured_ = actionCapture;
@@ -1134,6 +1192,7 @@ protected:
             audioRuntime_.reset();
         }
         app_.shutdown();
+        consoleOutput_.reset();
     }
 
 private:
@@ -1152,6 +1211,8 @@ private:
     double audioSimulationTime_{};
     RuntimeOptions opts_{};
     FearGameApp app_{};
+    std::unique_ptr<platform::ProcessConsole> processConsole_;
+    std::shared_ptr<Console::Output> consoleOutput_;
     std::unique_ptr<gfx::SdlGpuSurface> gpuSurface_{};
     std::unique_ptr<gfx::SoftwareSurface> softwareSurface_{};
     std::unique_ptr<audio::Runtime> audioRuntime_{};

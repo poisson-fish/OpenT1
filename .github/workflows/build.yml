@@ -100,6 +100,7 @@ jobs:
           path: build/ci/downloads
           key: ${{ steps.dependency-downloads.outputs.cache-primary-key }}
       - name: Build all targets
+        id: compile
         run: cmake --build build/ci --parallel 3
       - name: Test
         run: ctest --test-dir build/ci --output-on-failure --no-tests=error --parallel 3
@@ -108,7 +109,8 @@ jobs:
       - name: Validate documentation
         run: python tools/sync_wiki.py --check
       - name: Package and test extracted downloads
-        if: matrix.configuration == 'Release'
+        id: package
+        if: matrix.configuration == 'Release' && !cancelled() && steps.compile.outcome == 'success'
         env:
           PACKAGE_PLATFORM: ${{ matrix.platform.package }}
         run: |
@@ -117,7 +119,7 @@ jobs:
           python tools/package_release.py --build build/ci --output build/dist \
             --platform "$PACKAGE_PLATFORM" "${source_option[@]}"
       - uses: actions/upload-artifact@v7
-        if: matrix.configuration == 'Release'
+        if: matrix.configuration == 'Release' && !cancelled() && steps.package.outcome == 'success'
         with:
           name: release-${{ matrix.platform.package }}
           path: build/dist/*

@@ -11,6 +11,7 @@
 #include <opent1/sim/sim_sdl_input.hpp>
 #include <chrono>
 #include <cstdlib>
+#include <thread>
 
 namespace {
 using namespace opent1;
@@ -56,6 +57,7 @@ void remoteDisconnect() {
     enum class Termination { Command, Shutdown, Kick, Timeout };
     for (const auto termination :
          {Termination::Command, Termination::Shutdown, Termination::Kick, Termination::Timeout}) {
+        std::printf("Disconnect termination mode: %d\n", static_cast<int>(termination));
         FearGameApp server, client;
         CHECK(server.init() && client.init());
         CHECK(server.fearPlugin().createServerWorld({}, true));
@@ -138,6 +140,15 @@ void remoteDisconnect() {
                 break;
         }
         advance(16, termination == Termination::Kick);
+        // Real UDP delivery can lag a tight optimized simulation loop on macOS.
+        // Allow kernel progress, as the other native-network tests do, without
+        // accepting a missing callback or a different termination event below.
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (server.console().getVariable("DropCount").empty() &&
+               std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            advance(1, termination == Termination::Kick);
+        }
         CHECK(server.console().getVariable("DropCount") == "1");
         CHECK(server.console().getVariable("DroppedId") == std::to_string(id));
         CHECK(server.console().getVariable("DroppedName") == "DepartingPlayer");

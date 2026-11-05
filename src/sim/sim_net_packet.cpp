@@ -31,11 +31,7 @@ void PacketStream::onBeforeRemove() {
 }
 
 void PacketStream::onRemove() {
-    if (session_) {
-        (void)session_->disconnect(connection_, {}, now_);
-    }
-    session_ = nullptr;
-    connection_ = 0;
+    disconnect(now_);
     pending_.clear();
     std::ranges::for_each(objects_, [](auto* object) {
         static_cast<PacketStreamClient*>(object)->owner_ = nullptr;
@@ -450,7 +446,12 @@ void PacketStream::connectionDied() {
 
 void PacketStream::disconnect(UInt32 now, std::span<const std::byte> reason) {
     if (session_) {
-        (void)session_->disconnect(connection_, reason, now);
+        const auto address = session_->address(connection_);
+        const auto result = session_->disconnect(connection_, reason, now);
+        if (result != net::Result::Ok && getManager() && getManager()->console()) {
+            getManager()->console()->print(std::format(
+                "Failed to send disconnect to {} (network result {}).", address, int(result)));
+        }
     }
     connectionDied();
 }

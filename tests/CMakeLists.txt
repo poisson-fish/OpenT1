@@ -54,6 +54,7 @@ add_executable(
     game/sky_test.cpp
     game/damage_flash_test.cpp
     game/chat_history_test.cpp
+    game/crosshair_test.cpp
     game/weather_test.cpp
     game/disconnect_test.cpp
     game/hosting_test.cpp

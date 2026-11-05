@@ -148,9 +148,10 @@ bool Player::detectItem(GameBase* obj) {
             query.box.fMax = objPos;
 
             sim::SimCollisionInfo info{};
-            root->findLOS(query, info, sim::SimCollisionImageQuery::Normal);
-            sim::SimObject* hitObj = info.object.resolve(*getManager());
-            return !hitObj || hitObj == obj;
+            // A miss leaves info.object at ID zero, which resolves to the
+            // manager rather than a null object. Only inspect actual hits.
+            return !root->findLOS(query, info, sim::SimCollisionImageQuery::Normal) ||
+                   info.object.resolve(*getManager()) == obj;
         }
     }
     return false;

@@ -984,13 +984,17 @@ bool Player::unpackPlayerUpdate(BitStream& stream, sim::network::GhostManager* g
             return rollback();
         }
         isInitialUpdate = (getManager() == nullptr);
-        if (!isInitialUpdate && datFileId_ != savedDatId) {
+        if (isInitialUpdate || datFileId_ != savedDatId) {
             auto* dbm = resolveDataBlockManager();
-            updateData =
-                dbm ? dynamic_cast<PlayerData*>(dbm->lookupDataBlock(datFileId_, getDatGroup()))
-                    : nullptr;
-            if (!updateData) {
-                return rollback();
+            // Initial ghosts decode before onAdd loads their armor. Use the
+            // incoming datablock's scales for this packet's damage/energy too.
+            if (dbm || !isInitialUpdate) {
+                updateData =
+                    dbm ? dynamic_cast<PlayerData*>(dbm->lookupDataBlock(datFileId_, getDatGroup()))
+                        : nullptr;
+                if (!updateData) {
+                    return rollback();
+                }
             }
         }
     }

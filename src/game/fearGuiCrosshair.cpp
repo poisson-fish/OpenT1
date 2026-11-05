@@ -179,7 +179,13 @@ void Crosshair::updateLive(sim::SimManager& manager,
                     position.z += .65f;
                 }
                 const auto screen = project(position);
-                if (!screen || !unobstructed(target, target->getBoxCenter())) {
+                auto sightPoint = target->getBoxCenter();
+                if (player) {
+                    // Vanilla checks above the box center so low cover does
+                    // not hide a player's otherwise visible target marker.
+                    sightPoint.z += std::max(size.z, size.x) * .5f;
+                }
+                if (!screen || !unobstructed(target, sightPoint)) {
                     continue;
                 }
                 const bool friendly = players && players->getNumTeams() > 1 &&

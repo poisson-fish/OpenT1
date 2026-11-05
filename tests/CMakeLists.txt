@@ -54,6 +54,7 @@ add_executable(
     game/datablock_quantization_test.cpp
     game/model_rendering_test.cpp
     game/player_skin_test.cpp
+    game/profile_skin_test.cpp
     game/image_lighting_test.cpp
     game/sky_test.cpp
     game/damage_flash_test.cpp

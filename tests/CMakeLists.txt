@@ -92,7 +92,10 @@ option(OPENT1_TEST_GPU "Register real-device GPU tests (requires a native video 
 set(OPENT1_TEST_GPU_DRIVER
     "" CACHE STRING "SDL GPU backend for real-device tests (empty selects automatically)"
 )
-target_sources(opent1_tests PRIVATE platform/window_test.cpp platform/gpu_cache_test.cpp)
+target_sources(
+    opent1_tests
+    PRIVATE platform/window_test.cpp platform/gpu_cache_test.cpp platform/input_lifetime_test.cpp
+)
 if(WIN32 AND TARGET SDL3::SDL3-shared)
     add_custom_command(
         TARGET opent1_tests

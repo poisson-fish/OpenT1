@@ -5318,7 +5318,19 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
         const auto fov = cg.playerPSC ? std::clamp(cg.playerPSC->getFov(), 1.f, 179.f) : 90.f;
         const auto focal = Flt32(w) * .5f / std::tan(fov * std::numbers::pi_v<Flt32> / 360.f);
         envCam.focal = {focal, focal};
-        envCam.nearDistance = 0.5f;
+        // Vanilla keeps nearby walls/terrain visible in first-person gameplay.
+        // Observer cameras use the ordinary world projection even in that mode.
+        envCam.nearDistance = ctrlObj && cg.playerPSC && cg.playerPSC->isFirstPerson() &&
+                                      !dynamic_cast<const ObserverCamera*>(ctrlObj)
+                                  ? .2f
+                                  : .5f;
+        if (ctrlObj) {
+            envCam.nearDistance =
+                ctrlObj->validateCameraNearPlane(camPos,
+                                                 envCam.nearDistance,
+                                                 {envCam.nearDistance * Flt32(w) * .5f / focal,
+                                                  envCam.nearDistance * Flt32(h) * .5f / focal});
+        }
         const auto visibility = world::sceneVisibility(*activeMgr);
         envCam.farDistance = visibility.visibleDistance;
         envCam.perspective = true;

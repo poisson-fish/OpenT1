@@ -13,6 +13,8 @@ namespace opent1::game {
 
 namespace {
 constexpr Flt32 kCameraRadius = 0.025f;
+constexpr UInt32 kCameraCollisionMask = SimTerrainObjectType | SimInteriorObjectType |
+                                        VehicleObjectType | MoveableObjectType | StaticObjectType;
 thread_local std::vector<std::unique_ptr<GameBase::Timer>> g_timerPool{};
 
 struct BitStreamRollbackGuard {
@@ -1024,46 +1026,140 @@ Flt32 GameBase::validateEyePoint(TMat3F* trans, Flt32 camDist) const {
     sim::SimContainerQuery cq{};
     cq.id = getId();
     cq.type = AllObjectTypes;
-    cq.mask = SimTerrainObjectType | SimInteriorObjectType | VehicleObjectType |
-              MoveableObjectType | StaticObjectType;
-    cq.box.fMin = trans->p;
-
+    cq.mask = kCameraCollisionMask;
     Point3F dir{};
     trans->getRow(1, dir);
-
-    cq.box.fMax = dir * (-camDist * 2.5f) + trans->p;
-
-    sim::SimCollisionInfo info{};
+    sim::SimCollisionTubeImage sweep;
+    sweep.start = trans->p;
+    sweep.end = trans->p - dir * camDist;
+    sweep.radius = kCameraRadius;
+    const Flt32 requestedDistance = camDist;
+    sim::SimCollisionLineImage center;
+    center.start = sweep.start;
+    center.end = sweep.end;
+    cq.box = Box3F(sweep.start, sweep.end);
+    cq.box.fMin -= kCameraRadius;
+    cq.box.fMax += kCameraRadius;
     auto* mgr = getManager();
     sim::SimContainer* root =
         mgr ? dynamic_cast<sim::SimContainer*>(mgr->findObject(sim::RootContainerId)) : nullptr;
-
-    if (!root || !root->findLOS(cq, info) || info.surfaces.surfaces.empty()) {
-        trans->p -= dir * camDist;
-        return camDist;
+    if (root && camDist > 0) {
+        // A center ray misses adjacent corners. Sweep the existing camera
+        // clearance instead; hit times also avoid normal-facing/grazing fallbacks.
+        // Test the anchor separately because some sweep backends only report entry.
+        sim::SimCollisionSphereImage anchor;
+        anchor.center = sweep.start;
+        anchor.radius = sweep.radius;
+        mgr->dispatch([&] {
+            for (const auto& address : root->scope(cq)) {
+                sim::SimCollisionImageQuery query;
+                query.bounds = cq.box;
+                if (!mgr->sendQuery(address, query)) {
+                    continue;
+                }
+                for (const auto& image : query.images) {
+                    if (!image || image->trigger) {
+                        continue;
+                    }
+                    CollisionSurfaceList surfaces;
+                    if (sim::SimCollisionImage::test(anchor, *image, surfaces)) {
+                        camDist = 0;
+                        return;
+                    }
+                    if (sim::SimCollisionImage::test(sweep, *image, surfaces)) {
+                        for (const auto& surface : surfaces.surfaces) {
+                            camDist = std::min(
+                                camDist, std::clamp(surface.time, 0.f, 1.f) * requestedDistance);
+                        }
+                    }
+                    // Native TS tube face hits lie on the face rather than at
+                    // the swept center. Retain the normal clearance for those
+                    // hits, accepting either normal orientation at grazing angles.
+                    if (sim::SimCollisionImage::test(center, *image, surfaces)) {
+                        for (const auto& surface : surfaces.surfaces) {
+                            Point3F position;
+                            Point3F normal;
+                            m_mul(surface.position, surfaces.tWorld, position);
+                            m_mul(surface.normal,
+                                  static_cast<const RMat3F&>(surfaces.tWorld),
+                                  normal);
+                            const auto length = normal.len();
+                            const auto facing =
+                                length > 0 ? std::abs(m_dot(dir, normal)) / length : 0;
+                            const auto clearance = kCameraRadius / std::max(facing, 1e-6f);
+                            camDist = std::min(
+                                camDist,
+                                std::max(0.f, m_dot(sweep.start - position, dir) - clearance));
+                        }
+                    }
+                }
+            }
+        });
     }
-
-    const auto& surfaceList = info.surfaces;
-    Point3F endpos{};
-    Point3F normal{};
-    m_mul(surfaceList.surfaces[0].position, surfaceList.tWorld, endpos);
-    m_mul(surfaceList.surfaces[0].normal, static_cast<const RMat3F&>(surfaceList.tWorld), normal);
-
-    const Flt32 dot = m_dot(dir, normal);
-    if (dot >= 0.01f) {
-        Flt32 colDist = m_dot(trans->p - endpos, dir) - (1.0f / dot) * kCameraRadius;
-        if (colDist > camDist) {
-            colDist = camDist;
-        }
-        if (colDist < 0.0f) {
-            colDist = 0.0f;
-        }
-        trans->p -= dir * colDist;
-        camDist = colDist;
-    } else {
-        trans->p -= dir * camDist;
-    }
+    trans->p -= dir * camDist;
     return camDist;
+}
+
+Flt32 GameBase::validateCameraNearPlane(const Point3F& position,
+                                        Flt32 nearDistance,
+                                        const Point2F& halfExtents) const {
+    auto* manager = getManager();
+    auto* root = manager
+                     ? dynamic_cast<sim::SimContainer*>(manager->findObject(sim::RootContainerId))
+                     : nullptr;
+    if (!root) {
+        return nearDistance;
+    }
+    // The eye can be clear while the near rectangle cuts through a side wall.
+    // Fit the entire eye-to-near-plane pyramid inside a collision-free sphere.
+    // Scaling the near distance scales its width/height by the same amount.
+    sim::SimCollisionSphereImage volume;
+    volume.center = position;
+    volume.radius = std::hypot(nearDistance, halfExtents.x, halfExtents.y);
+    sim::SimContainerQuery bounds;
+    bounds.id = getId();
+    bounds.mask = kCameraCollisionMask;
+    bounds.box = {position - Point3F(volume.radius, volume.radius, volume.radius),
+                  position + Point3F(volume.radius, volume.radius, volume.radius)};
+    Flt32 clearance = volume.radius;
+    manager->dispatch([&] {
+        for (const auto& address : root->scope(bounds)) {
+            sim::SimCollisionImageQuery query;
+            query.bounds = bounds.box;
+            if (!manager->sendQuery(address, query))
+                continue;
+            for (const auto& image : query.images) {
+                if (!image || image->trigger)
+                    continue;
+                CollisionSurfaceList contacts;
+                if (!sim::SimCollisionImage::test(volume, *image, contacts))
+                    continue;
+                if (const auto* sphere =
+                        dynamic_cast<const sim::SimCollisionSphereImage*>(image.get())) {
+                    Point3F center;
+                    m_mul(sphere->center, sphere->transform, center);
+                    clearance =
+                        std::min(clearance,
+                                 std::max(0.f, (position - center).len() - sphere->radius - .001f));
+                } else if (contacts.contained) {
+                    clearance = 0;
+                } else {
+                    for (const auto& contact : contacts.surfaces) {
+                        Point3F point, normal;
+                        m_mul(contact.position, contacts.tWorld, point);
+                        m_mul(contact.normal, static_cast<const RMat3F&>(contacts.tWorld), normal);
+                        const auto length = normal.len();
+                        const auto distance =
+                            length > 0 ? std::abs(m_dot(position - point, normal)) / length
+                                       : (position - point).len();
+                        clearance = std::min(clearance, std::max(0.f, distance - .001f));
+                    }
+                }
+            }
+        }
+    });
+    return clearance == volume.radius ? nearDistance
+                                      : std::max(.0001f, nearDistance * clearance / volume.radius);
 }
 
 void GameBase::buildScopeAndCameraInfo(sim::network::GhostManager& cr,

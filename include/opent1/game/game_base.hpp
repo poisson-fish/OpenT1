@@ -390,6 +390,10 @@ public:
 
     // Camera eye validation & scope/update priority
     Flt32 validateEyePoint(TMat3F* trans, Flt32 camDist) const;
+    // halfExtents describes the near rectangle at the requested nearDistance.
+    [[nodiscard]] Flt32 validateCameraNearPlane(const Point3F& position,
+                                                Flt32 nearDistance,
+                                                const Point2F& halfExtents) const;
     void buildScopeAndCameraInfo(sim::network::GhostManager& cr,
                                  sim::SimNetObject::CameraInfo& camInfo) override;
     [[nodiscard]] Flt32 getUpdatePriority(const sim::SimNetObject::CameraInfo& camInfo,

@@ -3,6 +3,7 @@
 #include <opent1/game/player.hpp>
 #include <opent1/game/projectile_factory.hpp>
 #include <algorithm>
+#include <cmath>
 
 namespace opent1::game {
 
@@ -352,6 +353,7 @@ void Player::resetImageSlot(Int32 imageSlot) {
     image.fireCount = 0;
     image.triggerDown = false;
     image.ammo = false;
+    image.lightStart.reset();
     image.shape.reset();
     image.resources.reset();
     image.renderedImageId = -1;
@@ -462,7 +464,53 @@ void Player::fireImage(Int32 imageSlot) {
                 }
             }
         }
+    } else if (imgData->lightType == WeaponFireLight && getManager()) {
+        image.lightStart = getManager()->getCurrentTime();
     }
+}
+
+std::optional<sim::SimLight> Player::getImageLight(Int32 imageSlot) const {
+    const auto& image = itemImageList_[imageSlot];
+    const auto* data = getImageData(image.imageId);
+    if (!data || data->lightType == NoLight) {
+        return std::nullopt;
+    }
+    const Flt32 now = getManager() ? getManager()->getCurrentTime() : 0;
+    const Flt32 delta = std::max(0.0f, now - image.lightStart.value_or(0));
+    Flt32 intensity = 1;
+    switch (data->lightType) {
+        case ConstantLight:
+            break;
+        case PulsingLight:
+            if (data->lightTime <= 0 || !std::isfinite(data->lightTime)) {
+                return std::nullopt;
+            }
+            intensity =
+                .15f +
+                (.5f + .5f * std::sin(std::numbers::pi_v<Flt32> * delta / data->lightTime)) * .85f;
+            break;
+        case WeaponFireLight:
+            if (!image.lightStart || data->lightTime <= 0 || !std::isfinite(data->lightTime) ||
+                delta >= data->lightTime) {
+                return std::nullopt;
+            }
+            intensity = 1 - delta / data->lightTime;
+            break;
+        default:
+            return std::nullopt;
+    }
+    TMat3F local, world;
+    if (!getMuzzleTransform(imageSlot, &local)) {
+        return std::nullopt;
+    }
+    m_mul(local, getTransform(), world);
+    sim::SimLight light;
+    light.position = world.p;
+    light.range = data->lightRadius;
+    light.intensity = {data->lightColor.x * intensity,
+                       data->lightColor.y * intensity,
+                       data->lightColor.z * intensity};
+    return light;
 }
 
 void Player::updateImageFire(Int32 imageSlot) {

@@ -95,12 +95,13 @@ struct SimLight {
 };
 
 struct SimLightQuery : SimQuery {
+    static constexpr std::size_t MaxLights = 8; // one light per mounted player image
     SimLightQuery() {
         type = EventTypeFirst + 3;
     }
 
     ColorF ambient;
-    std::vector<SimLight> lights; // at most five per provider, as in legacy
+    std::vector<SimLight> lights;
 };
 
 struct SimSceneLighting {

@@ -734,7 +734,30 @@ protected:
             gameInput_ = std::make_unique<sim::SdlSimInput>(*input, mainWindow_);
         }
         if (gameInput_) {
-            gameInput_->capture(actionInputCaptured_);
+            gameInput_->capture(actionInputCaptured_ || mouseCaptured_);
+        }
+    }
+
+    void synchronizeInputCapture() {
+        const bool focused = foreground() || opts_.verifyInput;
+        const bool mouse = (app_.gameplayInputActive() || editorMouseLook()) && focused;
+        const bool actions = (app_.gameplayKeyboardActive() || editorKeyboardActive() ||
+                              (commanderInputActive() && !app_.consoleVisible())) &&
+                             focused;
+        if (gameInput_ && (actions != actionInputCaptured_ || mouse != mouseCaptured_)) {
+            // Opening chat must release held movement/actions while retaining
+            // the adapter for relative mouse motion.
+            if (!actions && actionInputCaptured_) {
+                gameInput_->release();
+            }
+            gameInput_->capture(actions || mouse);
+        }
+        actionInputCaptured_ = actions;
+        if (mouse != mouseCaptured_) {
+            mouseCaptured_ = mouse;
+            if (auto* window = findWindow(mainWindow_)) {
+                (void)SDL_SetWindowRelativeMouseMode(window->nativeHandle(), mouse);
+            }
         }
     }
 
@@ -746,6 +769,7 @@ protected:
             app_.trimRenderCaches();
         }
         bindInput();
+        synchronizeInputCapture();
         if (const auto* key = std::get_if<platform::KeyEvent>(&ev.data);
             key && key->scancode == SDL_SCANCODE_GRAVE) {
             suppressConsoleText_ = key->down;
@@ -754,11 +778,7 @@ protected:
                 if (auto* psc = app_.fearPlugin().clientGlobals().playerPSC) {
                     psc->resetInput();
                 }
-                actionInputCaptured_ = app_.gameplayKeyboardActive() || editorKeyboardActive() ||
-                                       (commanderInputActive() && !app_.consoleVisible());
-                if (gameInput_) {
-                    gameInput_->capture(actionInputCaptured_);
-                }
+                synchronizeInputCapture();
                 if (guiInput_) {
                     (void)guiInput_->synchronize();
                 }
@@ -794,10 +814,7 @@ protected:
             }
             if (cg.playerPSC) {
                 (void)app_.escapeGameplay();
-                actionInputCaptured_ = app_.gameplayKeyboardActive() || commanderInputActive();
-                if (gameInput_) {
-                    gameInput_->capture(actionInputCaptured_);
-                }
+                synchronizeInputCapture();
             } else if (guiInput_) {
                 (void)guiInput_->process(ev);
             }
@@ -809,16 +826,20 @@ protected:
         const auto* key = std::get_if<platform::KeyEvent>(&ev.data);
         const auto* runtime = app_.guiRuntime().get();
         const bool editing = runtime && dynamic_cast<gui::TextEdit*>(runtime->canvas.focus());
+        const bool keyboard = app_.gameplayKeyboardActive();
+        const bool text = std::holds_alternative<platform::TextEvent>(ev.data);
         // PDA actions share the keyboard action map while the tactical screen
         // keeps an absolute mouse for selecting units and placing waypoints.
         const bool commandKey =
-            (commanding || editorKeyboardActive() || app_.gameplayKeyboardActive()) && key && (!editing || !key->down);
-        if (gameInput_ && (playing || editorMouseLook() || lifecycle || commandKey)) {
+            (commanding || editorKeyboardActive() || keyboard) && key && (!editing || !key->down);
+        if (gameInput_ &&
+            (((playing || editorMouseLook()) && !key && !text) || lifecycle || commandKey)) {
             (void)gameInput_->process(ev);
         }
-        if (guiInput_ && (!playing || lifecycle)) {
+        if (guiInput_ && (!playing || lifecycle || (!keyboard && (key || text)))) {
             (void)guiInput_->process(ev);
         }
+        synchronizeInputCapture();
     }
 
     void onIdle() override {
@@ -848,22 +869,7 @@ protected:
         bindInput();
         bindGameplayAudio();
         auto& cg = app_.fearPlugin().clientGlobals();
-        const bool capture = (app_.gameplayInputActive() || editorMouseLook()) && (foreground() || opts_.verifyInput);
-        const bool actionCapture =
-            (app_.gameplayKeyboardActive() || editorKeyboardActive() || (commanderInputActive() && !app_.consoleVisible())) &&
-            (foreground() || opts_.verifyInput);
-        if (actionCapture != actionInputCaptured_) {
-            actionInputCaptured_ = actionCapture;
-            if (gameInput_) {
-                gameInput_->capture(actionCapture);
-            }
-        }
-        if (auto* window = findWindow(mainWindow_)) {
-            if (capture != mouseCaptured_) {
-                mouseCaptured_ = capture;
-                (void)SDL_SetWindowRelativeMouseMode(window->nativeHandle(), capture);
-            }
-        }
+        synchronizeInputCapture();
         if (guiInput_) {
             (void)guiInput_->synchronize();
         }

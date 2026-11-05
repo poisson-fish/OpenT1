@@ -263,6 +263,7 @@ void chatOverServerMenu() {
     for (const auto key : {'t', 'y'}) {
         press(key);
         CHECK(chat.visible() && runtime->canvas.focus() == &chat && !app.gameplayKeyboardActive());
+        CHECK(!app.gameplayInputActive());
         CHECK(app.console().getVariable("pref::msgChannel") == (key == 't' ? "0" : "1"));
         gui::Event text;
         text.type = gui::EventType::Text;
@@ -284,6 +285,17 @@ void chatOverServerMenu() {
     CHECK(app.console().getVariable("ChatParityMenuPicks") == "1");
     app.showGameplayScores(false);
     CHECK(runtime->canvas.dialogCount() == 0 && runtime->canvas.top()->getName() == "playGui");
+    for (const auto key : {'t', 'y'}) {
+        CHECK(app.gameplayInputActive() && app.gameplayKeyboardActive());
+        press(key);
+        CHECK(chat.visible() && runtime->canvas.focus() == &chat);
+        CHECK(app.gameplayInputActive() && !app.gameplayKeyboardActive());
+        CHECK(app.escapeGameplay() && !chat.visible());
+        CHECK(app.gameplayInputActive() && app.gameplayKeyboardActive());
+    }
+    CHECK(app.toggleConsole());
+    CHECK(!app.gameplayInputActive() && !app.gameplayKeyboardActive());
+    CHECK(app.toggleConsole());
     CHECK(runtime->clear());
 }
 

@@ -118,6 +118,7 @@ public:
     ~FearGuiChatDisplay() override = default;
     std::array<std::shared_ptr<const gfx::BitmapFont>, 4> messageFonts, smallMessageFonts;
     bool layout(Point2I extent);
+    void wake() override;
 
     void clear() noexcept;
     MessageEntry newMessage(std::string_view rawMsg, Int32 msgType = MSG_Chat);

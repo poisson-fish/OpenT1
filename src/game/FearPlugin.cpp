@@ -5100,6 +5100,7 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
     game_.console().setVariable("OpenT1::LastRenderError", "");
     std::optional<gfx::HardwareBatch> background;
     std::optional<gfx::HardwareBatch> worldBatch;
+    std::optional<gfx::HardwareBatch> damageFlash;
     std::optional<gfx::HardwareBatch> hardwareForeground;
     std::vector<gfx::HardwareBatch> guiLayers;
     ensureFallbackRenderAssets();
@@ -5239,9 +5240,12 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
         }
 
         const GameBase* ctrlObj = cg.playerPSC ? cg.playerPSC->getControlObject() : nullptr;
+        Flt32 flash = ctrlObj ? cg.playerPSC->damageFlash() : 0.f;
         if (!ctrlObj && sg.playerPSC) {
             ctrlObj = sg.playerPSC->getControlObject();
+            flash = ctrlObj ? ctrlObj->getDamageFlash() : 0.f;
         }
+        flash = std::clamp(flash, 0.f, .76f);
         TMat3F camToWorld;
         camToWorld.identity();
         if (ctrlObj) {
@@ -5456,6 +5460,42 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
             return false;
         }
 
+        // Native camera damage tint covers the completed scene (including
+        // translucent effects), before HUD text and panels are composited.
+        if (flash > 0.f) {
+            if (hardware) {
+                const std::array<gfx::PolygonVertex, 4> quad{
+                    {{{0, 0}}, {{Flt32(w), 0}}, {{Flt32(w), Flt32(h)}}, {{0, Flt32(h)}}}};
+                gfx::HardwareMaterial material;
+                material.color = {1, 0, 0};
+                material.opacity = flash;
+                material.alphaSource = gfx::HardwareAlphaSource::Constant;
+                material.blend = gfx::HardwareBlend::Alpha;
+                material.depth = gfx::HardwareDepth::Disabled;
+                material.perspective = false;
+                const gfx::HardwarePolygon polygon{quad, material};
+                damageFlash = gfx::HardwareBatch::prepare(std::span(&polygon, 1));
+                if (!damageFlash) {
+                    return false;
+                }
+            } else {
+                // Quantize the scene back into its active indexed palette;
+                // changing the palette itself would also tint the later HUD.
+                std::array<std::byte, 256> remap;
+                const auto& colors = surface.palette()->find().colors;
+                for (std::size_t i = 0; i < remap.size(); ++i) {
+                    const auto& color = colors[i];
+                    remap[i] = std::byte(surface.palette()->nearest(
+                        {UInt8(color.red * (1.f - flash) + 255.f * flash),
+                         UInt8(color.green * (1.f - flash)),
+                         UInt8(color.blue * (1.f - flash)),
+                         0}));
+                }
+                for (auto& pixel : surface.pixels()) {
+                    pixel = remap[std::to_integer<UInt8>(pixel)];
+                }
+            }
+        }
     } else {
         MMShellBorder border;
         border.setBitmapName("MainMenuBkgnd.bmp");
@@ -5678,6 +5718,9 @@ bool FearGameApp::renderFrame(gfx::SoftwareSurface& surface,
             std::vector<const gfx::HardwareBatch*> layers{&*background};
             if (worldBatch) {
                 layers.push_back(&*worldBatch);
+            }
+            if (damageFlash) {
+                layers.push_back(&*damageFlash);
             }
             for (const auto& guiLayer : guiLayers) {
                 layers.push_back(&guiLayer);

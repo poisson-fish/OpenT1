@@ -363,6 +363,11 @@ bool GridCollision::collideFile(const Point3F& start, const Point3F& end) {
         cp *= currentT;
         cp += start;
 
+        // Starting on an edge, or crossing a corner, can produce tied streams
+        // with no interval to test. They do not enter or leave a terrain block.
+        if (currentI != 2 && cp == curStart)
+            continue;
+
         float xPos = cp.x * invBlockSize;
         float yPos = cp.y * invBlockSize;
         int ix, iy;
@@ -379,21 +384,24 @@ bool GridCollision::collideFile(const Point3F& start, const Point3F& end) {
             if (delta.x > 0)
                 ix--;
         } else {
-            ix = int(floor(xPos));
-            iy = int(floor(yPos));
+            // The endpoint can lie on the next block's boundary. Query the
+            // block containing this final interval, including its last edge.
+            ix = int(floor((curStart.x + cp.x) * .5f * invBlockSize));
+            iy = int(floor((curStart.y + cp.y) * .5f * invBlockSize));
         }
+        Point3F blockStart = curStart;
+        // Advance through absent and out-of-map blocks too, so an entering
+        // segment starts at the block edge rather than outside its height map.
+        curStart = cp;
         if (ix >= 0 && ix < extent.x && iy >= 0 && iy < extent.y) {
             const NativeBlock* blk = terrainFile->getBlock(Point2I(ix, iy));
             if (!blk) {
-                curStart = cp;
                 if (currentI == 2) {
                     return false;
                 }
                 continue;
             }
-            Point3F blockStart = curStart;
             Point3F blockEnd = cp;
-            curStart = cp;
             Point3F offset(float(ix * (1 << (grdSize + blockShift))),
                            float(iy * (1 << (grdSize + blockShift))),
                            0);
@@ -591,12 +599,33 @@ bool GridCollision::collideBlock(const NativeBlock* block,
             height = h1 + (h2 - h1) * pct;
         }
 
+        if (xPos <= 0 || yPos <= 0 || xPos >= hmwid || yPos >= hmwid) {
+            // At a block edge, diagonal streams can select an exterior cell.
+            // Sample the actual boundary triangle rather than extending that
+            // cell's clamped vertices and manufacturing a crossing at t=0.
+            const Point2I cell{std::clamp(int(xPos), 0, hmwid - 1),
+                               std::clamp(int(yPos), 0, hmwid - 1)};
+            GridHeight boundary{gridSize,
+                                ((cell.x ^ cell.y) & 1) ? GridHeight::Split135
+                                                       : GridHeight::Split45,
+                                block->getHeight(0, cell),
+                                1,
+                                block->getHeightMapWidth()};
+            height = boundary.getHeight({surface.position.x - cell.x * gridSize,
+                                         surface.position.y - cell.y * gridSize});
+        }
+
         if (int(surface.position.z > height) ^ above) {
 
             if (currentI == 0 && deltaY > 0)
                 iy--;
             else if (currentI == 1 && deltaX > 0)
                 ix--;
+
+            // Crossing streams can meet on the outer row/column (including
+            // t=0). The boundary vertices belong to the last interior cell.
+            ix = std::clamp(ix, 0, hmwid - 1);
+            iy = std::clamp(iy, 0, hmwid - 1);
 
             if (!hitHoles && GetMaterial(ix, iy)->emptyLevel()) {
                 above = !above;

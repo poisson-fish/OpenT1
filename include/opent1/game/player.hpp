@@ -537,6 +537,7 @@ protected:
     bool processCollision(MovementInfo& info) override;
 
 private:
+    void calcImagePullIn();
     void updateClientEffects();
     void stopJetSound();
     void appendJetFlame(world::WorldShapeQuery&);
@@ -561,6 +562,8 @@ private:
     Int32 surfaceType_{-1};
     Flt32 traction_{0.0f};
     Flt32 viewPitch_{0.0f};
+    Flt32 gunPullIn_{0.0f};
+    Flt32 bounce_{0.0f};
     Flt32 damageFlash_{0.0f};
     Flt32 lastImpactSpeed_{0.0f};
 

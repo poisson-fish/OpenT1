@@ -37,6 +37,7 @@ add_executable(
     game/player_test.cpp
     game/player_collision_test.cpp
     game/camera_test.cpp
+    game/viewmodel_test.cpp
     game/item_collision_test.cpp
     game/weapons_test.cpp
     game/effects_test.cpp

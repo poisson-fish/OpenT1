@@ -161,6 +161,10 @@ void Player::clientProcess(UInt32 curTime) {
         }
         lastProcessTime_ = endTick;
     }
+    const auto& velocity = getLinearVelocity();
+    if (!mount_ && !jetting_ && didContact() && (velocity.x || velocity.y)) {
+        bounce_ += .174f * 30 * animationSeconds;
+    }
     updateAnimation(animationSeconds);
     for (auto& image : itemImageList_) {
         updateImageAnimation(image, animationSeconds);
@@ -512,6 +516,8 @@ void Player::updateMove(const PlayerMove* curMove, bool server) {
         }
         deltaPos_ = getTransform().p - oldPos;
     }
+
+    calcImagePullIn();
 
     // Contact aging
     if (didContact()) {

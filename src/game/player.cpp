@@ -990,6 +990,45 @@ void Player::appendMountedImages(world::WorldShapeQuery& query) {
     }
 }
 
+void Player::calcImagePullIn() {
+    // Measure the authored mount every tick, never the previous correction.
+    gunPullIn_ = 0;
+    auto* manager = getManager();
+    auto* root = manager
+                     ? dynamic_cast<sim::SimContainer*>(manager->findObject(sim::RootContainerId))
+                     : nullptr;
+    if (!root) {
+        return;
+    }
+    for (Int32 slot = 0; slot < MaxImageSlots; ++slot) {
+        const auto* data = getImageData(itemImageList_[slot].imageId);
+        if (!data || data->mountPoint != 0) {
+            continue;
+        }
+        TMat3F image, muzzle;
+        if (!getImageTransform(slot, &image) || !getMuzzleTransform(slot, &muzzle)) {
+            return;
+        }
+        sim::SimContainerQuery query;
+        query.id = getId();
+        query.type = AllObjectTypes;
+        query.mask = AllObjectTypes & ~CorpseObjectType;
+        m_mul(image.p, getTransform(), query.box.fMin);
+        m_mul(muzzle.p, getTransform(), query.box.fMax);
+        sim::SimCollisionInfo hit;
+        if (!root->findLOS(query, hit) || hit.surfaces.surfaces.empty()) {
+            return;
+        }
+        Point3F end, forward;
+        m_mul(hit.surfaces.surfaces.front().position, hit.surfaces.tWorld, end);
+        getTransform().getRow(1, forward);
+        // Vanilla pulls the primary mount along its Y axis using the hit's
+        // body-forward projection, with 0.2 units of muzzle clearance.
+        gunPullIn_ = m_dot(end - query.box.fMax, forward) - .2f;
+        return;
+    }
+}
+
 bool Player::getImageTransform(Int32 slot, TMat3F* transform) const {
     if (!transform || slot < 0 || slot >= MaxImageSlots) {
         return false;
@@ -1013,9 +1052,13 @@ bool Player::getImageTransform(Int32 slot, TMat3F* transform) const {
             (playerData_->animData[std::size_t(pickAnim())].viewFlags & view)) {
             mount.set(EulerF{viewPitch_, 0, 0}, mount.p);
         }
+        auto mountOffset = data->mountOffset;
+        if (data->mountPoint == 0) {
+            mountOffset.y += gunPullIn_;
+        }
         const TMat3F offset(
             EulerF{data->mountRotation.x, data->mountRotation.y, data->mountRotation.z},
-            data->mountOffset);
+            mountOffset);
         m_mul(offset, mount, *transform);
         return true;
     }
@@ -1232,7 +1275,10 @@ void Player::getCameraTransform(Flt32 camDist, TMat3F* transform) const {
             }
         }
         m_mul(TMat3F(EulerF{viewPitch_, 0, 0}, anchor), getTransform(), *transform);
+        transform->p.z += std::sin(bounce_ * 2) / 120;
         validateEyePoint(transform, camDist);
+    } else {
+        transform->p.z += std::sin(bounce_ * 2) / 120;
     }
 }
 

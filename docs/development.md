@@ -226,8 +226,10 @@ python -m unittest discover -s tests/tools -v
 
 Gameplay regressions include target filtering, impact delivery, player animation
 audio, looping weapon audio, target names and health fractions, mission clock
-resets, and projectile velocity inheritance. An optional acceptance case uses an
-external game installation to check chaingun damage and renderable impacts on
+resets, and projectile velocity inheritance. The game suite also checks vanilla
+primary-weapon wall pull-in across pitch, yaw, crouching and client/server paths,
+plus client camera bounce without moving the aiming eye. An optional acceptance
+case uses an external game installation to check chaingun damage and renderable impacts on
 all five antenna models and a Scout, then cycles a hosted mission through the
 summary screen and back to player control:
 

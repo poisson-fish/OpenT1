@@ -183,6 +183,8 @@ bool Player::processQuery(sim::SimQuery& query) {
         reSkin();
         appendMountedImages(*shapes);
         appendJetFlame(*shapes);
+        // ShapeBase owns the skinned materials and invalidates them on reSkin,
+        // including forced refreshes that keep the same skin name.
         (void)Parent::processQuery(query);
         if (shapes->image) {
             auto& image = *shapes->image;
@@ -192,30 +194,6 @@ bool Player::processQuery(sim::SimQuery& query) {
             image.castShadow = prefPlayerShadows && !mount_ && image.haze <= .2f;
             if (auto pose = animationPose()) {
                 image.pose = std::move(*pose);
-            }
-        }
-        if (!isFirstPersonView()) {
-            if (shapes->image) {
-                const auto skin = std::string(getSkinBase());
-                if (!skinMaterials_ || renderedSkin_ != skin) {
-                    auto* dbm = resolveDataBlockManager();
-                    if (dbm && dbm->resources() && playerData_ &&
-                        shapes->image->resources.shape->materials) {
-                        skinMaterials_ = world::TsMaterialResources::loadSkin(
-                            *dbm->resources(),
-                            *shapes->image->resources.shape->materials,
-                            skin,
-                            playerData_->fileName);
-                        if (skinMaterials_) {
-                            renderedSkin_ = skin;
-                        }
-                    }
-                }
-                if (skinMaterials_) {
-                    if (auto materials = damageMaterials(*skinMaterials_)) {
-                        shapes->image->resources.materials = std::move(*materials);
-                    }
-                }
             }
         }
         return shapes->image.has_value() || !shapes->attachments.empty();
@@ -270,7 +248,6 @@ bool Player::initResources(GameBaseData* inData) {
     }
     updateImageMass();
     animationThread_.reset();
-    skinMaterials_.reset();
     lookThread_.reset();
     flameShape_.reset();
     flameThread_.reset();

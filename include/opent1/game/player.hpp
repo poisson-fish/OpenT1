@@ -591,8 +591,6 @@ private:
     std::shared_ptr<world::TsShapeInstance> flameShape_;
     std::optional<UInt32> flameThread_;
     std::optional<world::TsShapeResources> flameResources_;
-    std::string renderedSkin_;
-    std::optional<world::TsMaterialResources> skinMaterials_;
     Int32 mountPoint_{0};
     UInt16 mountGhostIndex_{sim::InvalidGhostIndex};
     UInt32 curGuiMode_{1};

@@ -240,6 +240,15 @@ The optional cases do not bundle game assets or run unless this variable is set.
 The `game` suite's installed-content integration checks use the same variable;
 they do not auto-discover nearby installations during the standard test run.
 
+With the Wasteland RPG mod (including `RPG/SpecialArmors.cs`), the optional
+`skins` suite saves a DeathKnight character and checks its first controllable
+body after cold loopback joins and reconnects. It verifies the selected armor
+and actual skin textures using temporary write directories:
+
+```powershell
+.\build\x64-release\tests\opent1_tests.exe --suite skins
+```
+
 The `game` suite also checks enemy popup acquisition and rendered names, health,
 and markers through loopback and UDP visibility replication, including low cover,
 solid occluders, team changes and hidden/dead targets. With an installed RPG mod,

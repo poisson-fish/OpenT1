@@ -51,7 +51,7 @@ struct EditorViewport {
     bool hasHover{};
     Point3F anchor{}, lastPlane{}, placeOffset{};
     float rotationSum{}, rotationApplied{};
-    std::string action;
+    std::string action{};
 
     FearMissionEditor* editor() const {
         auto* client = !gameLife.expired() ? game.world(sim::WorldType::Client) : nullptr;
@@ -522,7 +522,7 @@ struct EditorViewport {
                 for (Int32 x = 0; x < document->grid.size.x; ++x) {
                     const Point2I p{x * width, y * width};
                     for (Int32 i = 0; i < width; ++i) {
-                        for (const auto edge :
+                        for (const auto& edge :
                              {std::pair{Point2I{p.x + i, p.y}, Point2I{p.x + i + 1, p.y}},
                               std::pair{Point2I{p.x, p.y + i}, Point2I{p.x, p.y + i + 1}}}) {
                             const auto a = vertex(edge.first), b = vertex(edge.second);

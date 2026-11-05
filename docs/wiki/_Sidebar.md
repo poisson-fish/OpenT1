@@ -12,5 +12,6 @@
 - [Compatibility and troubleshooting](Compatibility-and-troubleshooting.md)
 - [Releasing](Releasing.md)
 
-[Downloads](https://github.com/poisson-fish/OpenT1/releases) ·
+[Continuous downloads](https://github.com/poisson-fish/OpenT1/wiki/Continuous-builds) ·
+[Numbered releases](https://github.com/poisson-fish/OpenT1/releases) ·
 [Report an issue](https://github.com/poisson-fish/OpenT1/issues/new/choose)

@@ -10,14 +10,21 @@ prints the engine version and source commit; every binary archive contains
 The Build and test workflow runs Debug and Release on Windows x64, Linux x64 and
 macOS ARM64. Release jobs stage explicit install inputs, inspect them, archive
 them, extract each download and test the extracted executable away from the build
-tree. Publication requires all six build/test jobs to pass. PRs produce reviewable
+tree. Publication requires all six build/test jobs and the tools check to pass. PRs produce reviewable
 artifacts but cannot publish releases.
 
-After a successful push to `main`, the workflow updates the **continuous** tag and
-prerelease. Its fixed filenames provide stable download URLs. A stale main run
-cannot replace downloads once a newer main commit exists. This dedicated tag may
-move; numbered release tags must stay fixed. The rolling build is never marked
-the latest stable release.
+After a successful push to `main`, the workflow publishes a fixed prerelease
+snapshot and updates [Continuous builds](https://github.com/poisson-fish/OpenT1/wiki/Continuous-builds)
+with current download links. Snapshot tags contain the source commit and a digest
+of the download checksums: `main-COMMIT-DIGEST`. Rebuilding the same source with
+different archive bytes creates a distinct snapshot. No published tag or asset is
+overwritten. Main snapshots are never marked the latest stable release.
+
+This works with the repository's immutable-release enforcement enabled.
+[GitHub locks published immutable tags and assets](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases).
+The continuous wiki page changes its links while the files behind each link stay
+fixed. A stale main run cannot roll the index back after a newer main commit exists.
+The original `continuous` tag is an archived initial snapshot, not a moving tag.
 
 ## Make a numbered release
 
@@ -41,8 +48,9 @@ the latest stable release.
 5. Confirm all downloads/checksums and append the manual validation/known-issues
    notes. Stable tags become latest; alpha/beta/rc tags remain prereleases.
 
-An existing published numbered release is not overwritten by rerunning its job.
-Use a new version/tag for corrections. A failed upload can leave a draft that a
+An existing published release is verified against the tested asset digests on a
+retry. Identical bytes are reused; different bytes require a new tag. Use a new
+numbered version for corrections. A failed upload can leave a draft that a
 rerun completes. If a tag was pushed before its main build completed, rerun the
 numbered-release workflow after main succeeds. Build artifacts are retained for
 14 days; rerun the exact main build to regenerate expired inputs before promoting
@@ -52,7 +60,7 @@ permission only in the publishing job; no personal token is needed for releases.
 
 ## Before a public numbered release
 
-- Check all six CI jobs and inspect the actual archive file lists and hashes.
+- Check the six matrix jobs and tools check, and inspect the archive lists/hashes.
 - On a clean target machine, extract and launch with actual game data. Verify
   menus, input, window/fullscreen behavior, hardware/software rendering and audio.
 - Play a base mission, host/join using separate processes, reconnect and reload
@@ -109,6 +117,11 @@ Home page through GitHub once before using Git publication. The workflow first
 uses `GITHUB_TOKEN`; if the repository's wiki policy rejects that token, supply
 a repository secret `WIKI_TOKEN` with write access to that wiki. No token is
 embedded in source, command URLs, generated docs or logs.
+
+`Continuous-builds.md` is generated directly by the successful main publisher and
+is deliberately outside `docs/wiki/`. Ordinary documentation sync preserves it;
+do not add a canonical page with that filename. It is the stable entry point for
+current main downloads. Main/numbered release assets remain immutable.
 
 Maintainers can publish with existing GitHub CLI credentials:
 

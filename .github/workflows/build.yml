@@ -14,6 +14,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  tools:
+    name: Release and documentation tools
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s tests/tools -v
+      - run: python tools/sync_wiki.py --check
+
   build:
     name: ${{ matrix.platform.name }} ${{ matrix.configuration }}
     runs-on: ${{ matrix.platform.runner }}
@@ -125,10 +136,11 @@ jobs:
           path: build/dist/*
           if-no-files-found: error
           retention-days: 14
+          overwrite: true
 
   publish:
     name: Publish release downloads
-    needs: build
+    needs: [build, tools]
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
     permissions:

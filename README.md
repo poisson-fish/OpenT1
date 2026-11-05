@@ -20,8 +20,10 @@ verified for the particular game content and environment being used.
 ## Downloads and documentation
 
 [Numbered releases](https://github.com/poisson-fish/OpenT1/releases) provide fixed
-versions; the [continuous main prerelease](https://github.com/poisson-fish/OpenT1/releases/tag/continuous)
-updates after successful main builds. Packages target Windows x64, Linux x64
+versions; [continuous main downloads](https://github.com/poisson-fish/OpenT1/wiki/Continuous-builds)
+advance after successful main builds. Each linked snapshot keeps its original
+tag and files, including when GitHub release immutability is enabled.
+Packages target Windows x64, Linux x64
 (Ubuntu 24.04 or compatible), and macOS ARM64 (macOS 15+), and include runtime
 libraries, matching docs and original scripting examples. Supply game data from
 your own installation. Checksums and a combined source/dependency bundle accompany

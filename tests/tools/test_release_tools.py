@@ -1,9 +1,11 @@
 """Release boundary checks: reject bad inputs and preserve documentation links."""
 from pathlib import Path
 import json
+import io
 import shutil
 import sys
 import tempfile
+import tarfile
 import unittest
 import zipfile
 from unittest.mock import patch
@@ -70,6 +72,51 @@ class ReleaseInputs(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "identity"):
             publish_release.validate_identity([archive], "b" * 40, "0.1.0")
 
+    def test_source_archive_must_match_the_binary_commit(self):
+        archive = self.stage / "OpenT1-source.tar.gz"
+        with tarfile.open(archive, "w:gz", format=tarfile.PAX_FORMAT,
+                          pax_headers={"comment": "a" * 40}) as package:
+            entry = tarfile.TarInfo("OpenT1-source/VERSION")
+            contents = b"0.1.0\n"
+            entry.size = len(contents)
+            package.addfile(entry, io.BytesIO(contents))
+        publish_release.validate_identity([archive], "a" * 40, "0.1.0")
+        with self.assertRaisesRegex(ValueError, "Source archive"):
+            publish_release.validate_identity([archive], "b" * 40, "0.1.0")
+
+    def test_rebuilt_download_bytes_get_a_new_snapshot(self):
+        checksums = self.stage / "SHA256SUMS.txt"
+        checksums.write_text("first build")
+        first = publish_release.snapshot_tag("a" * 40, checksums)
+        self.assertEqual(first, publish_release.snapshot_tag("a" * 40, checksums))
+        checksums.write_text("rebuilt archive with a new toolchain")
+        self.assertNotEqual(first, publish_release.snapshot_tag("a" * 40, checksums))
+
+    def test_published_snapshot_retries_do_not_change_assets(self):
+        file = self.stage / "OpenT1-windows-x64.zip"
+        file.write_bytes(b"tested binary download")
+        release = {"draft": False, "html_url": "https://github.com/example/project/releases/tag/main-test",
+                   "assets": [{"name": file.name, "digest": f"sha256:{package_release.sha256(file)}"}]}
+        with patch.object(publish_release.subprocess, "run") as run, \
+             patch.object(publish_release, "gh", return_value=json.dumps(release)) as api:
+            run.return_value.returncode = 0
+            result = publish_release.publish("example/project", "main-test", "Title", True,
+                                             [file], self.stage / "notes.md")
+            self.assertEqual(result, release["html_url"])
+            api.assert_called_once_with("api", "repos/example/project/releases/tags/main-test")
+            file.write_bytes(b"different unapproved bytes")
+            with self.assertRaisesRegex(ValueError, "Published assets differ"):
+                publish_release.publish("example/project", "main-test", "Title", True,
+                                        [file], self.stage / "notes.md")
+            self.assertTrue(all(call.args[0] == "api" for call in api.call_args_list))
+
+    def test_continuous_page_points_to_the_fixed_snapshot(self):
+        page = publish_release.download_page("example/project", "a" * 40, "0.1.0", "main-tested-build")
+        for name in ("OpenT1-windows-x64.zip", "OpenT1-linux-x64.tar.gz", "OpenT1-macos-arm64.tar.gz",
+                     "OpenT1-source.tar.gz", "SHA256SUMS.txt"):
+            self.assertIn(f"/releases/download/main-tested-build/{name}", page)
+        self.assertNotIn("/releases/download/continuous/", page)
+
 
 class WikiSources(unittest.TestCase):
     def test_repository_links_and_generated_index_are_current(self):
@@ -80,8 +127,11 @@ class WikiSources(unittest.TestCase):
             directory = Path(temporary)
             other = directory / "Community.md"
             other.write_text("User-owned page")
+            dynamic = directory / "Continuous-builds.md"
+            dynamic.write_text("Current tested build links")
             sync_wiki.export(directory)
             self.assertEqual(other.read_text(), "User-owned page")
+            self.assertEqual(dynamic.read_text(), "Current tested build links")
             home = (directory / "Home.md").read_text()
             self.assertIn("](Getting-started)", home)
             self.assertNotIn("](Getting-started.md)", home)

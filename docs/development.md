@@ -383,8 +383,9 @@ check count because CTest groups cases into subsystem suites.
 The `Runtime` install component stages the game, asset tool, required runtime
 libraries, notices, wiki docs and original script examples. Release CI creates
 archives using `tools/package_release.py` and tests the extracted downloads.
-After all platform/configuration jobs pass, main pushes update the `continuous`
-prerelease; `vX.Y.Z` tags on main history publish numbered releases. See the
+After all platform/configuration and tools jobs pass, main pushes publish fixed
+main snapshots and update the wiki's continuous download index; `vX.Y.Z` tags on
+main history publish numbered releases. See the
 [release guide](wiki/Releasing.md) for versioning, source bundles and acceptance.
 
 When preparing a binary distribution, include `LICENSE`, `THIRD_PARTY.md`, and

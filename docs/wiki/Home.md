@@ -8,7 +8,7 @@ with every installation, mod or hardware driver.
 
 Start with [Getting started](Getting-started.md). Download a fixed version from
 [Releases](https://github.com/poisson-fish/OpenT1/releases), or use the
-[continuous main build](https://github.com/poisson-fish/OpenT1/releases/tag/continuous)
+[continuous main build](https://github.com/poisson-fish/OpenT1/wiki/Continuous-builds)
 to try current development. Game data must come from your own installation.
 
 | I want to… | Read |

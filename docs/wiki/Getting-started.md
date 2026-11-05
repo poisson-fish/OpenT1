@@ -3,9 +3,10 @@
 ## Choose a download
 
 [Numbered releases](https://github.com/poisson-fish/OpenT1/releases) identify fixed
-versions. The [continuous prerelease](https://github.com/poisson-fish/OpenT1/releases/tag/continuous)
-is replaced after successful builds of `main`; it may change behavior between
-downloads. Keep the original archive when you need to reproduce a development issue.
+versions. The [continuous download page](https://github.com/poisson-fish/OpenT1/wiki/Continuous-builds)
+links the newest successful main snapshot. The page advances as main builds pass;
+each linked snapshot retains its original files and tag. Keep the version or
+commit identity when reproducing a development issue.
 
 | Package | Target |
 | --- | --- |

@@ -26,7 +26,9 @@ See [Getting started](docs/Getting-started.md), [game modding](docs/Game-modding
 [server hosting](docs/Server-hosting.md), and [troubleshooting](docs/Compatibility-and-troubleshooting.md).
 `opent1_asset_tool` provides native asset inspection/conversion utilities.
 
-Continuous downloads are development prereleases. Numbered releases are fixed.
+The [continuous download page](https://github.com/poisson-fish/OpenT1/wiki/Continuous-builds)
+links the latest development snapshot. Each snapshot and numbered release retains
+its original files and tag.
 Automated package tests cover headless startup, not real GPU/audio hardware or
 every game/mod. Verify archives with `SHA256SUMS.txt` from the same release.
 

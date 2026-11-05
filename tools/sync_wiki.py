@@ -69,7 +69,7 @@ def export(destination: Path) -> None:
         (destination / page.name).write_text(text, encoding="utf-8", newline="\n")
 
 
-def publish(repository: str) -> None:
+def publish(repository: str, generated_pages: dict[str, str] | None = None) -> None:
     if not re.fullmatch(r"[\w.-]+/[\w.-]+", repository):
         raise ValueError("Expected owner/repository")
     with tempfile.TemporaryDirectory(prefix="opent1-wiki-") as temporary:
@@ -78,7 +78,13 @@ def publish(repository: str) -> None:
         git = ["git", "-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential"]
         subprocess.run([*git, "clone", f"https://github.com/{repository}.wiki.git", str(clone)], check=True)
         export(clone)
-        subprocess.run(["git", "add", "--", *[p.name for p in PAGES.glob("*.md")]], cwd=clone, check=True)
+        page_names = [p.name for p in PAGES.glob("*.md")]
+        for name, content in (generated_pages or {}).items():
+            if not re.fullmatch(r"[A-Za-z0-9_-]+\.md", name) or name in page_names:
+                raise ValueError(f"Invalid or canonical generated page: {name}")
+            (clone / name).write_text(content, encoding="utf-8", newline="\n")
+            page_names.append(name)
+        subprocess.run(["git", "add", "--", *page_names], cwd=clone, check=True)
         if subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=clone).returncode == 0:
             print("Wiki already matches repository documentation.")
             return

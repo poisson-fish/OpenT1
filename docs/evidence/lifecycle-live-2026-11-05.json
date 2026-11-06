@@ -1,0 +1,5757 @@
+{
+  "date_local": "2026-11-05",
+  "timezone": "America/Denver",
+  "opent1_behavior_base_commit": "a7a2e9b",
+  "additional_engine_behavior_changes": false,
+  "timing": "departure observation is from a 50 ms log poll after relay receipt of outgoing control; not a remote packet-processing timestamp",
+  "scope": "See live-disconnect-interoperability.md for supported scenarios and remaining unverified cases.",
+  "runs": [
+    {
+      "opent1_sha256": "722512500a421b5a94208e62a3b3640b45cb7bd53e776227f59fd87c239510dd",
+      "vanilla_sha256": "e9aa50a43dae8f23d54863be031bc8e1b871afb839d9317b83e372a656c6e740",
+      "memory_sha256": "3bf2e460d637c9a170a9eace0af2a26acb7c9aae91ee93d9b242d94bf8070592",
+      "scope": "minimal native delegates; no mission, UI, GPU, or internet claims",
+      "os": "Windows-11-10.0.26200-SP0",
+      "label": "minimal-debug",
+      "cases": [
+        {
+          "name": "vanilla-to-vanilla-kick",
+          "client": "vanilla",
+          "server": "vanilla",
+          "scenario": "kick",
+          "accepted": 3,
+          "joins": 3,
+          "drops": 3,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 4.968,
+          "disconnects": 0,
+          "replacement_requests": 2,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "Dropped",
+            "Accepted",
+            "Dropped",
+            "Accepted",
+            "Dropped"
+          ],
+          "client_exit": null,
+          "server_disconnects": 3,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE DELEGATE=35",
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=1",
+            "LIFECYCLE DROP=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=2",
+            "LIFECYCLE DROP=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=3"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 3,
+            "s2c:Accept": 3,
+            "c2s:Data": 52,
+            "s2c:Data": 15,
+            "s2c:Disconnect": 3
+          },
+          "control_trace": [
+            {
+              "ms": 3260.73,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  4,
+                  4
+                ],
+                [
+                  12,
+                  4
+                ],
+                [
+                  20,
+                  4
+                ],
+                [
+                  28,
+                  4
+                ]
+              ],
+              "size": 46,
+              "generation": 415449859
+            },
+            {
+              "ms": 3261.21,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 31,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 415449859
+            },
+            {
+              "ms": 3776.71,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 7,
+              "high_ack": 6,
+              "acks": [
+                [
+                  16,
+                  2
+                ]
+              ],
+              "size": 23,
+              "generation": 415449859
+            },
+            {
+              "ms": 3826.08,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  2,
+                  2
+                ],
+                [
+                  8,
+                  1
+                ],
+                [
+                  16,
+                  1
+                ],
+                [
+                  20,
+                  1
+                ],
+                [
+                  22,
+                  1
+                ],
+                [
+                  24,
+                  4
+                ],
+                [
+                  0,
+                  1
+                ]
+              ],
+              "size": 49,
+              "generation": 415449860
+            },
+            {
+              "ms": 3827.08,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 415449860
+            },
+            {
+              "ms": 4320.11,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 7,
+              "high_ack": 6,
+              "acks": [
+                [
+                  16,
+                  2
+                ]
+              ],
+              "size": 23,
+              "generation": 415449860
+            },
+            {
+              "ms": 4370.06,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  7,
+                  1
+                ]
+              ],
+              "size": 43,
+              "generation": 415449861
+            },
+            {
+              "ms": 4370.61,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 7,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 415449861
+            },
+            {
+              "ms": 4865.87,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 7,
+              "high_ack": 6,
+              "acks": [
+                [
+                  16,
+                  2
+                ]
+              ],
+              "size": 23,
+              "generation": 415449861
+            }
+          ]
+        },
+        {
+          "name": "vanilla-to-vanilla-shutdown",
+          "client": "vanilla",
+          "server": "vanilla",
+          "scenario": "shutdown",
+          "accepted": 1,
+          "joins": 1,
+          "drops": 1,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 3.606,
+          "disconnects": 1,
+          "replacement_requests": 0,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted"
+          ],
+          "client_exit": 0,
+          "server_disconnects": 0,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE DELEGATE=35",
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=1"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE SHUTDOWN"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 1,
+            "s2c:Accept": 1,
+            "c2s:Data": 8,
+            "s2c:Data": 2,
+            "c2s:Disconnect": 1
+          },
+          "control_trace": [
+            {
+              "ms": 3274.65,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  4,
+                  4
+                ],
+                [
+                  12,
+                  4
+                ],
+                [
+                  20,
+                  4
+                ],
+                [
+                  28,
+                  4
+                ]
+              ],
+              "size": 46,
+              "generation": 415454890
+            },
+            {
+              "ms": 3276.28,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 31,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 415454890
+            },
+            {
+              "ms": 3482.14,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 9,
+              "high_ack": 5,
+              "acks": [
+                [
+                  3,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 415454890
+            }
+          ]
+        },
+        {
+          "name": "vanilla-to-opent1-kick",
+          "client": "vanilla",
+          "server": "opent1",
+          "scenario": "kick",
+          "accepted": 3,
+          "joins": 3,
+          "drops": 3,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 4.037,
+          "disconnects": 0,
+          "replacement_requests": 2,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "Dropped",
+            "Accepted",
+            "Dropped",
+            "Accepted",
+            "Dropped"
+          ],
+          "client_exit": null,
+          "server_disconnects": 3,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=1",
+            "LIFECYCLE DROP=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=2",
+            "LIFECYCLE DROP=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=3"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 3,
+            "s2c:Accept": 3,
+            "c2s:Data": 51,
+            "s2c:Data": 48,
+            "s2c:Disconnect": 3
+          },
+          "control_trace": [
+            {
+              "ms": 2293.9,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  4,
+                  4
+                ],
+                [
+                  12,
+                  4
+                ],
+                [
+                  20,
+                  4
+                ],
+                [
+                  28,
+                  4
+                ]
+              ],
+              "size": 46,
+              "generation": 415457546
+            },
+            {
+              "ms": 2296.59,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 31,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 415457546
+            },
+            {
+              "ms": 2793.54,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 18,
+              "high_ack": 16,
+              "acks": [
+                [
+                  17,
+                  1
+                ]
+              ],
+              "size": 22,
+              "generation": 415457546
+            },
+            {
+              "ms": 2842.85,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  2,
+                  2
+                ],
+                [
+                  8,
+                  1
+                ],
+                [
+                  16,
+                  1
+                ],
+                [
+                  20,
+                  1
+                ],
+                [
+                  22,
+                  1
+                ],
+                [
+                  24,
+                  4
+                ],
+                [
+                  0,
+                  1
+                ]
+              ],
+              "size": 49,
+              "generation": 415457547
+            },
+            {
+              "ms": 2844.17,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 415457547
+            },
+            {
+              "ms": 3342.86,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 18,
+              "high_ack": 16,
+              "acks": [
+                [
+                  17,
+                  1
+                ]
+              ],
+              "size": 22,
+              "generation": 415457547
+            },
+            {
+              "ms": 3392.86,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  17,
+                  2
+                ]
+              ],
+              "size": 43,
+              "generation": 415457548
+            },
+            {
+              "ms": 3394.17,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 18,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 415457548
+            },
+            {
+              "ms": 3892.99,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 18,
+              "high_ack": 16,
+              "acks": [
+                [
+                  17,
+                  1
+                ]
+              ],
+              "size": 22,
+              "generation": 415457548
+            }
+          ]
+        },
+        {
+          "name": "vanilla-to-opent1-shutdown",
+          "client": "vanilla",
+          "server": "opent1",
+          "scenario": "shutdown",
+          "accepted": 1,
+          "joins": 1,
+          "drops": 1,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 2.607,
+          "disconnects": 1,
+          "replacement_requests": 0,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted"
+          ],
+          "client_exit": 0,
+          "server_disconnects": 0,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=1"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE SHUTDOWN"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 1,
+            "s2c:Accept": 1,
+            "c2s:Data": 8,
+            "s2c:Data": 7,
+            "c2s:Disconnect": 1
+          },
+          "control_trace": [
+            {
+              "ms": 2268.28,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  4,
+                  4
+                ],
+                [
+                  12,
+                  4
+                ],
+                [
+                  20,
+                  4
+                ],
+                [
+                  28,
+                  4
+                ]
+              ],
+              "size": 46,
+              "generation": 415461625
+            },
+            {
+              "ms": 2270.63,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 31,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 415461625
+            },
+            {
+              "ms": 2474.72,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 9,
+              "high_ack": 8,
+              "acks": [
+                [
+                  8,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 415461625
+            }
+          ]
+        },
+        {
+          "name": "opent1-to-vanilla-kick",
+          "client": "opent1",
+          "server": "vanilla",
+          "scenario": "kick",
+          "accepted": 3,
+          "joins": 3,
+          "drops": 3,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 3.887,
+          "disconnects": 0,
+          "replacement_requests": 2,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "Dropped",
+            "Accepted",
+            "Dropped",
+            "Accepted",
+            "Dropped"
+          ],
+          "client_exit": null,
+          "server_disconnects": 3,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE DELEGATE=35",
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=1",
+            "LIFECYCLE DROP=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=2",
+            "LIFECYCLE DROP=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=3"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 3,
+            "s2c:Accept": 3,
+            "c2s:Data": 50,
+            "s2c:Data": 15,
+            "s2c:Disconnect": 3
+          },
+          "control_trace": [
+            {
+              "ms": 2192.54,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 1
+            },
+            {
+              "ms": 2193.84,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 1
+            },
+            {
+              "ms": 2680.96,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 7,
+              "high_ack": 6,
+              "acks": [
+                [
+                  15,
+                  2
+                ]
+              ],
+              "size": 23,
+              "generation": 1
+            },
+            {
+              "ms": 2730.88,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 2
+            },
+            {
+              "ms": 2732.28,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 2
+            },
+            {
+              "ms": 3225.41,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 7,
+              "high_ack": 6,
+              "acks": [
+                [
+                  16,
+                  2
+                ]
+              ],
+              "size": 23,
+              "generation": 2
+            },
+            {
+              "ms": 3276.18,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 3
+            },
+            {
+              "ms": 3278.07,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 3
+            },
+            {
+              "ms": 3768.62,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 7,
+              "high_ack": 6,
+              "acks": [
+                [
+                  16,
+                  2
+                ]
+              ],
+              "size": 23,
+              "generation": 3
+            }
+          ]
+        },
+        {
+          "name": "opent1-to-vanilla-shutdown",
+          "client": "opent1",
+          "server": "vanilla",
+          "scenario": "shutdown",
+          "accepted": 1,
+          "joins": 1,
+          "drops": 1,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 2.564,
+          "disconnects": 1,
+          "replacement_requests": 0,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted"
+          ],
+          "client_exit": 0,
+          "server_disconnects": 0,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE DELEGATE=35",
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=1"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE SHUTDOWN"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 1,
+            "s2c:Accept": 1,
+            "c2s:Data": 7,
+            "s2c:Data": 2,
+            "c2s:Disconnect": 1
+          },
+          "control_trace": [
+            {
+              "ms": 2239.36,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 1
+            },
+            {
+              "ms": 2241.16,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 1
+            },
+            {
+              "ms": 2442.46,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 8,
+              "high_ack": 4,
+              "acks": [
+                [
+                  3,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 1
+            }
+          ]
+        },
+        {
+          "name": "opent1-to-opent1-kick",
+          "client": "opent1",
+          "server": "opent1",
+          "scenario": "kick",
+          "accepted": 3,
+          "joins": 3,
+          "drops": 3,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 2.9,
+          "disconnects": 0,
+          "replacement_requests": 2,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "Dropped",
+            "Accepted",
+            "Dropped",
+            "Accepted",
+            "Dropped"
+          ],
+          "client_exit": null,
+          "server_disconnects": 3,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=1",
+            "LIFECYCLE DROP=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=2",
+            "LIFECYCLE DROP=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=3"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 3,
+            "s2c:Accept": 3,
+            "c2s:Data": 50,
+            "s2c:Data": 48,
+            "s2c:Disconnect": 3
+          },
+          "control_trace": [
+            {
+              "ms": 1194.89,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 1
+            },
+            {
+              "ms": 1196.97,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 1
+            },
+            {
+              "ms": 1694.65,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 18,
+              "high_ack": 16,
+              "acks": [
+                [
+                  16,
+                  1
+                ]
+              ],
+              "size": 22,
+              "generation": 1
+            },
+            {
+              "ms": 1745.11,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 2
+            },
+            {
+              "ms": 1746.68,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 2
+            },
+            {
+              "ms": 2244.5,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 18,
+              "high_ack": 16,
+              "acks": [
+                [
+                  17,
+                  1
+                ]
+              ],
+              "size": 22,
+              "generation": 2
+            },
+            {
+              "ms": 2295.02,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 3
+            },
+            {
+              "ms": 2296.81,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 3
+            },
+            {
+              "ms": 2794.51,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 18,
+              "high_ack": 16,
+              "acks": [
+                [
+                  16,
+                  2
+                ]
+              ],
+              "size": 22,
+              "generation": 3
+            }
+          ]
+        },
+        {
+          "name": "opent1-to-opent1-shutdown",
+          "client": "opent1",
+          "server": "opent1",
+          "scenario": "shutdown",
+          "accepted": 1,
+          "joins": 1,
+          "drops": 1,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 1.524,
+          "disconnects": 1,
+          "replacement_requests": 0,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted"
+          ],
+          "client_exit": 0,
+          "server_disconnects": 0,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=1"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE SHUTDOWN"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 1,
+            "s2c:Accept": 1,
+            "c2s:Data": 7,
+            "s2c:Data": 7,
+            "c2s:Disconnect": 1
+          },
+          "control_trace": [
+            {
+              "ms": 1195.34,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 1
+            },
+            {
+              "ms": 1197.55,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 1
+            },
+            {
+              "ms": 1399.65,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 8,
+              "high_ack": 7,
+              "acks": [
+                [
+                  8,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "opent1_sha256": "57e1839681db3262bbdfe64cf5e942dd3754f414522476d9c6ed366c0e1dedc9",
+      "vanilla_sha256": "e9aa50a43dae8f23d54863be031bc8e1b871afb839d9317b83e372a656c6e740",
+      "memory_sha256": "3bf2e460d637c9a170a9eace0af2a26acb7c9aae91ee93d9b242d94bf8070592",
+      "scope": "minimal native delegates; no mission, UI, GPU, or internet claims",
+      "os": "Windows-11-10.0.26200-SP0",
+      "installed_content": null,
+      "label": "minimal-release",
+      "cases": [
+        {
+          "name": "vanilla-to-vanilla-orderly",
+          "client": "vanilla",
+          "server": "vanilla",
+          "scenario": "orderly",
+          "accepted": 3,
+          "joins": 3,
+          "drops": 3,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 4.009,
+          "disconnects": 3,
+          "first_drop_observed_ms": 3506.74,
+          "first_disconnect_ms": 3463.91,
+          "departure_observation_delay_ms": 42.83,
+          "replacement_requests": 2,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "Accepted",
+            "Accepted"
+          ],
+          "client_exit": null,
+          "ghosts_done": false,
+          "endgame_returned": false,
+          "ghost_batches": 0,
+          "endgame_count": 0,
+          "stream_retired": null,
+          "server_disconnects": 0,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE DELEGATE=35",
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=1",
+            "LIFECYCLE DROP=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=2",
+            "LIFECYCLE DROP=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=3"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE CLOSED MANAGER=2049",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE CLOSED MANAGER=2049",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE CLOSED MANAGER=2049",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 3,
+            "s2c:Accept": 3,
+            "c2s:Data": 24,
+            "s2c:Data": 6,
+            "c2s:Disconnect": 3
+          },
+          "control_trace": [
+            {
+              "ms": 3263.2,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  4,
+                  4
+                ],
+                [
+                  12,
+                  4
+                ],
+                [
+                  20,
+                  4
+                ],
+                [
+                  28,
+                  4
+                ]
+              ],
+              "size": 46,
+              "generation": 416297343
+            },
+            {
+              "ms": 3263.87,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 31,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 416297343
+            },
+            {
+              "ms": 3463.91,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 9,
+              "high_ack": 5,
+              "acks": [
+                [
+                  3,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 416297343
+            },
+            {
+              "ms": 3464.31,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  2,
+                  2
+                ],
+                [
+                  8,
+                  1
+                ],
+                [
+                  16,
+                  1
+                ],
+                [
+                  20,
+                  1
+                ],
+                [
+                  22,
+                  1
+                ],
+                [
+                  24,
+                  4
+                ],
+                [
+                  0,
+                  1
+                ]
+              ],
+              "size": 49,
+              "generation": 416297344
+            },
+            {
+              "ms": 3468.87,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 416297344
+            },
+            {
+              "ms": 3668.91,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 9,
+              "high_ack": 5,
+              "acks": [
+                [
+                  3,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 416297344
+            },
+            {
+              "ms": 3669.22,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  3,
+                  1
+                ]
+              ],
+              "size": 43,
+              "generation": 416297345
+            },
+            {
+              "ms": 3674.16,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 3,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 416297345
+            },
+            {
+              "ms": 3873.91,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 9,
+              "high_ack": 5,
+              "acks": [
+                [
+                  3,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 416297345
+            }
+          ]
+        },
+        {
+          "name": "vanilla-to-vanilla-kick",
+          "client": "vanilla",
+          "server": "vanilla",
+          "scenario": "kick",
+          "accepted": 3,
+          "joins": 3,
+          "drops": 3,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 4.983,
+          "disconnects": 0,
+          "first_drop_observed_ms": 3822.31,
+          "first_disconnect_ms": null,
+          "departure_observation_delay_ms": null,
+          "replacement_requests": 2,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "Dropped",
+            "Accepted",
+            "Dropped",
+            "Accepted",
+            "Dropped"
+          ],
+          "client_exit": null,
+          "ghosts_done": false,
+          "endgame_returned": false,
+          "ghost_batches": 0,
+          "endgame_count": 0,
+          "stream_retired": null,
+          "server_disconnects": 3,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE DELEGATE=35",
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=1",
+            "LIFECYCLE DROP=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=2",
+            "LIFECYCLE DROP=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=3"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 3,
+            "s2c:Accept": 3,
+            "c2s:Data": 51,
+            "s2c:Data": 15,
+            "s2c:Disconnect": 3
+          },
+          "control_trace": [
+            {
+              "ms": 3282.76,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  4,
+                  4
+                ],
+                [
+                  12,
+                  4
+                ],
+                [
+                  20,
+                  4
+                ],
+                [
+                  28,
+                  4
+                ]
+              ],
+              "size": 46,
+              "generation": 416301390
+            },
+            {
+              "ms": 3284.65,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 31,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 416301390
+            },
+            {
+              "ms": 3780.56,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 7,
+              "high_ack": 6,
+              "acks": [
+                [
+                  16,
+                  2
+                ]
+              ],
+              "size": 23,
+              "generation": 416301390
+            },
+            {
+              "ms": 3830.61,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  2,
+                  2
+                ],
+                [
+                  8,
+                  1
+                ],
+                [
+                  16,
+                  1
+                ],
+                [
+                  20,
+                  1
+                ],
+                [
+                  22,
+                  1
+                ],
+                [
+                  24,
+                  4
+                ],
+                [
+                  0,
+                  1
+                ]
+              ],
+              "size": 49,
+              "generation": 416301391
+            },
+            {
+              "ms": 3831.6,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 416301391
+            },
+            {
+              "ms": 4324.93,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 7,
+              "high_ack": 6,
+              "acks": [
+                [
+                  16,
+                  2
+                ]
+              ],
+              "size": 23,
+              "generation": 416301391
+            },
+            {
+              "ms": 4374.61,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  7,
+                  1
+                ]
+              ],
+              "size": 43,
+              "generation": 416301392
+            },
+            {
+              "ms": 4374.8,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 7,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 416301392
+            },
+            {
+              "ms": 4868.45,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 7,
+              "high_ack": 6,
+              "acks": [
+                [
+                  16,
+                  2
+                ]
+              ],
+              "size": 23,
+              "generation": 416301392
+            }
+          ]
+        },
+        {
+          "name": "vanilla-to-vanilla-shutdown",
+          "client": "vanilla",
+          "server": "vanilla",
+          "scenario": "shutdown",
+          "accepted": 1,
+          "joins": 1,
+          "drops": 1,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 3.621,
+          "disconnects": 1,
+          "first_drop_observed_ms": 3528.05,
+          "first_disconnect_ms": 3498.7,
+          "departure_observation_delay_ms": 29.35,
+          "replacement_requests": 0,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted"
+          ],
+          "client_exit": 0,
+          "ghosts_done": false,
+          "endgame_returned": false,
+          "ghost_batches": 0,
+          "endgame_count": 0,
+          "stream_retired": null,
+          "server_disconnects": 0,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE DELEGATE=35",
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=1"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE SHUTDOWN"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 1,
+            "s2c:Accept": 1,
+            "c2s:Data": 8,
+            "s2c:Data": 2,
+            "c2s:Disconnect": 1
+          },
+          "control_trace": [
+            {
+              "ms": 3292.77,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  4,
+                  4
+                ],
+                [
+                  12,
+                  4
+                ],
+                [
+                  20,
+                  4
+                ],
+                [
+                  28,
+                  4
+                ]
+              ],
+              "size": 46,
+              "generation": 416306421
+            },
+            {
+              "ms": 3293.95,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 31,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 416306421
+            },
+            {
+              "ms": 3498.7,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 9,
+              "high_ack": 5,
+              "acks": [
+                [
+                  3,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 416306421
+            }
+          ]
+        },
+        {
+          "name": "vanilla-to-opent1-orderly",
+          "client": "vanilla",
+          "server": "opent1",
+          "scenario": "orderly",
+          "accepted": 3,
+          "joins": 3,
+          "drops": 3,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 2.953,
+          "disconnects": 3,
+          "first_drop_observed_ms": 2450.76,
+          "first_disconnect_ms": 2418.14,
+          "departure_observation_delay_ms": 32.62,
+          "replacement_requests": 2,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "Accepted",
+            "Accepted"
+          ],
+          "client_exit": null,
+          "ghosts_done": false,
+          "endgame_returned": false,
+          "ghost_batches": 0,
+          "endgame_count": 0,
+          "stream_retired": null,
+          "server_disconnects": 0,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=1",
+            "LIFECYCLE DROP=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=2",
+            "LIFECYCLE DROP=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=3"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE CLOSED MANAGER=2049",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE CLOSED MANAGER=2049",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE CLOSED MANAGER=2049",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 3,
+            "s2c:Accept": 3,
+            "c2s:Data": 24,
+            "s2c:Data": 21,
+            "c2s:Disconnect": 3
+          },
+          "control_trace": [
+            {
+              "ms": 2218.06,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  4,
+                  4
+                ],
+                [
+                  12,
+                  4
+                ],
+                [
+                  20,
+                  4
+                ],
+                [
+                  28,
+                  4
+                ]
+              ],
+              "size": 46,
+              "generation": 416309000
+            },
+            {
+              "ms": 2218.9,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 31,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 416309000
+            },
+            {
+              "ms": 2418.14,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 9,
+              "high_ack": 8,
+              "acks": [
+                [
+                  8,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 416309000
+            },
+            {
+              "ms": 2418.49,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  2,
+                  2
+                ],
+                [
+                  8,
+                  1
+                ],
+                [
+                  16,
+                  1
+                ],
+                [
+                  20,
+                  1
+                ],
+                [
+                  22,
+                  1
+                ],
+                [
+                  24,
+                  4
+                ],
+                [
+                  0,
+                  1
+                ]
+              ],
+              "size": 49,
+              "generation": 416309001
+            },
+            {
+              "ms": 2419.09,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 416309001
+            },
+            {
+              "ms": 2619.12,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 9,
+              "high_ack": 7,
+              "acks": [
+                [
+                  8,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 416309001
+            },
+            {
+              "ms": 2619.54,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  8,
+                  1
+                ]
+              ],
+              "size": 43,
+              "generation": 416309002
+            },
+            {
+              "ms": 2620.03,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 8,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 416309002
+            },
+            {
+              "ms": 2820.12,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 9,
+              "high_ack": 7,
+              "acks": [
+                [
+                  8,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 416309002
+            }
+          ]
+        },
+        {
+          "name": "vanilla-to-opent1-kick",
+          "client": "vanilla",
+          "server": "opent1",
+          "scenario": "kick",
+          "accepted": 3,
+          "joins": 3,
+          "drops": 3,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 3.922,
+          "disconnects": 0,
+          "first_drop_observed_ms": 2757.17,
+          "first_disconnect_ms": null,
+          "departure_observation_delay_ms": null,
+          "replacement_requests": 2,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "Dropped",
+            "Accepted",
+            "Dropped",
+            "Accepted",
+            "Dropped"
+          ],
+          "client_exit": null,
+          "ghosts_done": false,
+          "endgame_returned": false,
+          "ghost_batches": 0,
+          "endgame_count": 0,
+          "stream_retired": null,
+          "server_disconnects": 3,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=1",
+            "LIFECYCLE DROP=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=2",
+            "LIFECYCLE DROP=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=3"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 3,
+            "s2c:Accept": 3,
+            "c2s:Data": 51,
+            "s2c:Data": 48,
+            "s2c:Disconnect": 3
+          },
+          "control_trace": [
+            {
+              "ms": 2212.95,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  4,
+                  4
+                ],
+                [
+                  12,
+                  4
+                ],
+                [
+                  20,
+                  4
+                ],
+                [
+                  28,
+                  4
+                ]
+              ],
+              "size": 46,
+              "generation": 416311968
+            },
+            {
+              "ms": 2213.76,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 31,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 416311968
+            },
+            {
+              "ms": 2713.0,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 18,
+              "high_ack": 16,
+              "acks": [
+                [
+                  17,
+                  1
+                ]
+              ],
+              "size": 22,
+              "generation": 416311968
+            },
+            {
+              "ms": 2762.36,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  2,
+                  2
+                ],
+                [
+                  8,
+                  1
+                ],
+                [
+                  16,
+                  1
+                ],
+                [
+                  20,
+                  1
+                ],
+                [
+                  22,
+                  1
+                ],
+                [
+                  24,
+                  4
+                ],
+                [
+                  0,
+                  1
+                ]
+              ],
+              "size": 49,
+              "generation": 416311969
+            },
+            {
+              "ms": 2762.87,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 416311969
+            },
+            {
+              "ms": 3262.0,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 18,
+              "high_ack": 16,
+              "acks": [
+                [
+                  17,
+                  1
+                ]
+              ],
+              "size": 22,
+              "generation": 416311969
+            },
+            {
+              "ms": 3311.32,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  17,
+                  2
+                ]
+              ],
+              "size": 43,
+              "generation": 416311970
+            },
+            {
+              "ms": 3311.83,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 18,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 416311970
+            },
+            {
+              "ms": 3810.98,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 18,
+              "high_ack": 16,
+              "acks": [
+                [
+                  17,
+                  1
+                ]
+              ],
+              "size": 22,
+              "generation": 416311970
+            }
+          ]
+        },
+        {
+          "name": "vanilla-to-opent1-shutdown",
+          "client": "vanilla",
+          "server": "opent1",
+          "scenario": "shutdown",
+          "accepted": 1,
+          "joins": 1,
+          "drops": 1,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 2.549,
+          "disconnects": 1,
+          "first_drop_observed_ms": 2451.76,
+          "first_disconnect_ms": 2424.07,
+          "departure_observation_delay_ms": 27.69,
+          "replacement_requests": 0,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted"
+          ],
+          "client_exit": 0,
+          "ghosts_done": false,
+          "endgame_returned": false,
+          "ghost_batches": 0,
+          "endgame_count": 0,
+          "stream_retired": null,
+          "server_disconnects": 0,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=1"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE SHUTDOWN"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 1,
+            "s2c:Accept": 1,
+            "c2s:Data": 8,
+            "s2c:Data": 7,
+            "c2s:Disconnect": 1
+          },
+          "control_trace": [
+            {
+              "ms": 2218.13,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  4,
+                  4
+                ],
+                [
+                  12,
+                  4
+                ],
+                [
+                  20,
+                  4
+                ],
+                [
+                  28,
+                  4
+                ]
+              ],
+              "size": 46,
+              "generation": 416315937
+            },
+            {
+              "ms": 2218.97,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 31,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 416315937
+            },
+            {
+              "ms": 2424.07,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 9,
+              "high_ack": 8,
+              "acks": [
+                [
+                  8,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 416315937
+            }
+          ]
+        },
+        {
+          "name": "opent1-to-vanilla-orderly",
+          "client": "opent1",
+          "server": "vanilla",
+          "scenario": "orderly",
+          "accepted": 3,
+          "joins": 3,
+          "drops": 3,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 2.85,
+          "disconnects": 3,
+          "first_drop_observed_ms": 2345.63,
+          "first_disconnect_ms": 2327.5,
+          "departure_observation_delay_ms": 18.13,
+          "replacement_requests": 2,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "Accepted",
+            "Accepted"
+          ],
+          "client_exit": null,
+          "ghosts_done": false,
+          "endgame_returned": false,
+          "ghost_batches": 0,
+          "endgame_count": 0,
+          "stream_retired": null,
+          "server_disconnects": 0,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE DELEGATE=35",
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=1",
+            "LIFECYCLE DROP=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=2",
+            "LIFECYCLE DROP=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=3"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE CLOSED MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE CLOSED MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE CLOSED MANAGER=0",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 3,
+            "s2c:Accept": 3,
+            "c2s:Data": 23,
+            "s2c:Data": 6,
+            "c2s:Disconnect": 3
+          },
+          "control_trace": [
+            {
+              "ms": 2126.25,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 1
+            },
+            {
+              "ms": 2127.43,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 1
+            },
+            {
+              "ms": 2327.5,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 8,
+              "high_ack": 4,
+              "acks": [
+                [
+                  3,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 1
+            },
+            {
+              "ms": 2328.24,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 2
+            },
+            {
+              "ms": 2333.33,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 2
+            },
+            {
+              "ms": 2532.46,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 9,
+              "high_ack": 5,
+              "acks": [
+                [
+                  3,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 2
+            },
+            {
+              "ms": 2533.19,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 3
+            },
+            {
+              "ms": 2537.94,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 3
+            },
+            {
+              "ms": 2737.44,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 9,
+              "high_ack": 5,
+              "acks": [
+                [
+                  3,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 3
+            }
+          ]
+        },
+        {
+          "name": "opent1-to-vanilla-kick",
+          "client": "opent1",
+          "server": "vanilla",
+          "scenario": "kick",
+          "accepted": 3,
+          "joins": 3,
+          "drops": 3,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 3.87,
+          "disconnects": 0,
+          "first_drop_observed_ms": 2701.93,
+          "first_disconnect_ms": null,
+          "departure_observation_delay_ms": null,
+          "replacement_requests": 2,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "Dropped",
+            "Accepted",
+            "Dropped",
+            "Accepted",
+            "Dropped"
+          ],
+          "client_exit": null,
+          "ghosts_done": false,
+          "endgame_returned": false,
+          "ghost_batches": 0,
+          "endgame_count": 0,
+          "stream_retired": null,
+          "server_disconnects": 3,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE DELEGATE=35",
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=1",
+            "LIFECYCLE DROP=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=2",
+            "LIFECYCLE DROP=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=3"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 3,
+            "s2c:Accept": 3,
+            "c2s:Data": 50,
+            "s2c:Data": 15,
+            "s2c:Disconnect": 3
+          },
+          "control_trace": [
+            {
+              "ms": 2154.35,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 1
+            },
+            {
+              "ms": 2155.93,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 1
+            },
+            {
+              "ms": 2664.07,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 7,
+              "high_ack": 6,
+              "acks": [
+                [
+                  15,
+                  2
+                ]
+              ],
+              "size": 23,
+              "generation": 1
+            },
+            {
+              "ms": 2713.75,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 2
+            },
+            {
+              "ms": 2714.85,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 2
+            },
+            {
+              "ms": 3208.45,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 7,
+              "high_ack": 6,
+              "acks": [
+                [
+                  16,
+                  2
+                ]
+              ],
+              "size": 23,
+              "generation": 2
+            },
+            {
+              "ms": 3258.72,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 3
+            },
+            {
+              "ms": 3260.36,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 3
+            },
+            {
+              "ms": 3752.78,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 7,
+              "high_ack": 6,
+              "acks": [
+                [
+                  16,
+                  2
+                ]
+              ],
+              "size": 23,
+              "generation": 3
+            }
+          ]
+        },
+        {
+          "name": "opent1-to-vanilla-shutdown",
+          "client": "opent1",
+          "server": "vanilla",
+          "scenario": "shutdown",
+          "accepted": 1,
+          "joins": 1,
+          "drops": 1,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 2.444,
+          "disconnects": 1,
+          "first_drop_observed_ms": 2347.77,
+          "first_disconnect_ms": 2331.25,
+          "departure_observation_delay_ms": 16.52,
+          "replacement_requests": 0,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted"
+          ],
+          "client_exit": 0,
+          "ghosts_done": false,
+          "endgame_returned": false,
+          "ghost_batches": 0,
+          "endgame_count": 0,
+          "stream_retired": null,
+          "server_disconnects": 0,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE DELEGATE=35",
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=1"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE SHUTDOWN"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 1,
+            "s2c:Accept": 1,
+            "c2s:Data": 7,
+            "s2c:Data": 2,
+            "c2s:Disconnect": 1
+          },
+          "control_trace": [
+            {
+              "ms": 2129.51,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 1
+            },
+            {
+              "ms": 2130.62,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 1
+            },
+            {
+              "ms": 2331.25,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 8,
+              "high_ack": 4,
+              "acks": [
+                [
+                  3,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 1
+            }
+          ]
+        },
+        {
+          "name": "opent1-to-opent1-orderly",
+          "client": "opent1",
+          "server": "opent1",
+          "scenario": "orderly",
+          "accepted": 3,
+          "joins": 3,
+          "drops": 3,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 1.824,
+          "disconnects": 3,
+          "first_drop_observed_ms": 1319.14,
+          "first_disconnect_ms": 1301.13,
+          "departure_observation_delay_ms": 18.01,
+          "replacement_requests": 2,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "Accepted",
+            "Accepted"
+          ],
+          "client_exit": null,
+          "ghosts_done": false,
+          "endgame_returned": false,
+          "ghost_batches": 0,
+          "endgame_count": 0,
+          "stream_retired": null,
+          "server_disconnects": 0,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=1",
+            "LIFECYCLE DROP=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=2",
+            "LIFECYCLE DROP=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=3"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE CLOSED MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE CLOSED MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE CLOSED MANAGER=0",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 3,
+            "s2c:Accept": 3,
+            "c2s:Data": 23,
+            "s2c:Data": 21,
+            "c2s:Disconnect": 3
+          },
+          "control_trace": [
+            {
+              "ms": 1100.06,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 1
+            },
+            {
+              "ms": 1101.15,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 1
+            },
+            {
+              "ms": 1301.13,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 8,
+              "high_ack": 6,
+              "acks": [
+                [
+                  8,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 1
+            },
+            {
+              "ms": 1302.02,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 2
+            },
+            {
+              "ms": 1302.57,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 2
+            },
+            {
+              "ms": 1502.14,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 9,
+              "high_ack": 8,
+              "acks": [
+                [
+                  8,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 2
+            },
+            {
+              "ms": 1503.29,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 3
+            },
+            {
+              "ms": 1503.79,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 3
+            },
+            {
+              "ms": 1703.14,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 9,
+              "high_ack": 8,
+              "acks": [
+                [
+                  8,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 3
+            }
+          ]
+        },
+        {
+          "name": "opent1-to-opent1-kick",
+          "client": "opent1",
+          "server": "opent1",
+          "scenario": "kick",
+          "accepted": 3,
+          "joins": 3,
+          "drops": 3,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 2.839,
+          "disconnects": 0,
+          "first_drop_observed_ms": 1623.14,
+          "first_disconnect_ms": null,
+          "departure_observation_delay_ms": null,
+          "replacement_requests": 2,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "Dropped",
+            "Accepted",
+            "Dropped",
+            "Accepted",
+            "Dropped"
+          ],
+          "client_exit": null,
+          "ghosts_done": false,
+          "endgame_returned": false,
+          "ghost_batches": 0,
+          "endgame_count": 0,
+          "stream_retired": null,
+          "server_disconnects": 3,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=1",
+            "LIFECYCLE DROP=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE JOIN=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=1 DROPS=2",
+            "LIFECYCLE DROP=3 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=3"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=Dropped MANAGER=0",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 3,
+            "s2c:Accept": 3,
+            "c2s:Data": 50,
+            "s2c:Data": 48,
+            "s2c:Disconnect": 3
+          },
+          "control_trace": [
+            {
+              "ms": 1099.79,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 1
+            },
+            {
+              "ms": 1100.69,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 1
+            },
+            {
+              "ms": 1600.01,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 18,
+              "high_ack": 16,
+              "acks": [
+                [
+                  15,
+                  2
+                ]
+              ],
+              "size": 22,
+              "generation": 1
+            },
+            {
+              "ms": 1649.57,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 2
+            },
+            {
+              "ms": 1650.17,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 2
+            },
+            {
+              "ms": 2148.98,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 18,
+              "high_ack": 16,
+              "acks": [
+                [
+                  17,
+                  1
+                ]
+              ],
+              "size": 22,
+              "generation": 2
+            },
+            {
+              "ms": 2198.66,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 3
+            },
+            {
+              "ms": 2199.25,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 3
+            },
+            {
+              "ms": 2698.0,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 18,
+              "high_ack": 17,
+              "acks": [
+                [
+                  17,
+                  1
+                ]
+              ],
+              "size": 22,
+              "generation": 3
+            }
+          ]
+        },
+        {
+          "name": "opent1-to-opent1-shutdown",
+          "client": "opent1",
+          "server": "opent1",
+          "scenario": "shutdown",
+          "accepted": 1,
+          "joins": 1,
+          "drops": 1,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 1.469,
+          "disconnects": 1,
+          "first_drop_observed_ms": 1369.6,
+          "first_disconnect_ms": 1351.94,
+          "departure_observation_delay_ms": 17.66,
+          "replacement_requests": 0,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted"
+          ],
+          "client_exit": 0,
+          "ghosts_done": false,
+          "endgame_returned": false,
+          "ghost_batches": 0,
+          "endgame_count": 0,
+          "stream_retired": null,
+          "server_disconnects": 0,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=1"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE SHUTDOWN"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 1,
+            "s2c:Accept": 1,
+            "c2s:Data": 8,
+            "s2c:Data": 7,
+            "c2s:Disconnect": 1
+          },
+          "control_trace": [
+            {
+              "ms": 1151.06,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 1
+            },
+            {
+              "ms": 1151.84,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 1
+            },
+            {
+              "ms": 1351.94,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 9,
+              "high_ack": 8,
+              "acks": [
+                [
+                  8,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "opent1_sha256": "57e1839681db3262bbdfe64cf5e942dd3754f414522476d9c6ed366c0e1dedc9",
+      "vanilla_sha256": "e9aa50a43dae8f23d54863be031bc8e1b871afb839d9317b83e372a656c6e740",
+      "memory_sha256": "3bf2e460d637c9a170a9eace0af2a26acb7c9aae91ee93d9b242d94bf8070592",
+      "scope": "minimal native delegates; no mission, UI, GPU, or internet claims",
+      "os": "Windows-11-10.0.26200-SP0",
+      "installed_content": null,
+      "label": "request-reordering-release",
+      "cases": [
+        {
+          "name": "opent1-to-vanilla-cancel_request",
+          "client": "opent1",
+          "server": "vanilla",
+          "scenario": "cancel_request",
+          "accepted": 1,
+          "joins": 1,
+          "drops": 1,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 2.446,
+          "disconnects": 2,
+          "replacement_requests": 1,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted"
+          ],
+          "client_exit": null,
+          "ghosts_done": false,
+          "endgame_returned": false,
+          "ghost_batches": 0,
+          "endgame_count": 0,
+          "server_disconnects": 0,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE DELEGATE=35",
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=1"
+          ],
+          "client_events": [
+            "LIFECYCLE CANCELLED MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE CLOSED MANAGER=0",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 3,
+            "c2s:Disconnect": 2,
+            "s2c:Accept": 1,
+            "c2s:Data": 8
+          },
+          "control_trace": [
+            {
+              "ms": 2125.75,
+              "direction": "c2s",
+              "action": "hold_request",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 1
+            },
+            {
+              "ms": 2139.85,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 2,
+              "high_ack": 0,
+              "acks": [],
+              "size": 7,
+              "generation": 1
+            },
+            {
+              "ms": 2239.99,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 2
+            },
+            {
+              "ms": 2240.04,
+              "direction": "c2s",
+              "action": "release_old",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 1
+            },
+            {
+              "ms": 2240.53,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 2
+            },
+            {
+              "ms": 2440.63,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 9,
+              "high_ack": 1,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 2
+            }
+          ]
+        },
+        {
+          "name": "opent1-to-opent1-cancel_request",
+          "client": "opent1",
+          "server": "opent1",
+          "scenario": "cancel_request",
+          "accepted": 1,
+          "joins": 1,
+          "drops": 1,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 1.425,
+          "disconnects": 2,
+          "replacement_requests": 1,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted"
+          ],
+          "client_exit": null,
+          "ghosts_done": false,
+          "endgame_returned": false,
+          "ghost_batches": 0,
+          "endgame_count": 0,
+          "server_disconnects": 0,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=1"
+          ],
+          "client_events": [
+            "LIFECYCLE CANCELLED MANAGER=0",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE CLOSED MANAGER=0",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 3,
+            "c2s:Disconnect": 2,
+            "s2c:Accept": 1,
+            "c2s:Data": 8
+          },
+          "control_trace": [
+            {
+              "ms": 1099.05,
+              "direction": "c2s",
+              "action": "hold_request",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 1
+            },
+            {
+              "ms": 1116.15,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 2,
+              "high_ack": 0,
+              "acks": [],
+              "size": 7,
+              "generation": 1
+            },
+            {
+              "ms": 1215.87,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 2
+            },
+            {
+              "ms": 1215.94,
+              "direction": "c2s",
+              "action": "release_old",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 1
+            },
+            {
+              "ms": 1216.52,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 2
+            },
+            {
+              "ms": 1417.5,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 9,
+              "high_ack": 1,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "opent1_sha256": "722512500a421b5a94208e62a3b3640b45cb7bd53e776227f59fd87c239510dd",
+      "vanilla_sha256": "e9aa50a43dae8f23d54863be031bc8e1b871afb839d9317b83e372a656c6e740",
+      "memory_sha256": "3bf2e460d637c9a170a9eace0af2a26acb7c9aae91ee93d9b242d94bf8070592",
+      "scope": "minimal native delegates; no mission, UI, GPU, or internet claims",
+      "os": "Windows-11-10.0.26200-SP0",
+      "label": "timeout-debug-vv",
+      "cases": [
+        {
+          "name": "vanilla-to-vanilla-timeout",
+          "client": "vanilla",
+          "server": "vanilla",
+          "scenario": "timeout",
+          "accepted": 1,
+          "joins": 1,
+          "drops": 1,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 51.393,
+          "disconnects": 0,
+          "replacement_requests": 0,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "TimedOut"
+          ],
+          "client_exit": null,
+          "server_disconnects": 0,
+          "blackholed_packets": 73,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE DELEGATE=35",
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=1"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=TimedOut MANAGER=0",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 1,
+            "s2c:Accept": 1,
+            "c2s:Data": 48,
+            "s2c:Data": 26
+          },
+          "control_trace": [
+            {
+              "ms": 3263.64,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  4,
+                  4
+                ],
+                [
+                  12,
+                  4
+                ],
+                [
+                  20,
+                  4
+                ],
+                [
+                  28,
+                  4
+                ]
+              ],
+              "size": 46,
+              "generation": 415466187
+            },
+            {
+              "ms": 3265.15,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 31,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 415466187
+            }
+          ],
+          "blackhole_boundary": [
+            {
+              "ms": 3266.99,
+              "direction": "s2c",
+              "action": "blackhole",
+              "type": "Data",
+              "flags": 0,
+              "parity": 1,
+              "sequence": 2,
+              "high_ack": 1,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 177
+            },
+            {
+              "ms": 51275.88,
+              "direction": "s2c",
+              "action": "blackhole",
+              "type": "Data",
+              "flags": 8,
+              "parity": 1,
+              "sequence": 11,
+              "high_ack": 1,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "opent1_sha256": "722512500a421b5a94208e62a3b3640b45cb7bd53e776227f59fd87c239510dd",
+      "vanilla_sha256": "e9aa50a43dae8f23d54863be031bc8e1b871afb839d9317b83e372a656c6e740",
+      "memory_sha256": "3bf2e460d637c9a170a9eace0af2a26acb7c9aae91ee93d9b242d94bf8070592",
+      "scope": "minimal native delegates; no mission, UI, GPU, or internet claims",
+      "os": "Windows-11-10.0.26200-SP0",
+      "label": "timeout-debug-vo",
+      "cases": [
+        {
+          "name": "vanilla-to-opent1-timeout",
+          "client": "vanilla",
+          "server": "opent1",
+          "scenario": "timeout",
+          "accepted": 1,
+          "joins": 1,
+          "drops": 1,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 50.445,
+          "disconnects": 0,
+          "replacement_requests": 0,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "TimedOut"
+          ],
+          "client_exit": null,
+          "server_disconnects": 0,
+          "blackholed_packets": 94,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=1"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=TimedOut MANAGER=0",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 1,
+            "s2c:Accept": 1,
+            "c2s:Data": 48,
+            "s2c:Data": 47
+          },
+          "control_trace": [
+            {
+              "ms": 2318.8,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  4,
+                  4
+                ],
+                [
+                  12,
+                  4
+                ],
+                [
+                  20,
+                  4
+                ],
+                [
+                  28,
+                  4
+                ]
+              ],
+              "size": 46,
+              "generation": 415465187
+            },
+            {
+              "ms": 2320.94,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 31,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 415465187
+            }
+          ],
+          "blackhole_boundary": [
+            {
+              "ms": 2325.2,
+              "direction": "c2s",
+              "action": "blackhole",
+              "type": "Data",
+              "flags": 0,
+              "parity": 1,
+              "sequence": 2,
+              "high_ack": 1,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 10
+            },
+            {
+              "ms": 50336.53,
+              "direction": "c2s",
+              "action": "blackhole",
+              "type": "Data",
+              "flags": 8,
+              "parity": 1,
+              "sequence": 32,
+              "high_ack": 1,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 35
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "opent1_sha256": "722512500a421b5a94208e62a3b3640b45cb7bd53e776227f59fd87c239510dd",
+      "vanilla_sha256": "e9aa50a43dae8f23d54863be031bc8e1b871afb839d9317b83e372a656c6e740",
+      "memory_sha256": "3bf2e460d637c9a170a9eace0af2a26acb7c9aae91ee93d9b242d94bf8070592",
+      "scope": "minimal native delegates; no mission, UI, GPU, or internet claims",
+      "os": "Windows-11-10.0.26200-SP0",
+      "label": "timeout-debug-ov",
+      "cases": [
+        {
+          "name": "opent1-to-vanilla-timeout",
+          "client": "opent1",
+          "server": "vanilla",
+          "scenario": "timeout",
+          "accepted": 1,
+          "joins": 1,
+          "drops": 1,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 50.328,
+          "disconnects": 0,
+          "replacement_requests": 0,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "TimedOut"
+          ],
+          "client_exit": null,
+          "server_disconnects": 0,
+          "blackholed_packets": 73,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE DELEGATE=35",
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=1"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=TimedOut MANAGER=0",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 1,
+            "s2c:Accept": 1,
+            "c2s:Data": 48,
+            "s2c:Data": 26
+          },
+          "control_trace": [
+            {
+              "ms": 2194.26,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 1
+            },
+            {
+              "ms": 2194.96,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 1
+            }
+          ],
+          "blackhole_boundary": [
+            {
+              "ms": 2198.91,
+              "direction": "s2c",
+              "action": "blackhole",
+              "type": "Data",
+              "flags": 0,
+              "parity": 1,
+              "sequence": 2,
+              "high_ack": 1,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 177
+            },
+            {
+              "ms": 50197.13,
+              "direction": "s2c",
+              "action": "blackhole",
+              "type": "Data",
+              "flags": 8,
+              "parity": 1,
+              "sequence": 11,
+              "high_ack": 1,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "opent1_sha256": "722512500a421b5a94208e62a3b3640b45cb7bd53e776227f59fd87c239510dd",
+      "vanilla_sha256": "e9aa50a43dae8f23d54863be031bc8e1b871afb839d9317b83e372a656c6e740",
+      "memory_sha256": "3bf2e460d637c9a170a9eace0af2a26acb7c9aae91ee93d9b242d94bf8070592",
+      "scope": "minimal native delegates; no mission, UI, GPU, or internet claims",
+      "os": "Windows-11-10.0.26200-SP0",
+      "label": "timeout-debug-oo",
+      "cases": [
+        {
+          "name": "opent1-to-opent1-timeout",
+          "client": "opent1",
+          "server": "opent1",
+          "scenario": "timeout",
+          "accepted": 1,
+          "joins": 1,
+          "drops": 1,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 49.324,
+          "disconnects": 0,
+          "replacement_requests": 0,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "TimedOut"
+          ],
+          "client_exit": null,
+          "server_disconnects": 0,
+          "blackholed_packets": 94,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE ROSTER=0 DROPS=1"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE STATE=TimedOut MANAGER=0",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 1,
+            "s2c:Accept": 1,
+            "c2s:Data": 48,
+            "s2c:Data": 47
+          },
+          "control_trace": [
+            {
+              "ms": 1199.58,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 1
+            },
+            {
+              "ms": 1202.12,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 1
+            }
+          ],
+          "blackhole_boundary": [
+            {
+              "ms": 1209.47,
+              "direction": "s2c",
+              "action": "blackhole",
+              "type": "Data",
+              "flags": 0,
+              "parity": 1,
+              "sequence": 2,
+              "high_ack": 1,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 165
+            },
+            {
+              "ms": 49203.03,
+              "direction": "c2s",
+              "action": "blackhole",
+              "type": "Data",
+              "flags": 8,
+              "parity": 1,
+              "sequence": 32,
+              "high_ack": 1,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "opent1_sha256": "57e1839681db3262bbdfe64cf5e942dd3754f414522476d9c6ed366c0e1dedc9",
+      "vanilla_sha256": "e9aa50a43dae8f23d54863be031bc8e1b871afb839d9317b83e372a656c6e740",
+      "memory_sha256": "3bf2e460d637c9a170a9eace0af2a26acb7c9aae91ee93d9b242d94bf8070592",
+      "scope": "installed base startup, mission ghosts and scripted EndGame; no native input/GPU/internet claim",
+      "os": "Windows-11-10.0.26200-SP0",
+      "installed_content": {
+        "scripts_sha256": "d0e70d42fccb48607ec3eb3833994e8134af89ed4d88961af88c648360697db8",
+        "base_tree": {
+          "sha256": "4e49756d06a754991e6f7344fc418ee559ed664b5d8f8bfe4c2f43f0a8cf4fb3",
+          "files": 787
+        },
+        "mission": "Raindance"
+      },
+      "label": "installed-base-release-vv",
+      "cases": [
+        {
+          "name": "vanilla-to-vanilla-orderly",
+          "client": "vanilla",
+          "server": "vanilla",
+          "scenario": "orderly",
+          "accepted": 2,
+          "joins": 2,
+          "drops": 2,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 54.074,
+          "disconnects": 2,
+          "replacement_requests": 1,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "Accepted"
+          ],
+          "client_exit": null,
+          "ghosts_done": true,
+          "endgame_returned": true,
+          "ghost_batches": 2,
+          "endgame_count": 2,
+          "stream_retired": true,
+          "server_disconnects": 0,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DEPARTING_BODY=-1 CAMERA=8374",
+            "LIFECYCLE ROSTER=0 DROPS=1 STREAM=False",
+            "LIFECYCLE JOIN=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DEPARTING_BODY=-1 CAMERA=8369"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE GHOSTS_DONE",
+            "LIFECYCLE ENDGAME_RETURNED",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE GHOSTS_DONE",
+            "LIFECYCLE ENDGAME_RETURNED",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 2,
+            "s2c:Accept": 2,
+            "c2s:Data": 320,
+            "s2c:Data": 295,
+            "c2s:Disconnect": 2
+          },
+          "control_trace": [
+            {
+              "ms": 22905.31,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  2,
+                  3
+                ],
+                [
+                  9,
+                  3
+                ],
+                [
+                  19,
+                  7
+                ],
+                [
+                  26,
+                  1
+                ],
+                [
+                  0,
+                  1
+                ]
+              ],
+              "size": 47,
+              "generation": 416244890
+            },
+            {
+              "ms": 22906.69,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 416244890
+            },
+            {
+              "ms": 35423.8,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 124,
+              "high_ack": 26,
+              "acks": [
+                [
+                  19,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 416244890
+            },
+            {
+              "ms": 35634.17,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  2,
+                  3
+                ],
+                [
+                  9,
+                  1
+                ],
+                [
+                  11,
+                  3
+                ],
+                [
+                  17,
+                  4
+                ],
+                [
+                  25,
+                  5
+                ]
+              ],
+              "size": 47,
+              "generation": 416244891
+            },
+            {
+              "ms": 35635.44,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 29,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 416244891
+            },
+            {
+              "ms": 55539.12,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 198,
+              "high_ack": 4,
+              "acks": [
+                [
+                  22,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 416244891
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "opent1_sha256": "57e1839681db3262bbdfe64cf5e942dd3754f414522476d9c6ed366c0e1dedc9",
+      "vanilla_sha256": "e9aa50a43dae8f23d54863be031bc8e1b871afb839d9317b83e372a656c6e740",
+      "memory_sha256": "3bf2e460d637c9a170a9eace0af2a26acb7c9aae91ee93d9b242d94bf8070592",
+      "scope": "installed base startup, mission ghosts and scripted EndGame; no native input/GPU/internet claim",
+      "os": "Windows-11-10.0.26200-SP0",
+      "installed_content": {
+        "scripts_sha256": "d0e70d42fccb48607ec3eb3833994e8134af89ed4d88961af88c648360697db8",
+        "base_tree": {
+          "sha256": "4e49756d06a754991e6f7344fc418ee559ed664b5d8f8bfe4c2f43f0a8cf4fb3",
+          "files": 787
+        },
+        "mission": "Raindance"
+      },
+      "label": "installed-base-release-vo",
+      "cases": [
+        {
+          "name": "vanilla-to-opent1-orderly",
+          "client": "vanilla",
+          "server": "opent1",
+          "scenario": "orderly",
+          "accepted": 2,
+          "joins": 2,
+          "drops": 2,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 45.383,
+          "disconnects": 2,
+          "replacement_requests": 1,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "Accepted"
+          ],
+          "client_exit": null,
+          "ghosts_done": true,
+          "endgame_returned": true,
+          "ghost_batches": 2,
+          "endgame_count": 2,
+          "stream_retired": true,
+          "server_disconnects": 0,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DEPARTING_BODY=-1 CAMERA=8379",
+            "LIFECYCLE ROSTER=0 DROPS=1 STREAM=False",
+            "LIFECYCLE JOIN=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DEPARTING_BODY=-1 CAMERA=8232"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE GHOSTS_DONE",
+            "LIFECYCLE ENDGAME_RETURNED",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE GHOSTS_DONE",
+            "LIFECYCLE ENDGAME_RETURNED",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 2,
+            "s2c:Accept": 2,
+            "c2s:Data": 237,
+            "s2c:Data": 748,
+            "c2s:Disconnect": 2
+          },
+          "control_trace": [
+            {
+              "ms": 22613.45,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  2,
+                  3
+                ],
+                [
+                  9,
+                  3
+                ],
+                [
+                  19,
+                  7
+                ],
+                [
+                  26,
+                  1
+                ],
+                [
+                  0,
+                  1
+                ]
+              ],
+              "size": 47,
+              "generation": 416244343
+            },
+            {
+              "ms": 22615.27,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 416244343
+            },
+            {
+              "ms": 27363.67,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 46,
+              "high_ack": 12,
+              "acks": [
+                [
+                  16,
+                  4
+                ]
+              ],
+              "size": 8,
+              "generation": 416244343
+            },
+            {
+              "ms": 27473.1,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  2,
+                  2
+                ],
+                [
+                  8,
+                  1
+                ],
+                [
+                  20,
+                  1
+                ],
+                [
+                  0,
+                  1
+                ]
+              ],
+              "size": 46,
+              "generation": 416244344
+            },
+            {
+              "ms": 27474.52,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 416244344
+            },
+            {
+              "ms": 46905.09,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 193,
+              "high_ack": 31,
+              "acks": [
+                [
+                  25,
+                  3
+                ]
+              ],
+              "size": 8,
+              "generation": 416244344
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "opent1_sha256": "57e1839681db3262bbdfe64cf5e942dd3754f414522476d9c6ed366c0e1dedc9",
+      "vanilla_sha256": "e9aa50a43dae8f23d54863be031bc8e1b871afb839d9317b83e372a656c6e740",
+      "memory_sha256": "3bf2e460d637c9a170a9eace0af2a26acb7c9aae91ee93d9b242d94bf8070592",
+      "scope": "installed base startup, mission ghosts and scripted EndGame; no native input/GPU/internet claim",
+      "os": "Windows-11-10.0.26200-SP0",
+      "installed_content": {
+        "scripts_sha256": "d0e70d42fccb48607ec3eb3833994e8134af89ed4d88961af88c648360697db8",
+        "base_tree": {
+          "sha256": "4e49756d06a754991e6f7344fc418ee559ed664b5d8f8bfe4c2f43f0a8cf4fb3",
+          "files": 787
+        },
+        "mission": "Raindance"
+      },
+      "label": "installed-base-release-ov",
+      "cases": [
+        {
+          "name": "opent1-to-vanilla-orderly",
+          "client": "opent1",
+          "server": "vanilla",
+          "scenario": "orderly",
+          "accepted": 2,
+          "joins": 2,
+          "drops": 2,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 36.921,
+          "disconnects": 2,
+          "replacement_requests": 1,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "Accepted"
+          ],
+          "client_exit": null,
+          "ghosts_done": true,
+          "endgame_returned": true,
+          "ghost_batches": 2,
+          "endgame_count": 2,
+          "stream_retired": true,
+          "server_disconnects": 0,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DEPARTING_BODY=-1 CAMERA=8374",
+            "LIFECYCLE ROSTER=0 DROPS=1 STREAM=False",
+            "LIFECYCLE JOIN=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DEPARTING_BODY=-1 CAMERA=8369"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE GHOSTS_DONE",
+            "LIFECYCLE ENDGAME_RETURNED",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE GHOSTS_DONE",
+            "LIFECYCLE ENDGAME_RETURNED",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 2,
+            "s2c:Accept": 2,
+            "c2s:Data": 995,
+            "s2c:Data": 297,
+            "c2s:Disconnect": 2
+          },
+          "control_trace": [
+            {
+              "ms": 5821.16,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 1
+            },
+            {
+              "ms": 5822.94,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 1
+            },
+            {
+              "ms": 18210.8,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 378,
+              "high_ack": 24,
+              "acks": [
+                [
+                  19,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 1
+            },
+            {
+              "ms": 18415.94,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 2
+            },
+            {
+              "ms": 18416.34,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 2
+            },
+            {
+              "ms": 38379.99,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 107,
+              "high_ack": 9,
+              "acks": [
+                [
+                  24,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "opent1_sha256": "57e1839681db3262bbdfe64cf5e942dd3754f414522476d9c6ed366c0e1dedc9",
+      "vanilla_sha256": "e9aa50a43dae8f23d54863be031bc8e1b871afb839d9317b83e372a656c6e740",
+      "memory_sha256": "3bf2e460d637c9a170a9eace0af2a26acb7c9aae91ee93d9b242d94bf8070592",
+      "scope": "installed base startup, mission ghosts and scripted EndGame; no native input/GPU/internet claim",
+      "os": "Windows-11-10.0.26200-SP0",
+      "installed_content": {
+        "scripts_sha256": "d0e70d42fccb48607ec3eb3833994e8134af89ed4d88961af88c648360697db8",
+        "base_tree": {
+          "sha256": "4e49756d06a754991e6f7344fc418ee559ed664b5d8f8bfe4c2f43f0a8cf4fb3",
+          "files": 787
+        },
+        "mission": "Raindance"
+      },
+      "label": "installed-base-release-oo",
+      "cases": [
+        {
+          "name": "opent1-to-opent1-orderly",
+          "client": "opent1",
+          "server": "opent1",
+          "scenario": "orderly",
+          "accepted": 2,
+          "joins": 2,
+          "drops": 2,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 26.182,
+          "disconnects": 2,
+          "replacement_requests": 1,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "Accepted"
+          ],
+          "client_exit": null,
+          "ghosts_done": true,
+          "endgame_returned": true,
+          "ghost_batches": 2,
+          "endgame_count": 2,
+          "stream_retired": true,
+          "server_disconnects": 0,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DEPARTING_BODY=-1 CAMERA=8379",
+            "LIFECYCLE ROSTER=0 DROPS=1 STREAM=False",
+            "LIFECYCLE JOIN=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DEPARTING_BODY=-1 CAMERA=8232"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE GHOSTS_DONE",
+            "LIFECYCLE ENDGAME_RETURNED",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE GHOSTS_DONE",
+            "LIFECYCLE ENDGAME_RETURNED",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 2,
+            "s2c:Accept": 2,
+            "c2s:Data": 662,
+            "s2c:Data": 680,
+            "c2s:Disconnect": 2
+          },
+          "control_trace": [
+            {
+              "ms": 5680.64,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 1
+            },
+            {
+              "ms": 5682.27,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 1
+            },
+            {
+              "ms": 8422.23,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 74,
+              "high_ack": 9,
+              "acks": [
+                [
+                  22,
+                  2
+                ]
+              ],
+              "size": 8,
+              "generation": 1
+            },
+            {
+              "ms": 8620.16,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 2
+            },
+            {
+              "ms": 8621.5,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 2
+            },
+            {
+              "ms": 27694.39,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 78,
+              "high_ack": 12,
+              "acks": [
+                [
+                  18,
+                  2
+                ]
+              ],
+              "size": 8,
+              "generation": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "opent1_sha256": "57e1839681db3262bbdfe64cf5e942dd3754f414522476d9c6ed366c0e1dedc9",
+      "vanilla_sha256": "e9aa50a43dae8f23d54863be031bc8e1b871afb839d9317b83e372a656c6e740",
+      "memory_sha256": "3bf2e460d637c9a170a9eace0af2a26acb7c9aae91ee93d9b242d94bf8070592",
+      "scope": "installed base startup, mission ghosts and scripted EndGame; no native input/GPU/internet claim",
+      "os": "Windows-11-10.0.26200-SP0",
+      "installed_content": {
+        "scripts_sha256": "d0e70d42fccb48607ec3eb3833994e8134af89ed4d88961af88c648360697db8",
+        "base_tree": {
+          "sha256": "74b3d0a52b4c55f44eff7ec185bd8b5337f58f4aac2379cc61f13d7958212edf",
+          "files": 332
+        },
+        "mod_tree": {
+          "sha256": "6a8818bb07d3e7e486305c866ba6cfd2ba08eeb3d9d8971ab5af6cff850b0292",
+          "files": 610
+        },
+        "mod": "RPG",
+        "mission": "rpgmap5"
+      },
+      "label": "installed-rpg-opent1-control",
+      "cases": [
+        {
+          "name": "opent1-to-opent1-orderly",
+          "client": "opent1",
+          "server": "opent1",
+          "scenario": "orderly",
+          "accepted": 2,
+          "joins": 2,
+          "drops": 2,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 29.264,
+          "disconnects": 2,
+          "first_drop_observed_ms": 19155.73,
+          "first_disconnect_ms": 19138.83,
+          "departure_observation_delay_ms": 16.9,
+          "replacement_requests": 1,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "Accepted"
+          ],
+          "client_exit": null,
+          "ghosts_done": true,
+          "endgame_returned": true,
+          "ghost_batches": 2,
+          "endgame_count": 2,
+          "stream_retired": true,
+          "server_disconnects": 0,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DEPARTING_BODY=-1 CAMERA=10466",
+            "LIFECYCLE ROSTER=0 DROPS=1 STREAM=False",
+            "LIFECYCLE JOIN=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DEPARTING_BODY=-1 CAMERA=10466"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE GHOSTS_DONE",
+            "LIFECYCLE ENDGAME_RETURNED",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE GHOSTS_DONE",
+            "LIFECYCLE ENDGAME_RETURNED",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 2,
+            "s2c:Accept": 2,
+            "c2s:Data": 583,
+            "s2c:Data": 621,
+            "c2s:Disconnect": 2
+          },
+          "control_trace": [
+            {
+              "ms": 9051.12,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 1
+            },
+            {
+              "ms": 9077.66,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 1
+            },
+            {
+              "ms": 19138.83,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 286,
+              "high_ack": 29,
+              "acks": [
+                [
+                  27,
+                  1
+                ]
+              ],
+              "size": 8,
+              "generation": 1
+            },
+            {
+              "ms": 19333.56,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [],
+              "size": 42,
+              "generation": 2
+            },
+            {
+              "ms": 19360.45,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 2
+            },
+            {
+              "ms": 29174.42,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 288,
+              "high_ack": 30,
+              "acks": [
+                [
+                  18,
+                  2
+                ]
+              ],
+              "size": 8,
+              "generation": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "opent1_sha256": "57e1839681db3262bbdfe64cf5e942dd3754f414522476d9c6ed366c0e1dedc9",
+      "vanilla_sha256": "954977fb8d68e5573a93e08f30493bacb3547316fcf18b89ea17ba485da8ca1b",
+      "native_binary": "T1Vista.exe",
+      "memory_sha256": "3bf2e460d637c9a170a9eace0af2a26acb7c9aae91ee93d9b242d94bf8070592",
+      "scope": "installed base startup, mission ghosts and scripted EndGame; no native input/GPU/internet claim",
+      "os": "Windows-11-10.0.26200-SP0",
+      "installed_content": {
+        "scripts_sha256": "d0e70d42fccb48607ec3eb3833994e8134af89ed4d88961af88c648360697db8",
+        "base_tree": {
+          "sha256": "74b3d0a52b4c55f44eff7ec185bd8b5337f58f4aac2379cc61f13d7958212edf",
+          "files": 332
+        },
+        "mod_tree": {
+          "sha256": "6a8818bb07d3e7e486305c866ba6cfd2ba08eeb3d9d8971ab5af6cff850b0292",
+          "files": 610
+        },
+        "mod": "RPG",
+        "mission": "rpgmap5"
+      },
+      "label": "installed-rpg-t1vista-mixed",
+      "cases": [
+        {
+          "name": "vanilla-to-opent1-orderly",
+          "client": "vanilla",
+          "server": "opent1",
+          "scenario": "orderly",
+          "accepted": 2,
+          "joins": 2,
+          "drops": 2,
+          "empty_roster": true,
+          "done": true,
+          "elapsed_s": 50.027,
+          "disconnects": 2,
+          "first_drop_observed_ms": 32508.36,
+          "first_disconnect_ms": 32464.47,
+          "departure_observation_delay_ms": 43.89,
+          "replacement_requests": 1,
+          "names_preserved": true,
+          "client_states": [
+            "Accepted",
+            "Accepted"
+          ],
+          "client_exit": null,
+          "ghosts_done": true,
+          "endgame_returned": true,
+          "ghost_batches": 2,
+          "endgame_count": 2,
+          "ghost_log_batches": 2,
+          "exported_client_state": {
+            "accepted": 2,
+            "endgames": 2,
+            "ghosts": 2
+          },
+          "exported_server_state": {
+            "drops": 2,
+            "joins": 2
+          },
+          "stream_retired": true,
+          "server_disconnects": 0,
+          "blackholed_packets": 0,
+          "status": "pass",
+          "server_events": [
+            "LIFECYCLE READY",
+            "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=1 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DEPARTING_BODY=-1 CAMERA=10466",
+            "LIFECYCLE ROSTER=0 DROPS=1 STREAM=False",
+            "LIFECYCLE JOIN=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DROP=2 ID=2049 NAME=LifecycleProbe",
+            "LIFECYCLE DEPARTING_BODY=-1 CAMERA=10466"
+          ],
+          "client_events": [
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE GHOSTS_DONE",
+            "LIFECYCLE ENDGAME_RETURNED",
+            "LIFECYCLE STATE=Accepted MANAGER=2049",
+            "LIFECYCLE GHOSTS_DONE",
+            "LIFECYCLE ENDGAME_RETURNED",
+            "LIFECYCLE DONE"
+          ],
+          "packet_type_counts": {
+            "c2s:Request": 2,
+            "s2c:Accept": 2,
+            "c2s:Data": 355,
+            "s2c:Data": 1075,
+            "c2s:Disconnect": 2
+          },
+          "control_trace": [
+            {
+              "ms": 15134.01,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  2,
+                  3
+                ],
+                [
+                  8,
+                  7
+                ],
+                [
+                  15,
+                  1
+                ],
+                [
+                  17,
+                  7
+                ],
+                [
+                  24,
+                  3
+                ],
+                [
+                  28,
+                  5
+                ]
+              ],
+              "size": 48,
+              "generation": 416780984
+            },
+            {
+              "ms": 15161.31,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 0,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 416780984
+            },
+            {
+              "ms": 32464.47,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 0,
+              "sequence": 158,
+              "high_ack": 28,
+              "acks": [
+                [
+                  24,
+                  3
+                ]
+              ],
+              "size": 8,
+              "generation": 416780984
+            },
+            {
+              "ms": 32675.71,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Request",
+              "flags": 3,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  2,
+                  2
+                ],
+                [
+                  8,
+                  1
+                ],
+                [
+                  12,
+                  2
+                ],
+                [
+                  15,
+                  7
+                ],
+                [
+                  22,
+                  2
+                ],
+                [
+                  0,
+                  1
+                ]
+              ],
+              "size": 48,
+              "generation": 416780985
+            },
+            {
+              "ms": 32693.79,
+              "direction": "s2c",
+              "action": "forward",
+              "type": "Accept",
+              "flags": 12,
+              "parity": 1,
+              "sequence": 1,
+              "high_ack": 0,
+              "acks": [
+                [
+                  1,
+                  1
+                ]
+              ],
+              "size": 16,
+              "generation": 416780985
+            },
+            {
+              "ms": 49986.24,
+              "direction": "c2s",
+              "action": "forward",
+              "type": "Disconnect",
+              "flags": 2,
+              "parity": 1,
+              "sequence": 167,
+              "high_ack": 5,
+              "acks": [
+                [
+                  25,
+                  3
+                ]
+              ],
+              "size": 8,
+              "generation": 416780985
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "opent1_sha256": "57e1839681db3262bbdfe64cf5e942dd3754f414522476d9c6ed366c0e1dedc9",
+      "vanilla_sha256": "954977fb8d68e5573a93e08f30493bacb3547316fcf18b89ea17ba485da8ca1b",
+      "native_binary": "T1Vista.exe",
+      "memory_sha256": "3bf2e460d637c9a170a9eace0af2a26acb7c9aae91ee93d9b242d94bf8070592",
+      "scope": "installed base startup, mission ghosts and scripted EndGame; no native input/GPU/internet claim",
+      "os": "Windows-11-10.0.26200-SP0",
+      "installed_content": {
+        "scripts_sha256": "d0e70d42fccb48607ec3eb3833994e8134af89ed4d88961af88c648360697db8",
+        "base_tree": {
+          "sha256": "74b3d0a52b4c55f44eff7ec185bd8b5337f58f4aac2379cc61f13d7958212edf",
+          "files": 332
+        },
+        "mod_tree": {
+          "sha256": "6a8818bb07d3e7e486305c866ba6cfd2ba08eeb3d9d8971ab5af6cff850b0292",
+          "files": 610
+        },
+        "mod": "RPG",
+        "mission": "rpgmap5"
+      },
+      "label": "installed-rpg-t1vista-control",
+      "cases": [
+        {
+          "name": "vanilla-to-vanilla-orderly",
+          "client": "vanilla",
+          "server": "vanilla",
+          "scenario": "orderly",
+          "status": "fail",
+          "phase": "server_startup",
+          "reason": "server did not initialize",
+          "elapsed_s": 102.294,
+          "process_exits": [
+            null
+          ],
+          "server_events": [],
+          "client_events": [],
+          "server_tail": [
+            "MSG: \"Server: Team \\\"Greenskins\\\" added - id = 2\"",
+            "MSG: \"Server: Team \\\"Gnoll\\\" added - id = 3\"",
+            "MSG: \"Server: Team \\\"Undead\\\" added - id = 4\"",
+            "MSG: \"Server: Team \\\"Elf\\\" added - id = 5\"",
+            "MSG: \"Server: Team \\\"Minotaur\\\" added - id = 6\"",
+            "MSG: \"Server: Team \\\"Uber\\\" added - id = 7\"",
+            "Failed to registerObject of type: Moveable (DoorOneTop1)",
+            "Failed to registerObject of type: Moveable (DoorOneBottom1)",
+            "Failed to registerObject of type: Moveable (DoorFive1)",
+            "Failed to registerObject of type: Moveable (DoorFive1)",
+            "Failed to registerObject of type: Moveable (DoorFive1)",
+            "Failed to registerObject of type: Moveable (DoorFive1)"
+          ],
+          "packet_type_counts": {},
+          "control_trace": []
+        }
+      ]
+    }
+  ],
+  "user_operated_ui": [
+    {
+      "client": "T1Vista 1.11",
+      "server": "opent1",
+      "scenario": "Back with Accept withheld",
+      "input": "user-operated",
+      "join_menu_usable": "confirmed by user",
+      "client_disconnect_packets": 0,
+      "client_events": [
+        "LIFECYCLE MANUAL_READY",
+        "LIFECYCLE MANUAL_BACK_CLICKED",
+        "disconnect: not connected.",
+        "LIFECYCLE MANUAL_BACK_RETURNED"
+      ],
+      "server_events": [
+        "LIFECYCLE READY",
+        "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe"
+      ],
+      "runtime_sha256": "954977fb8d68e5573a93e08f30493bacb3547316fcf18b89ea17ba485da8ca1b",
+      "status": "unsupported pending cancellation; UI return verified"
+    },
+    {
+      "client": "T1Vista 1.11",
+      "server": "vanilla",
+      "scenario": "Back with Accept withheld",
+      "input": "user-operated",
+      "join_menu_usable": "confirmed by user",
+      "client_disconnect_packets": 0,
+      "client_events": [
+        "LIFECYCLE MANUAL_READY",
+        "LIFECYCLE MANUAL_BACK_CLICKED",
+        "disconnect: not connected.",
+        "LIFECYCLE MANUAL_BACK_RETURNED"
+      ],
+      "server_events": [
+        "LIFECYCLE DELEGATE=35",
+        "LIFECYCLE READY",
+        "LIFECYCLE JOIN=1 ID=2049 NAME=LifecycleProbe"
+      ],
+      "runtime_sha256": "954977fb8d68e5573a93e08f30493bacb3547316fcf18b89ea17ba485da8ca1b",
+      "status": "unsupported pending cancellation; UI return verified"
+    }
+  ],
+  "other_observations": [
+    {
+      "scenario": "stock Tribes.exe RPG dedicated startup",
+      "pairings": [
+        "native control",
+        "OpenT1 client to native server"
+      ],
+      "result": "server did not reach readiness; peer never launched; earlier harness did not record process exit/duration",
+      "note": "Native server compatibility for this mod revision is not established."
+    }
+  ]
+}

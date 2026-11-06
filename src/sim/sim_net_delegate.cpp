@@ -209,6 +209,13 @@ net::Result CSDelegate::process(UInt32 now) {
             }
         } guard{driving_};
         now_ = now;
+        const auto prepare = beforeProcess;
+        if (prepare) {
+            prepare(now);
+        }
+        if (isRemoved() || !getManager()) {
+            return;
+        }
         if (pendingLookup_) {
             std::string address;
             if (pendingLookup_->poll(address)) {

@@ -161,6 +161,10 @@ bool FearCSDelegate::onAdd() {
                 return true;
             };
             if (isServer_) {
+                delegate_->beforeProcess = [this](UInt32 now) {
+                    syncFromConsole();
+                    syncHeartbeat(now);
+                };
                 delegate_->selectClientId = [this] {
                     auto* players = PlayerManager::get(getManager());
                     return players ? UInt32(players->getFreeId()) : 0u;
@@ -335,6 +339,7 @@ void FearCSDelegate::bindConsole(Console& console) {
     setDefault("Server::AllowRCon", config_.allowRCon ? "true" : "false");
     setDefault("Server::RConPassword", config_.rconPassword);
     setDefault("Server::HostPublicGame", config_.hostPublicGame ? "true" : "false");
+    setDefault("Server::Heartbeats", config_.heartbeats ? "true" : "false");
     setDefault("Server::Port", std::to_string(config_.port));
     syncFromConsole();
 }
@@ -357,7 +362,35 @@ void FearCSDelegate::syncFromConsole() {
     config_.rconPassword = console_->getVariable("Server::RConPassword");
     config_.hostPublicGame =
         readConsoleBool(*console_, "Server::HostPublicGame", config_.hostPublicGame);
+    config_.heartbeats = readConsoleBool(*console_, "Server::Heartbeats", config_.heartbeats);
     config_.port = readConsoleInt(*console_, "Server::Port", config_.port);
+}
+
+void FearCSDelegate::syncHeartbeat(UInt32 now) {
+    auto* native = delegate();
+    if (!isServer_ || !native) {
+        return;
+    }
+    // console.cs may create a temporary listener before loading preferences.
+    // Do not announce until startup has selected the final game transport.
+    const bool ready = !console_ || readConsoleBool(*console_, "OpenT1::ConsoleCSExecuted", true);
+    const bool enabled = ready && config_.hostPublicGame && config_.heartbeats;
+    std::vector<std::string> masters;
+    if (enabled && console_) {
+        for (Int32 i = 0; i < std::clamp(config_.numMasters, 0, 64); ++i) {
+            auto master = console_->getVariable("Server::MasterAddressN" + std::to_string(i));
+            if (const auto tab = master.find('\t'); tab != master.npos) {
+                master.erase(0, tab + 1);
+            }
+            if (!master.empty()) {
+                master = native->translateAddress(master, kQueryMasterPort);
+                if (!master.empty()) {
+                    masters.push_back(std::move(master));
+                }
+            }
+        }
+    }
+    (void)native->browser().setHeartbeat(masters, enabled, now);
 }
 
 std::vector<std::byte> FearCSDelegate::buildConnectRequestPacket(std::string_view joinPassword,

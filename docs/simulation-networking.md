@@ -103,6 +103,13 @@ they do not read an implicit OS clock. `onRawPacket` exposes owned-session raw
 datagrams during its callback. Version-0x10 discovery packets route through the
 delegate's instance-owned `browser()`; other protocols reach `onRawPacket`.
 
+`beforeProcess(now)` refreshes application-owned network preferences before
+browser/session I/O. The game delegate uses it to apply the public-hosting and
+heartbeat preferences to its server browser after the final listener is ready.
+Announcements share the game socket; hostname lookups are asynchronous and are
+cancelled when settings change or the delegate is destroyed. See the
+[hosting preference contract](wiki/Server-hosting.md#master-server-announcements).
+
 ## Wire behavior and bounds
 
 Packet clients have a positional layout: matching peers must install

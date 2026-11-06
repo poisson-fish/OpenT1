@@ -56,7 +56,7 @@ struct ShellIdentity {
         CHECK(app.fearPlugin().clientGlobals().world == world);
         CHECK(app.fearPlugin().clientGlobals().manager == manager);
         CHECK(app.game().worldRevision(sim::WorldType::Client) == revision);
-        for (const auto [id, generation] : services) {
+        for (const auto& [id, generation] : services) {
             auto* service = manager->findObject(id);
             CHECK(service && service->address().generation == generation);
         }

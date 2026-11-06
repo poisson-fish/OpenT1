@@ -4521,6 +4521,15 @@ void FearGameApp::installRuntimeServices() {
             list->shellFont = font(150114);
             list->shellHighlightFont = font(150124);
         }
+        if (auto* list = dynamic_cast<ScoreListCtrl*>(&control)) {
+            const bool small = list->getName() == "LowResScore";
+            list->shellFont = chatFont(small ? "sf_white_6.pft" : "sf_white_10b.pft", small);
+            list->shellHighlightFont =
+                chatFont(small ? "sf_yellow_6.pft" : "sf_yellow_10b.pft", small);
+            if (list->shellFont) {
+                list->cellSize.y = list->shellFont->info.height + 2;
+            }
+        }
         if (auto* list = dynamic_cast<FearGuiInventory*>(&control)) {
             list->shellHighlightFont = font(150164);
             list->disabledFont = font(150134);

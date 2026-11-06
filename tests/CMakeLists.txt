@@ -44,6 +44,7 @@ add_executable(
     game/effects_test.cpp
     game/network_parity_test.cpp
     game/score_replication_test.cpp
+    game/score_interaction_test.cpp
     game/mission_editor_test.cpp
     game/e2e_integration_test.cpp
     game/gameplay_fix_pack_test.cpp

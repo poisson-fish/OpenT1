@@ -308,6 +308,17 @@ renders the installed HUD at UI scales 1 and 2 using a temporary write directory
 .\build\x64-release\tests\opent1_tests.exe --suite targetpopup
 ```
 
+The `game` suite checks the Tab player list's native 640px row width, horizontal
+and vertical arrows/thumbs, mouse-wheel scrolling, stable player selection and
+the `SelectClient` request/response through the local server. The optional
+`scores_assets` suite loads the supplied base and RPG `score.gui` dialogs,
+renders a synthetic 48-player roster and dispatches scrollbar and player clicks.
+It uses `OPENT1_TEST_ASSETS` and a temporary write directory:
+
+```powershell
+.\build\x64-release\tests\opent1_tests.exe --suite scores_assets
+```
+
 The optional `hosting` suite clicks the installed Host Game button with its UDP
 port occupied, renders and dismisses the error dialog, then releases the port
 and retries through to player control. It checks base Raindance and, when present,

@@ -59,6 +59,13 @@ not the download directory or an individual VOL file.
 
 ## Configuration and diagnostics
 
+With the installation's normal bindings, Tab opens the player list and options.
+The player list keeps vanilla's wide score columns: use its bottom scrollbar to
+reach columns on the right and its side scrollbar or mouse wheel to reach more
+players. Clicking a player highlights that player and requests the server's
+player-specific options. Team rows and headings do not select a player; the
+available options depend on the server/mod scripts and your permissions.
+
 The installation/mod scripts determine preferences and their persistence. Avoid
 editing original game archives just to change a preference. `--renderer software`
 selects indexed software rendering; `--renderer hardware` requires a working GPU

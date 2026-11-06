@@ -1225,6 +1225,9 @@ bool SimManager::postEvent(std::unique_ptr<SimEvent> event, bool current) {
         (event->address.managerId != 0 && event->address.managerId != getId())) {
         return false;
     }
+    // The queue belongs to this manager. Keep local events valid when a
+    // persistent client manager receives or releases its network ID.
+    event->address.managerId = 0;
     return queue_.insert(std::move(event), current);
 }
 
@@ -1235,6 +1238,9 @@ bool SimManager::postEvents(std::vector<std::unique_ptr<SimEvent>> pending, bool
             (event->address.managerId && event->address.managerId != getId())) {
             return false;
         }
+    }
+    for (auto& event : pending) {
+        event->address.managerId = 0;
     }
     return queue_.insertBatch(std::move(pending), current);
 }

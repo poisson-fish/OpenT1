@@ -325,7 +325,10 @@ void localScriptKick() {
     )")
               .ok());
     CHECK(app.stepFrame(0));
-    CHECK(!plugin.isConnected() && !plugin.serverGlobals().manager && plugin.clientGlobals().manager);
+    CHECK(!plugin.isConnected() && plugin.serverGlobals().manager &&
+          plugin.clientGlobals().manager);
+    CHECK(!plugin.serverGlobals().playerManager->findClient(2050));
+    CHECK(plugin.serverGlobals().playerManager->findBaseRep(2049));
     CHECK(app.console().getVariable("ConnectedToServer") == "false");
     CHECK(app.console().getVariable("droppedClient") == "2050");
     CHECK(app.console().getVariable("connectionState") == "Dropped");

@@ -207,6 +207,23 @@ void lifecycle() {
 }
 
 void queue() {
+    // Local callbacks survive assignment/release of a client's network ID.
+    SimManager persistent;
+    auto* service = add<Object>(persistent);
+    unsigned delivered{};
+    service->action = [&] {
+        ++delivered;
+    };
+    CHECK(service->postEvent(eventAt(0, 1)));
+    CHECK(persistent.setNetworkId(2049));
+    std::vector<std::unique_ptr<SimEvent>> batch;
+    auto duringJoin = eventAt(service->getId(), 1);
+    duringJoin->address.managerId = 2049;
+    batch.push_back(std::move(duringJoin));
+    CHECK(persistent.postEvents(std::move(batch)));
+    CHECK(persistent.setNetworkId(0));
+    CHECK(persistent.advanceToTime(1) == 2 && delivered == 2);
+
     SimEventQueue queue(4);
     CHECK(queue.insert(eventAt(3, 2)));
     CHECK(queue.insert(eventAt(1, 1)));
@@ -390,13 +407,16 @@ namespace {
 void hostOwnedRendering() {
     struct Canvas : SimCanvas {
         unsigned renders{};
+
         bool setTitle(std::string_view) override {
             return true;
         }
+
         void renderFrame() override {
             ++renders;
         }
     };
+
     SimGame game;
     auto world = std::make_unique<SimWorld>();
     auto* canvas = add<Canvas>(world->manager());

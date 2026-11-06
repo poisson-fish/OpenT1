@@ -172,6 +172,9 @@ bool CSDelegate::disconnectPending(UInt32 now, std::span<const std::byte> reason
     }
     const auto address = session_.address(pendingConnection_);
     const auto result = session_.disconnect(pendingConnection_, reason, now);
+    if (result != net::Result::Ok) {
+        session_.forget(pendingConnection_);
+    }
     if (result != net::Result::Ok && getManager() && getManager()->console()) {
         getManager()->console()->print(std::format(
             "Failed to send disconnect to {} (network result {}).", address, int(result)));

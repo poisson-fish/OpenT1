@@ -448,6 +448,9 @@ void PacketStream::disconnect(UInt32 now, std::span<const std::byte> reason) {
     if (session_) {
         const auto address = session_->address(connection_);
         const auto result = session_->disconnect(connection_, reason, now);
+        if (result != net::Result::Ok) {
+            session_->forget(connection_);
+        }
         if (result != net::Result::Ok && getManager() && getManager()->console()) {
             getManager()->console()->print(std::format(
                 "Failed to send disconnect to {} (network result {}).", address, int(result)));

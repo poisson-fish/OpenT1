@@ -236,7 +236,7 @@ version or build timestamp.
 Local hosting shares the remote client's PSC GUI/control callbacks, including
 server-menu visibility while an observer camera is controlled. Control assignment
 maintains the object's controlling-client backlink. The legacy `Net::kick`
-command also handles the direct local connection: it defers world teardown until
+command also handles the direct local connection: it defers connection teardown until
 after the simulation frame, then runs the disconnect script callbacks.
 
 Remote disconnects, kicks, and timeouts run `Server::onClientDisconnect` once in
@@ -247,16 +247,29 @@ the peer address and network result code.
 Transport departures retire the player during the network poll, before another
 request in that poll can reuse its ID or publish a roster containing stale state.
 Frame-end cleanup still catches streams removed through other paths, such as kicks.
+Direct loopback departures use the same player cleanup without deleting the server
+world. The installed EndGame script owns subsequent menus and `deleteServer()`.
+
+The client shell world persists across disconnect, rejection, kick and timeout.
+Its input manager, console scheduler, IRC client, canvases and startup mounts keep
+their identities. Connection-owned controllers, event/ghost clients, mission
+objects, datablocks, paths and effects retire before another join. Local queued
+events keep their target generation but use the owning manager rather than its
+temporary network ID. See [client lifecycle](client-lifecycle.md) for ownership
+and validation boundaries.
 
 Pending client requests retain their transport connection even before a
 `PacketStream` exists. Disconnecting or replacing the client world cancels that
 connection, including a request sent after asynchronous hostname resolution.
-The peer consumes Disconnect while requesting, awaiting a decision, accepting,
-or connected; cancellation does not wait for the accept handshake or a timeout.
-This follows vanilla `FearCSDelegate::cancelDuringConnection`, which retains and
-disconnects the pending VC. The game regression cancels before acceptance is
-polled and immediately rejoins three times, checking one player and one server
-disconnect callback per departure.
+OpenT1 consumes a validated Disconnect while requesting, awaiting a decision,
+accepting or connected. This receiver extension intentionally exceeds vanilla's
+Connected-only dispatch condition. A Disconnect can itself carry the ACK that
+promotes a vanilla server from Accepting to Connected; cancellation before the
+client receives Accept has different native behavior. See the
+[handshake cancellation audit](handshake-cancellation.md) for the state/event
+comparison, native process matrix, traces, reproduction and unsupported cases.
+The immediate OpenT1 reconnect regression retains one player and one departure
+callback per departed client.
 
 Regression cases cover selected event, ghost, control, discovery, and game
 handshake paths. The default suite runs against test peers and bundled records,

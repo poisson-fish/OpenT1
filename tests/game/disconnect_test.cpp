@@ -29,6 +29,40 @@ struct TemporaryDirectory {
     }
 };
 
+struct ShellIdentity {
+    sim::SimWorld* world;
+    sim::SimManager* manager;
+    UInt64 revision;
+    std::vector<std::pair<sim::SimObjectId, UInt64>> services;
+
+    explicit ShellIdentity(FearGameApp& app)
+        : world(app.fearPlugin().clientGlobals().world),
+          manager(app.fearPlugin().clientGlobals().manager),
+          revision(app.game().worldRevision(sim::WorldType::Client)) {
+        CHECK(world && manager);
+        for (const auto id : {sim::InputManagerId, sim::ConsoleSchedulerId}) {
+            auto* service = manager->findObject(id);
+            CHECK(service);
+            services.emplace_back(id, service->address().generation);
+        }
+        for (const auto* name : {"IRCClient", "MainWindow", "ShellVolume"}) {
+            if (auto* service = manager->findObject(name)) {
+                services.emplace_back(service->getId(), service->address().generation);
+            }
+        }
+    }
+
+    void check(FearGameApp& app) const {
+        CHECK(app.fearPlugin().clientGlobals().world == world);
+        CHECK(app.fearPlugin().clientGlobals().manager == manager);
+        CHECK(app.game().worldRevision(sim::WorldType::Client) == revision);
+        for (const auto& [id, generation] : services) {
+            auto* service = manager->findObject(id);
+            CHECK(service && service->address().generation == generation);
+        }
+    }
+};
+
 void disconnectSendFailures() {
     for (const bool explicitDisconnect : {false, true}) {
         net_test::Pair peers;
@@ -46,6 +80,9 @@ void disconnectSendFailures() {
             stream->disconnect(64);
         }
         CHECK(stream->deleteObject());
+        CHECK(peers.client.connectionCount() == 0);
+        peers.a.sendResult = net::Result::Ok;
+        CHECK(peers.client.connect("1", {}, 65, peers.clientId) == net::Result::Ok);
         CHECK(console.log().size() == 1);
         CHECK(console.log().front() ==
               std::format("Failed to send disconnect to 1 (network result {}).",
@@ -54,6 +91,20 @@ void disconnectSendFailures() {
 }
 
 void pendingDelegateDisconnect() {
+    {
+        auto transport = std::make_unique<net_test::Wire>("client");
+        auto* wire = transport.get();
+        sim::SimWorld world;
+        auto client = std::make_unique<sim::network::CSDelegate>(
+            std::move(transport), std::make_shared<sim::network::Registry>(), false);
+        auto* connector = client.get();
+        CHECK(world.manager().addObject(std::move(client)));
+        CHECK(connector->connect("server", 0) == net::Result::Ok);
+        wire->sendResult = net::Result::IoError;
+        CHECK(connector->disconnect(2048, 1));
+        wire->sendResult = net::Result::Ok;
+        CHECK(connector->connect("server", 2) == net::Result::Ok);
+    }
     for (const bool removeDelegate : {false, true}) {
         auto transports = net::makeLoopTransportPair();
         auto registry = std::make_shared<sim::network::Registry>();
@@ -130,6 +181,8 @@ void remoteDisconnect() {
         CHECK(endpoint);
         const std::array<std::string, 1> address{"IP:127.0.0.1:" + std::to_string(endpoint->port)};
         client.console().setVariable("PCFG::Name", "DepartingPlayer");
+        CHECK(client.fearPlugin().createClientWorld());
+        const ShellIdentity shell(client);
         CHECK(client.console().execute("connect", address).value == "True");
         double time = 0;
         const auto advance = [&](int frames, bool advanceClient) {
@@ -164,6 +217,7 @@ void remoteDisconnect() {
         switch (termination) {
             case Termination::Command:
                 CHECK(client.console().execute("disconnect").value == "True");
+                shell.check(client);
                 break;
             case Termination::Shutdown:
                 client.shutdown();
@@ -203,6 +257,7 @@ void remoteDisconnect() {
             CHECK(retained && retained->getOwnerClient() == 0);
             CHECK(!client.fearPlugin().isConnected());
             CHECK(client.console().getVariable("errorString") == "Disconnect regression");
+            shell.check(client);
         } else {
             CHECK(!body.resolve(*sg.manager));
             CHECK(termination == Termination::Timeout ? timedOut : disconnected);
@@ -228,6 +283,8 @@ void cancelAndReconnect() {
     CHECK(endpoint);
     const std::array<std::string, 1> address{"IP:127.0.0.1:" + std::to_string(endpoint->port)};
     client.console().setVariable("PCFG::Name", "RejoiningPlayer");
+    CHECK(client.fearPlugin().createClientWorld());
+    const ShellIdentity shell(client);
     double time{};
     const auto advance = [&](bool pollClient) {
         time += .032;
@@ -254,6 +311,7 @@ void cancelAndReconnect() {
         CHECK(client.console().execute("disconnect").value == "True");
         CHECK(client.console().execute("disconnect").value == "True");
         CHECK(!client.fearPlugin().isConnected());
+        shell.check(client);
         // Rejoin before the server's next frame, without waiting for a timeout.
         CHECK(client.console().execute("connect", address).value == "True");
         for (int frame = 0; frame < 64; ++frame)
@@ -269,6 +327,13 @@ void cancelAndReconnect() {
         advance(false);
     CHECK(sg.playerManager->getNumClients() == 0);
     CHECK(server.console().getVariable("DropCount") == "4");
+    server.console().setVariable("Server::Password", "required");
+    CHECK(client.console().execute("connect", address).value == "True");
+    for (int frame = 0; frame < 64; ++frame)
+        advance(true);
+    CHECK(!client.fearPlugin().isConnected());
+    shell.check(client);
+    CHECK(client.console().getVariable("errorString") == "Connection to server rejected.");
 }
 
 void disconnectShellResources() {
@@ -292,18 +357,21 @@ void disconnectShellResources() {
         function EndGame() {
             $ConnectedToServer = false;
             $DisconnectResult = disconnect();
+            deleteServer();
         }
     )")
               .ok());
     auto* shell = app.fearPlugin().clientGlobals().manager->findObject("ShellVolume");
     auto* canvas = app.fearPlugin().clientGlobals().manager->findObject("MainWindow");
     CHECK(shell && canvas);
+    const ShellIdentity identity(app);
     auto button = std::make_unique<FGUniversalButton>();
     auto* click = button.get();
     auto fields = click->fields();
     fields.command = "EndGame();";
     CHECK(click->configure(fields));
     CHECK(app.guiRuntime()->show(gui::Graph::create(std::move(button))));
+    CHECK(app.stepFrame(0, false));
     for ([[maybe_unused]] auto attempt : std::views::iota(0, 2)) {
         CHECK(app.fearPlugin().createServerWorld());
         CHECK(app.console().execute("localConnect").value == "True");
@@ -316,6 +384,10 @@ void disconnectShellResources() {
         )")
                   .ok());
         auto& manager = *app.fearPlugin().clientGlobals().manager;
+        CHECK(sim::SimConsoleEvent::schedule(
+            *manager.findObject("MissionGroup"), "$StaleMissionCallback = 1;", .032f));
+        CHECK(sim::SimConsoleEvent::schedule(
+            *manager.findObject(sim::ConsoleSchedulerId), "$ShellCallback++;", .032f));
         auto ghost = std::make_unique<sim::SimVolume>();
         ghost->assignName("GhostVolume");
         CHECK(ghost->setFileName("ghost.vol"));
@@ -325,6 +397,7 @@ void disconnectShellResources() {
               app.resources().contains("ghost.txt"));
         CHECK(app.guiRuntime()->canvas.performClick(*click));
         CHECK(app.console().getVariable("DisconnectResult") == "True");
+        identity.check(app);
         CHECK(!app.fearPlugin().isConnected() && !app.fearPlugin().serverGlobals().world);
         const auto* replacement = app.fearPlugin().clientGlobals().manager;
         CHECK(replacement && replacement->findObject("ShellVolume") == shell &&
@@ -332,6 +405,44 @@ void disconnectShellResources() {
         CHECK(!replacement->findObject("MissionGroup") && !replacement->findObject("GhostVolume"));
         CHECK(app.resources().contains("shell.txt"));
         CHECK(!app.resources().contains("mission.txt") && !app.resources().contains("ghost.txt"));
+        CHECK(app.stepFrame((attempt + 1) * .064, false));
+        CHECK(app.console().getVariable("StaleMissionCallback").empty());
+        CHECK(app.console().getVariable("ShellCallback") == std::to_string(attempt + 1));
+    }
+}
+
+void persistentLocalWorld() {
+    FearGameApp app;
+    CHECK(app.init());
+    CHECK(app.fearPlugin().createServerWorld({}, true));
+    CHECK(app.fearPlugin().createClientWorld());
+    const ShellIdentity shell(app);
+    auto& sg = app.fearPlugin().serverGlobals();
+    auto* server = sg.world;
+    CHECK(app.fearPlugin().focusServer());
+    CHECK(app.console()
+              .evaluate(R"(
+        PlayerData PersistentArmor { mass = 9; };
+        function Server::onClientDisconnect(%id) { $DropCount++; }
+    )")
+              .ok());
+    for (int attempt = 1; attempt <= 3; ++attempt) {
+        CHECK(app.console().execute("localConnect").value == "True");
+        auto* rep = sg.playerManager->getClientList();
+        CHECK(rep && !rep->nextClient);
+        const auto id = rep->id;
+        const auto body = app.fearPlugin().spawnPlayer("PersistentArmor", {}, {}, id);
+        CHECK(body);
+        const auto bodyAddress = sg.manager->findObject(*body)->address();
+        CHECK(app.fearPlugin().syncLoopbackState() > 0);
+        CHECK(app.console().execute("disconnect").value == "True");
+        CHECK(app.console().execute("disconnect").value == "True");
+        shell.check(app);
+        CHECK(sg.world == server && sg.playerManager->getNumClients() == 0);
+        CHECK(!sg.manager->findObject(id) && !bodyAddress.resolve(*sg.manager));
+        CHECK(app.console().getVariable("DropCount") == std::to_string(attempt));
+        CHECK(app.fearPlugin().clientGlobals().manager->getId() == 0);
+        CHECK(!app.fearPlugin().clientGlobals().playerPSC->getControlObject());
     }
 }
 
@@ -373,8 +484,10 @@ void installedRemoteDisconnect() {
         server.console().setVariable("Server::Port", "0");
         server.console().setVariable("Server::Heartbeats", "false");
         CHECK(server.loadMission(rpg ? "rpgmap5" : "Raindance"));
-        const auto hostedClients = server.fearPlugin().serverGlobals().playerManager->getNumClients();
+        const auto hostedClients =
+            server.fearPlugin().serverGlobals().playerManager->getNumClients();
         CHECK(rpg ? client.init(args) : client.init());
+        const ShellIdentity shell(client);
         client.console().setVariable("PCFG::Name", "RemoteDrop");
         client.console().setVariable("PCFG::Script", "");
         client.console().setVariable("PCFG::Info", "disconnect-test-password");
@@ -426,6 +539,7 @@ void installedRemoteDisconnect() {
             mouse.type = gui::EventType::Up;
             CHECK(runtime->canvas.dispatch(mouse));
             CHECK(!client.fearPlugin().isConnected());
+            shell.check(client);
             // The desktop host updates capture before it next rebinds input.
             input.release();
             input.capture(false);
@@ -487,7 +601,10 @@ void installedDisconnect() {
 }
 
 int opent1_test_disconnect_shell_resources() {
-    return opent1::test::run(disconnectShellResources);
+    return opent1::test::run([] {
+        disconnectShellResources();
+        persistentLocalWorld();
+    });
 }
 
 int opent1_test_installed_disconnect() {

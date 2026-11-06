@@ -349,8 +349,9 @@ struct Session::Impl {
                 c.dead = true;
             }
         } else if (base == Disconnect && p.state != State::Unbound) {
-            // A client can cancel after sending Request but before receiving
-            // Accept. Retire that handshake just like an established connection.
+            // Intentional extension: vanilla dispatches Disconnect only after
+            // Connected (including promotion by this packet's acceptance ACK).
+            // Also retire cancellation before acceptance reaches the client.
             flush(c);
             emit(c, EventType::Disconnected, payload);
             c.dead = true;

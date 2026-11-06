@@ -26,6 +26,12 @@ alive; normal EndGame scripts decide when to call `deleteServer()`. The reposito
 [client lifecycle audit](https://github.com/poisson-fish/OpenT1/blob/main/docs/client-lifecycle.md) distinguishes tested behavior from
 source comparisons and live vanilla acceptance.
 
+OpenT1 intentionally handles validated Disconnect during the handshake as well
+as after connection. Vanilla can require acknowledgment of Accept first. The
+[handshake audit](https://github.com/poisson-fish/OpenT1/blob/main/docs/handshake-cancellation.md) records native observations and generation/order limits;
+a successful reconnect alone does not prove that the original cancellation was
+consumed.
+
 ## Common startup problems
 
 - **Missing bootstrap or volumes:** point `--assets` at the supplied installation

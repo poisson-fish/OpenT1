@@ -94,6 +94,107 @@ void cancelHandshake() {
     CHECK(p.client.connectionCount() == 0);
 }
 
+void handshakeOrdering() {
+    // Request and cancellation can both arrive before the server's next poll.
+    Pair unpolled;
+    CHECK(unpolled.client.connect("1", {}, 0, unpolled.clientId) == Result::Ok);
+    CHECK(unpolled.client.disconnect(unpolled.clientId, {}, 1) == Result::Ok);
+    transfer(unpolled.a, unpolled.b);
+    CHECK(unpolled.server.process(1) == Result::Ok);
+    const auto cancelled = drain(unpolled.server);
+    CHECK(cancelled.size() == 2 && cancelled[0].type == EventType::Requested &&
+          cancelled[1].type == EventType::Disconnected);
+    CHECK(unpolled.server.connectionCount() == 0);
+
+    Pair p;
+    CHECK(p.client.connect("1", {}, 0, p.clientId) == Result::Ok);
+    transfer(p.a, p.b);
+    CHECK(p.server.process(0) == Result::Ok);
+    p.serverId = drain(p.server).front().connection;
+    CHECK(p.server.accept(p.serverId, bytes("accept"), 0) == Result::Ok);
+    const auto accept = p.b.outgoing.front();
+    CHECK(p.server.info(p.serverId)->state == State::Accepting);
+    transfer(p.b, p.a);
+    CHECK(p.client.process(1) == Result::Ok);
+    const auto accepted = drain(p.client);
+    CHECK(accepted.size() == 1 && accepted.front().type == EventType::Accepted);
+    // A duplicate/resend acceptance must not deliver another accepted event.
+    p.a.incoming.push_back(accept);
+    CHECK(p.client.process(1) == Result::Ok);
+    CHECK(drain(p.client).empty());
+    CHECK(p.server.info(p.serverId)->state == State::Accepting);
+    // Lose every standalone acceptance ACK. Disconnect itself acknowledges
+    // that acceptance, promoting the server before dispatching termination,
+    // just as VCProtocol::receive does in vanilla.
+    p.a.outgoing.clear();
+    CHECK(p.client.disconnect(p.clientId, bytes("after-accept"), 2) == Result::Ok);
+    const auto disconnect = p.a.outgoing.front();
+    transfer(p.a, p.b);
+    p.b.incoming.push_back(disconnect);
+    CHECK(p.server.process(2) == Result::Ok);
+    const auto departed = drain(p.server);
+    CHECK(departed.size() == 2 && departed[0].type == EventType::Connected &&
+          departed[1].type == EventType::Disconnected);
+    CHECK(text(departed[1].data()) == "after-accept");
+    CHECK(p.server.connectionCount() == 0);
+
+    // Reuse the endpoint twice so generation 3 has the same parity as 1.
+    // Full control generations must be checked before ACK processing, not
+    // merely the single parity bit or the control-packet dispatch branch.
+    for (int reuse = 0; reuse < 2; ++reuse) {
+        const UInt32 now = 3 + UInt32(reuse) * 3;
+        p.a.outgoing.clear();
+        p.b.outgoing.clear();
+        CHECK(p.client.connect("1", {}, now, p.clientId) == Result::Ok);
+        p.a.incoming.push_back(accept);
+        for (const auto type : {2, 5}) {
+            auto old = header(2, type);
+            old.address = "1";
+            p.a.incoming.push_back(old);
+        }
+        CHECK(p.client.process(now) == Result::Ok);
+        CHECK(drain(p.client).empty());
+        CHECK(p.client.info(p.clientId)->state == State::Requesting);
+        transfer(p.a, p.b);
+        CHECK(p.server.process(now) == Result::Ok);
+        p.serverId = drain(p.server).front().connection;
+        CHECK(p.server.accept(p.serverId, {}, now) == Result::Ok);
+        p.b.incoming.push_back(disconnect);
+        CHECK(p.server.process(now) == Result::Ok);
+        CHECK(p.server.info(p.serverId)->state == State::Accepting);
+        CHECK(drain(p.server).empty());
+        p.pump(now + 1);
+        CHECK(drain(p.client).front().type == EventType::Accepted);
+        CHECK(drain(p.server).front().type == EventType::Connected);
+        CHECK(p.client.disconnect(p.clientId, {}, now + 2) == Result::Ok);
+        p.pump(now + 2);
+        const auto closed = drain(p.server);
+        CHECK(closed.size() == 1 && closed.front().type == EventType::Disconnected);
+        CHECK(p.client.connectionCount() == 0);
+    }
+}
+
+void staleHandshakeDoesNotRefreshTimeout() {
+    Wire wire{"local"};
+    SessionConfig config;
+    config.connectSequence = 3;
+    Session session(wire, config);
+    ConnectionId id{};
+    CHECK(session.connect("remote", {}, 0, id) == Result::Ok);
+    for (UInt32 retry = 1; retry <= 16; ++retry) {
+        for (const auto type : {2, 4, 5}) {
+            auto stale = header(2, type, 1, 1);
+            stale.address = "remote";
+            wire.incoming.push_back(stale);
+        }
+        CHECK(session.process(retry * 3000 + 1) == Result::Ok);
+        wire.outgoing.clear();
+    }
+    CHECK(!session.info(id));
+    const auto events = drain(session);
+    CHECK(events.size() == 1 && events.front().type == EventType::TimedOut);
+}
+
 void malformed() {
     Wire wire{"server"};
     Session session(wire);
@@ -226,6 +327,8 @@ int opent1_test_net_protocol() {
     return test::run([] {
         windowAndFailures();
         cancelHandshake();
+        handshakeOrdering();
+        staleHandshakeDoesNotRefreshTimeout();
         malformed();
         timeoutAndWrap();
         transactionalAndStale();

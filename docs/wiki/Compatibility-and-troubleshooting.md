@@ -12,7 +12,7 @@ specific engine commit, installation/mod revision and test scenario.
 | Platforms | Debug/Release on Windows x64, Linux x64 and macOS ARM64 | Other OS versions/architectures and clean end-user machines |
 | Packages | Extract, inspect dependencies, run version/headless/dedicated smoke | Native window, real GPU, audio device and input |
 | Scripts/simulation | Regression fixtures and original script examples | Your actual installation/mod and full mission lifecycle |
-| Networking | Transport, replication and protocol regression tests | Separate machines, internet hosting and live vanilla 1.11 interoperability |
+| Networking | Protocol regressions and recorded Windows native/OpenT1 lifecycle matrix | Separate machines, internet hosting, unverified mods/platforms and the documented native pending-cancellation limit |
 | Editor | Native/editor regression coverage; optional installed acceptance documented in the repo | Your installation's editor scripts, resources and save/reload workflow |
 
 Historical installed-content audits in `docs/` describe particular validation
@@ -31,6 +31,11 @@ as after connection. Vanilla can require acknowledgment of Accept first. The
 [handshake audit](https://github.com/poisson-fish/OpenT1/blob/main/docs/handshake-cancellation.md) records native observations and generation/order limits;
 a successful reconnect alone does not prove that the original cancellation was
 consumed.
+
+The [live lifecycle matrix](https://github.com/poisson-fish/OpenT1/blob/main/docs/live-disconnect-interoperability.md) records both native/OpenT1 directions, base mission
+rejoins, kicks, shutdown and timeout. It also records the unsupported native RPG
+server startup and the native pending Back action that returns to a menu without
+sending Disconnect. Those limits remain explicit.
 
 ## Common startup problems
 

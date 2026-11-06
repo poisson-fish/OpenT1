@@ -6,6 +6,7 @@
 namespace opent1::sim::network {
 namespace {
 constexpr std::size_t MaxData = 1492;
+constexpr UInt32 HeartbeatInterval = 120000;
 
 UInt8 byte(std::byte b) {
     return std::to_integer<UInt8>(b);
@@ -145,19 +146,30 @@ bool ServerBrowser::setHeartbeat(std::span<const std::string> masters,
     }
     std::vector<std::string> validated;
     if (!std::ranges::all_of(masters, [&](const auto& address) {
-            const auto a = transport_.canonicalAddress(address);
+            auto a = transport_.canonicalAddress(address);
+            if (a.empty()) {
+                a = net::canonicalIPv4Endpoint(address);
+            }
             if (a.empty()) {
                 return false;
             }
-            validated.push_back(a);
+            if (std::ranges::find(validated, a) == validated.end()) {
+                validated.push_back(std::move(a));
+            }
             return true;
         })) {
         return false;
     }
-    masters_ = std::move(validated);
+    if (publicHost_ == publicHost &&
+        std::ranges::equal(validated, masters_, {}, std::identity{}, &HeartbeatMaster::address)) {
+        return true;
+    }
+    masters_.clear();
+    for (auto& address : validated) {
+        auto resolved = transport_.canonicalAddress(address);
+        masters_.push_back({std::move(address), std::move(resolved), {}, now, false});
+    }
     publicHost_ = publicHost;
-    heartbeatSent_ = false;
-    heartbeatTime_ = now;
     return true;
 }
 
@@ -191,14 +203,33 @@ void ServerBrowser::process(UInt32 now) {
     }
 
     if (server_) {
-        if (publicHost_ && (!heartbeatSent_ || now - heartbeatTime_ >= 120000)) {
-            const auto destinations = masters_;
+        if (publicHost_) {
             const auto bytes = Packet{Type::Heartbeat, 255, 0, 0, 0, {}}.encode();
-            std::ranges::for_each(destinations, [&](const auto& a) {
-                (void)transport_.send(a, bytes);
-            });
-            heartbeatTime_ = now;
-            heartbeatSent_ = true;
+            for (auto& master : masters_) {
+                if (master.lookup) {
+                    std::string result;
+                    if (!master.lookup->poll(result)) {
+                        continue;
+                    }
+                    master.lookup.reset();
+                    master.resolved = std::move(result);
+                    master.attempted = master.resolved.empty();
+                    master.time = now;
+                }
+                if (master.attempted && now - master.time < HeartbeatInterval) {
+                    continue;
+                }
+                if (master.resolved.empty()) {
+                    // Native DNS concurrency is bounded. If all slots are busy,
+                    // retry acquiring one on the next tick. Failed lookups back
+                    // off for the normal heartbeat interval.
+                    master.lookup = net::resolveIPv4AddressAsync(master.address);
+                    continue;
+                }
+                (void)transport_.send(master.resolved, bytes);
+                master.time = now;
+                master.attempted = true;
+            }
         }
         return;
     }

@@ -43,6 +43,7 @@ public:
         bool allowRCon{};
         std::string rconPassword;
         bool hostPublicGame{true};
+        bool heartbeats{true};
         Int32 port{kStandardServerPort};
     };
 
@@ -174,6 +175,7 @@ public:
     std::function<void(const net::Event&)> onConnection;
 
 private:
+    void syncHeartbeat(UInt32 now);
     bool isServer_{true};
     std::shared_ptr<BanList> banList_;
     std::shared_ptr<const sim::network::Registry> registry_;

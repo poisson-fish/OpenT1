@@ -65,6 +65,7 @@ add_executable(
     game/weather_test.cpp
     game/disconnect_test.cpp
     game/hosting_test.cpp
+    game/server_heartbeat_test.cpp
     video/video_test.cpp
 )
 target_link_libraries(opent1_tests PRIVATE opent1_game)

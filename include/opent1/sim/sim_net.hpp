@@ -477,6 +477,8 @@ public:
     std::function<void(PacketStream&)> configureStream;
     std::function<void(const net::Event&)> onConnection;
     std::function<void(std::string_view, std::span<const std::byte>)> onRawPacket;
+    // Refresh game-owned preferences before browser/session I/O on each tick.
+    std::function<void(UInt32)> beforeProcess;
     std::function<UInt32()> clock;
 
 private:

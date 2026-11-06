@@ -5,7 +5,8 @@
 
 namespace opent1::sim::network {
 // Original master/game-server discovery protocol. Payloads stay application
-// owned; no game globals, DNS lookup, implicit public hosting or background I/O.
+// owned; no game globals, implicit public hosting or background transport I/O.
+// Hostname lookup is asynchronous and cancellable; packets use the game transport.
 class ServerBrowser {
 public:
     enum class Type : UInt8 {
@@ -59,6 +60,8 @@ public:
     // Returns true for recognized discovery packets, including malformed packets
     // which are discarded. Unknown protocols remain available to the raw handler.
     bool receive(std::string_view address, std::span<const std::byte>, UInt32 now);
+    // Numeric or hostname endpoints, at most 64. Reapplying the same settings
+    // preserves timers/lookups; changing them cancels the old announcement work.
     bool setHeartbeat(std::span<const std::string> masters, bool publicHost, UInt32 now);
     [[nodiscard]] std::size_t pending() const;
     std::function<PingInfo()> getPingInfo;
@@ -92,15 +95,22 @@ private:
         UInt32 ping{};
     };
 
+    struct HeartbeatMaster {
+        std::string address, resolved;
+        std::unique_ptr<net::AddressLookup> lookup;
+        UInt32 time{};
+        bool attempted{};
+    };
+
     bool enqueue(std::vector<Request>&, std::string_view, UInt8, UInt32);
     net::Transport& transport_;
-    bool server_{}, busy_{}, publicHost_{}, heartbeatSent_{};
+    bool server_{}, busy_{}, publicHost_{};
     Config config_;
     UInt16 nextKey_{};
-    UInt32 heartbeatTime_{};
     std::vector<Request> pings_, queries_, broadcasts_;
     std::vector<Response> responses_;
     std::vector<Lookup> lookups_;
-    std::vector<std::string> completed_, masters_;
+    std::vector<std::string> completed_;
+    std::vector<HeartbeatMaster> masters_;
 };
 }

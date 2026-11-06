@@ -1,4 +1,5 @@
 #include <opent1/game/chat_inventory_huds.hpp>
+#include <opent1/gui/containers.hpp>
 #include <iterator>
 #include <ranges>
 
@@ -8,7 +9,45 @@
 namespace opent1::game {
 
 ScoreListCtrl::ScoreListCtrl() {
+    cells = {1, 0};
     cellSize = {640, 16};
+}
+
+void ScoreListCtrl::wake() {
+    active = true;
+    // Vanilla inherits ArrayCtrl directly: its 640px rows scroll horizontally
+    // instead of using FGArrayCtrl's viewport-fitting shell layout.
+    cellSize.x = 640;
+    gui::Array::wake();
+}
+
+bool ScoreListCtrl::select(Point2I cell) {
+    if (cell == Point2I{-1, -1}) {
+        selected = cell;
+        return true;
+    }
+    if (cell.x != 0 || cell.y < 0 || std::size_t(cell.y) >= lines_.size()) {
+        return false;
+    }
+    const auto& line = lines_[cell.y];
+    if (line.isHeader || line.isTeamSection) {
+        return true;
+    }
+    // Native cellSelected keeps the current scroll position, including the
+    // horizontal offset. Array::select would scroll the entire 640px cell.
+    selected = cell;
+    if (clientSelected) {
+        const auto callback = clientSelected;
+        const auto id = line.id;
+        if (canvas() && canvas()->dispatching()) {
+            canvas()->afterDispatch([callback, id] {
+                callback(id);
+            });
+        } else {
+            callback(id);
+        }
+    }
+    return true;
 }
 
 std::vector<Int32> ScoreListCtrl::parseHeadingTabStops(std::string_view heading) {
@@ -84,6 +123,11 @@ std::string ScoreListCtrl::expandTeamScoreFormat(std::string_view formatStr,
 }
 
 void ScoreListCtrl::rebuildScores(const PlayerManager& pm) {
+    const auto selectedId = selected.y >= 0 && std::size_t(selected.y) < lines_.size() &&
+                                    !lines_[selected.y].isHeader &&
+                                    !lines_[selected.y].isTeamSection
+                                ? lines_[selected.y].id
+                                : 0;
     lines_.clear();
     teamTabStops_ = parseHeadingTabStops(pm.teamScoreHeading());
     clientTabStops_ = parseHeadingTabStops(pm.clientScoreHeading());
@@ -135,7 +179,22 @@ void ScoreListCtrl::rebuildScores(const PlayerManager& pm) {
                      cl->scoreString.empty() ? "%n\t%t\t0\t%p\t%l" : cl->scoreString, *cl, tName)});
         }
     }
-    setSize({1, static_cast<Int32>(lines_.size())});
+    selected = {-1, -1};
+    for (std::size_t row = 0; row < lines_.size(); ++row) {
+        const auto& line = lines_[row];
+        if (line.id == selectedId && !line.isHeader && !line.isTeamSection) {
+            selected = {0, Int32(row)};
+            break;
+        }
+    }
+    const Point2I size{1, static_cast<Int32>(lines_.size())};
+    if (cells != size && setSize(size)) {
+        // Match native ScrollContent::childResized: publish scrollbar geometry
+        // as soon as the roster changes, even before another simulation tick.
+        if (auto* scroll = parent() ? dynamic_cast<gui::Scroll*>(parent()->parent()) : nullptr) {
+            (void)scroll->computeSizes();
+        }
+    }
 }
 
 std::string ScoreListCtrl::getCellText(Point2I cell) const {
@@ -146,11 +205,16 @@ std::string ScoreListCtrl::getCellText(Point2I cell) const {
 }
 
 bool ScoreListCtrl::drawCell(
-    gfx::SoftwareSurface& surface, Point2I position, Point2I cell, bool, bool) const {
+    gfx::SoftwareSurface& surface, Point2I position, Point2I cell, bool chosen, bool) const {
     if (cell.y < 0 || std::size_t(cell.y) >= lines_.size()) {
         return true;
     }
     const auto& line = lines_[cell.y];
+    if (chosen && !line.isHeader && !line.isTeamSection) {
+        surface.fill(
+            {position.x, position.y, position.x + cellSize.x - 1, position.y + cellSize.y - 1},
+            GREEN_78);
+    }
     const auto& font = line.isHeader || !shellHighlightFont ? shellFont : shellHighlightFont;
     if (!font) {
         return true;

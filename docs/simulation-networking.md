@@ -88,6 +88,12 @@ same score path. Synthetic tests exercise independent managers and rebuild
 `ScoreListCtrl`; they do not establish the reporter's installed Tab GUI layout
 or vanilla server interoperability.
 
+The Tab score list preserves vanilla's 640px rows inside its scroll viewport.
+Player selection sends `remoteEval(2048, "SelectClient", clientId)` from the
+client world; the server/mod's `remoteSelectClient` handles options and player
+information. Selection follows the player ID across score sorting and does not
+pan the list or take keyboard focus. Team and heading rows do not send a request.
+
 The delegate owns transport/session state and removes all its streams on removal.
 Each stream is an owning simulation group for its registered packet clients.
 Ghost managers own staged bootstrap objects, then transfer ownership to the

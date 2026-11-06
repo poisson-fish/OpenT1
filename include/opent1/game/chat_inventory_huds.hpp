@@ -484,6 +484,14 @@ public:
                                                            const PlayerManager::TeamRep& team);
 
     void rebuildScores(const PlayerManager& pm);
+    void wake() override;
+    bool select(Point2I cell) override;
+
+    bool becomeFirstResponder() const override {
+        return false;
+    }
+
+    std::function<void(Int32)> clientSelected;
     bool drawCell(gfx::SoftwareSurface&, Point2I, Point2I, bool, bool) const override;
 
     [[nodiscard]] std::span<const Int32> teamTabStops() const noexcept {

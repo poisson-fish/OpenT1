@@ -435,6 +435,13 @@ void FearGameApp::updateGameplayGui() {
         }
         if (auto* list = dynamic_cast<ScoreListCtrl*>(&control); list && cg.playerManager) {
             list->rebuildScores(*cg.playerManager);
+            list->clientSelected = [this](Int32 clientId) {
+                game_.withWorld(sim::WorldType::Client, [&] {
+                    const std::array<std::string, 3> args{
+                        "2048", "SelectClient", std::to_string(clientId)};
+                    (void)game_.console().execute("remoteEval", args);
+                });
+            };
         }
         if (auto* list = dynamic_cast<CommandTurretCtrl*>(&control); list && commander) {
             list->populateFromCommander(*commander);
@@ -503,7 +510,7 @@ void FearGameApp::updateGameplayGui() {
             list->populateShoppingItems(cg.playerPSC, cg.dbm);
         }
         if (auto* list = dynamic_cast<FGArrayCtrl*>(&control);
-            list && list->cells.x == 1 && list->parent()) {
+            list && !dynamic_cast<ScoreListCtrl*>(list) && list->cells.x == 1 && list->parent()) {
             const auto inset = dynamic_cast<FearGuiInventory*>(list) ? 0 : 18;
             list->cellSize.x = std::max(1, list->parent()->fields().extent.x - inset);
             (void)list->setSize(list->cells);

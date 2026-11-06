@@ -53,6 +53,46 @@ void disconnectSendFailures() {
     }
 }
 
+void pendingDelegateDisconnect() {
+    for (const bool removeDelegate : {false, true}) {
+        auto transports = net::makeLoopTransportPair();
+        auto registry = std::make_shared<sim::network::Registry>();
+        sim::SimWorld serverWorld, clientWorld;
+        auto server =
+            std::make_unique<sim::network::CSDelegate>(std::move(transports.first), registry, true);
+        auto client = std::make_unique<sim::network::CSDelegate>(
+            std::move(transports.second), registry, false);
+        auto* listener = server.get();
+        auto* connector = client.get();
+        CHECK(serverWorld.manager().addObject(std::move(server)));
+        CHECK(clientWorld.manager().addObject(std::move(client)));
+        CHECK(connector->connect(listener->localAddress(), 0) == net::Result::Ok);
+        CHECK(listener->process(0) == net::Result::Ok);
+        CHECK(listener->stream(2049) && !connector->stream(2048));
+        unsigned drops{};
+        listener->onConnection = [&](const net::Event& event) {
+            drops += event.type == net::EventType::Disconnected;
+        };
+        if (removeDelegate) {
+            CHECK(connector->deleteObject());
+        } else {
+            CHECK(connector->disconnect(2048, 1));
+            CHECK(!connector->disconnect(2048, 1));
+            CHECK(connector->connect(listener->localAddress(), 1) == net::Result::Ok);
+        }
+        CHECK(listener->process(1) == (removeDelegate ? net::Result::Closed : net::Result::Ok));
+        CHECK(drops == 1);
+        CHECK(removeDelegate ? !listener->stream(2049) : listener->stream(2049) != nullptr);
+        if (!removeDelegate) {
+            // An old acceptance was already queued when we cancelled. It must
+            // not complete or reject the replacement connection.
+            CHECK(connector->process(2) == net::Result::Ok);
+            CHECK(connector->stream(2048));
+            CHECK(listener->process(2) == net::Result::Ok);
+        }
+    }
+}
+
 void remoteDisconnect() {
     enum class Termination { Command, Shutdown, Kick, Timeout };
     for (const auto termination :
@@ -173,6 +213,64 @@ void remoteDisconnect() {
     }
 }
 
+void cancelAndReconnect() {
+    FearGameApp server, client;
+    CHECK(server.init() && client.init());
+    CHECK(server.fearPlugin().createServerWorld({}, true));
+    CHECK(server.console()
+              .evaluate(R"(
+        function Server::onClientConnect(%id) { $JoinCount++; }
+        function Server::onClientDisconnect(%id) { $DropCount++; }
+    )")
+              .ok());
+    auto& sg = server.fearPlugin().serverGlobals();
+    const auto endpoint = net::parseIPv4Address(sg.csDelegate->delegate()->localAddress());
+    CHECK(endpoint);
+    const std::array<std::string, 1> address{"IP:127.0.0.1:" + std::to_string(endpoint->port)};
+    client.console().setVariable("PCFG::Name", "RejoiningPlayer");
+    double time{};
+    const auto advance = [&](bool pollClient) {
+        time += .032;
+        CHECK(server.stepFrame(time, false));
+        if (pollClient)
+            CHECK(client.stepFrame(time, false));
+    };
+    const std::array<std::string, 1> hostname{"IP:localhost:" + std::to_string(endpoint->port)};
+    CHECK(client.console().execute("connect", hostname).value == "True");
+    // The server has allocated a player, but the client has not polled the
+    // acceptance yet. Cancelling ConnectingGui must still notify that server.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!sg.playerManager->getClientList()) {
+        CHECK(std::chrono::steady_clock::now() < deadline);
+        // Poll DNS before the server, stopping as soon as it accepts the
+        // request so the client cannot consume that acceptance in this loop.
+        time += .032;
+        CHECK(client.stepFrame(time, false));
+        CHECK(server.stepFrame(time, false));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    CHECK(!client.fearPlugin().isConnected());
+    for (int attempt = 1; attempt <= 3; ++attempt) {
+        CHECK(client.console().execute("disconnect").value == "True");
+        CHECK(client.console().execute("disconnect").value == "True");
+        CHECK(!client.fearPlugin().isConnected());
+        // Rejoin before the server's next frame, without waiting for a timeout.
+        CHECK(client.console().execute("connect", address).value == "True");
+        for (int frame = 0; frame < 64; ++frame)
+            advance(true);
+        CHECK(client.fearPlugin().isConnected());
+        CHECK(sg.playerManager->getNumClients() == 1);
+        CHECK(sg.playerManager->getClientList()->name == "RejoiningPlayer");
+        CHECK(server.console().getVariable("JoinCount") == std::to_string(attempt + 1));
+        CHECK(server.console().getVariable("DropCount") == std::to_string(attempt));
+    }
+    CHECK(client.console().execute("disconnect").value == "True");
+    for (int frame = 0; frame < 16; ++frame)
+        advance(false);
+    CHECK(sg.playerManager->getNumClients() == 0);
+    CHECK(server.console().getVariable("DropCount") == "4");
+}
+
 void disconnectShellResources() {
     TemporaryDirectory directory;
     CHECK(std::filesystem::create_directories(directory.path));
@@ -275,6 +373,7 @@ void installedRemoteDisconnect() {
         server.console().setVariable("Server::Port", "0");
         server.console().setVariable("Server::Heartbeats", "false");
         CHECK(server.loadMission(rpg ? "rpgmap5" : "Raindance"));
+        const auto hostedClients = server.fearPlugin().serverGlobals().playerManager->getNumClients();
         CHECK(rpg ? client.init(args) : client.init());
         client.console().setVariable("PCFG::Name", "RemoteDrop");
         client.console().setVariable("PCFG::Script", "");
@@ -284,56 +383,61 @@ void installedRemoteDisconnect() {
             server.fearPlugin().serverGlobals().csDelegate->delegate()->localAddress());
         CHECK(endpoint);
         const std::array<std::string, 1> address{"IP:127.0.0.1:" + std::to_string(endpoint->port)};
-        CHECK(client.console().execute("connect", address).value == "True");
-        for (int frame = 0; frame < 512; ++frame) {
-            CHECK(server.stepFrame(frame * .032, false));
-            CHECK(client.stepFrame(frame * .032, false));
-        }
-        CHECK(client.fearPlugin().isConnected());
-        const auto& cg = client.fearPlugin().clientGlobals();
-        CHECK(cg.playerPSC && cg.playerPSC->getControlObject());
-        auto& sg = server.fearPlugin().serverGlobals();
-        const auto* remote = sg.playerManager->getClientList();
-        while (remote && remote->name != "RemoteDrop") {
-            remote = remote->nextClient;
-        }
-        CHECK(remote);
-        const auto remoteId = remote->id;
-        auto surface = gfx::SoftwareSurface::create(1280, 720);
-        CHECK(surface && client.renderFrame(*surface));
-        CHECK(client.setGameplayGuiMode(1));
-        CHECK(client.escapeGameplay());
-        auto runtime = client.guiRuntime();
-        auto* button = disconnectButton(*runtime->canvas.top());
-        CHECK(button && button->active);
-        CHECK(client.renderFrame(*surface));
-        auto* service = dynamic_cast<sim::SimInputManager*>(
-            client.fearPlugin().clientGlobals().manager->findObject(sim::InputManagerId));
-        CHECK(service);
-        sim::SdlSimInput input(*service, 1);
-        std::printf("Clicking remote %s disconnect\n", rpg ? "RPG" : "base");
-        std::fflush(stdout);
-        gui::Event mouse;
-        mouse.point = button->localToGlobal(
-            {button->fields().extent.x / 2, button->fields().extent.y / 2});
-        mouse.type = gui::EventType::Move;
-        CHECK(runtime->canvas.dispatch(mouse));
-        mouse.type = gui::EventType::Down;
-        CHECK(runtime->canvas.dispatch(mouse));
-        CHECK(client.renderFrame(*surface));
-        mouse.type = gui::EventType::Up;
-        CHECK(runtime->canvas.dispatch(mouse));
-        CHECK(!client.fearPlugin().isConnected());
-        // The desktop host updates capture before it next rebinds input.
-        input.release();
-        input.capture(false);
-        for (int frame = 512; frame < 528; ++frame) {
-            CHECK(server.stepFrame(frame * .032, false));
-            CHECK(client.stepFrame(frame * .032, false));
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            client.console().setVariable("Server::Address", address.front());
+            CHECK(client.console().execute("JoinGame").ok());
+            for (int frame = 0; frame < 512; ++frame) {
+                CHECK(server.stepFrame((attempt * 528 + frame) * .032, false));
+                CHECK(client.stepFrame((attempt * 528 + frame) * .032, false));
+            }
+            CHECK(client.fearPlugin().isConnected());
+            const auto& cg = client.fearPlugin().clientGlobals();
+            CHECK(cg.playerPSC && cg.playerPSC->getControlObject());
+            auto& sg = server.fearPlugin().serverGlobals();
+            const auto* remote = sg.playerManager->getClientList();
+            while (remote && remote->name != "RemoteDrop") {
+                remote = remote->nextClient;
+            }
+            CHECK(remote);
+            CHECK(sg.playerManager->getNumClients() == hostedClients + 1);
+            const auto remoteId = remote->id;
+            auto surface = gfx::SoftwareSurface::create(1280, 720);
+            CHECK(surface && client.renderFrame(*surface));
+            CHECK(client.setGameplayGuiMode(1));
+            CHECK(client.escapeGameplay());
+            auto runtime = client.guiRuntime();
+            auto* button = disconnectButton(*runtime->canvas.top());
+            CHECK(button && button->active);
             CHECK(client.renderFrame(*surface));
+            auto* service = dynamic_cast<sim::SimInputManager*>(
+                client.fearPlugin().clientGlobals().manager->findObject(sim::InputManagerId));
+            CHECK(service);
+            sim::SdlSimInput input(*service, 1);
+            std::printf("Clicking remote %s disconnect\n", rpg ? "RPG" : "base");
+            std::fflush(stdout);
+            gui::Event mouse;
+            mouse.point = button->localToGlobal(
+                {button->fields().extent.x / 2, button->fields().extent.y / 2});
+            mouse.type = gui::EventType::Move;
+            CHECK(runtime->canvas.dispatch(mouse));
+            mouse.type = gui::EventType::Down;
+            CHECK(runtime->canvas.dispatch(mouse));
+            CHECK(client.renderFrame(*surface));
+            mouse.type = gui::EventType::Up;
+            CHECK(runtime->canvas.dispatch(mouse));
+            CHECK(!client.fearPlugin().isConnected());
+            // The desktop host updates capture before it next rebinds input.
+            input.release();
+            input.capture(false);
+            for (int frame = 512; frame < 528; ++frame) {
+                CHECK(server.stepFrame((attempt * 528 + frame) * .032, false));
+                CHECK(client.stepFrame((attempt * 528 + frame) * .032, false));
+            }
+            CHECK(client.renderFrame(*surface));
+            CHECK(sg.playerManager->getNumClients() == hostedClients);
+            CHECK(!sg.playerManager->findBaseRep(remoteId));
+            CHECK(runtime->canvas.top() && runtime->canvas.top()->getName() == "JoinGameGui");
         }
-        CHECK(!sg.playerManager->findBaseRep(remoteId));
-        CHECK(runtime->canvas.top() && runtime->canvas.top()->getName() == "JoinGameGui");
     }
 }
 
@@ -402,9 +506,18 @@ int opent1_test_disconnect_send_failures() {
     return opent1::test::run(disconnectSendFailures);
 }
 
+int opent1_test_cancel_and_reconnect() {
+    return opent1::test::run([] {
+        pendingDelegateDisconnect();
+        cancelAndReconnect();
+    });
+}
+
+OPENT1_REGISTER_TEST("game", "cancel_and_reconnect", opent1_test_cancel_and_reconnect);
 OPENT1_REGISTER_TEST("game", "disconnect_send_failures", opent1_test_disconnect_send_failures);
 OPENT1_REGISTER_TEST("game", "remote_disconnect", opent1_test_remote_disconnect);
 OPENT1_REGISTER_TEST("game", "disconnect_shell_resources", opent1_test_disconnect_shell_resources);
 OPENT1_REGISTER_TEST("fixpack", "installed_disconnect", opent1_test_installed_disconnect);
-OPENT1_REGISTER_TEST(
-    "disconnect_assets", "installed_remote_disconnect", opent1_test_installed_remote_disconnect);
+OPENT1_REGISTER_TEST("disconnect_assets",
+                     "installed_remote_disconnect",
+                     opent1_test_installed_remote_disconnect);

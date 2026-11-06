@@ -37,6 +37,7 @@ void CSDelegate::onRemove() {
     pendingLookup_.reset();
     pendingRequest_.clear();
     pendingAddress_.clear();
+    (void)disconnectPending(now_);
     const auto snapshot = streams_;
     streams_.clear();
     std::ranges::for_each(snapshot, [&](const auto& pair) {
@@ -161,9 +162,22 @@ CSDelegate::connect(std::string_view address, UInt32 now, std::span<const std::b
         now_ = now;
         return net::Result::Ok;
     }
-    net::ConnectionId connection{};
     now_ = now;
-    return session_.connect(address, request, now, connection);
+    return session_.connect(address, request, now, pendingConnection_);
+}
+
+bool CSDelegate::disconnectPending(UInt32 now, std::span<const std::byte> reason) {
+    if (!pendingConnection_) {
+        return false;
+    }
+    const auto address = session_.address(pendingConnection_);
+    const auto result = session_.disconnect(pendingConnection_, reason, now);
+    if (result != net::Result::Ok && getManager() && getManager()->console()) {
+        getManager()->console()->print(std::format(
+            "Failed to send disconnect to {} (network result {}).", address, int(result)));
+    }
+    pendingConnection_ = 0;
+    return true;
 }
 
 bool CSDelegate::disconnect(SimObjectId peer, UInt32 now, std::span<const std::byte> reason) {
@@ -174,6 +188,9 @@ bool CSDelegate::disconnect(SimObjectId peer, UInt32 now, std::span<const std::b
         pendingLookup_.reset();
         pendingRequest_.clear();
         pendingAddress_.clear();
+        return true;
+    }
+    if (peer == 2048 && disconnectPending(now, reason)) {
         return true;
     }
     bool removed = false;
@@ -220,10 +237,10 @@ net::Result CSDelegate::process(UInt32 now) {
             std::string address;
             if (pendingLookup_->poll(address)) {
                 pendingLookup_.reset();
-                net::ConnectionId connection{};
                 const auto connected =
-                    address.empty() ? net::Result::InvalidAddress
-                                    : session_.connect(address, pendingRequest_, now, connection);
+                    address.empty()
+                        ? net::Result::InvalidAddress
+                        : session_.connect(address, pendingRequest_, now, pendingConnection_);
                 pendingRequest_.clear();
                 if (connected != net::Result::Ok) {
                     net::Event failed;
@@ -260,6 +277,12 @@ net::Result CSDelegate::process(UInt32 now) {
         result = session_.process(now);
         net::Event event;
         while (!isRemoved() && getManager() && session_.poll(event)) {
+            if (event.connection == pendingConnection_ &&
+                (event.type == net::EventType::Accepted || event.type == net::EventType::Rejected ||
+                 event.type == net::EventType::Disconnected ||
+                 event.type == net::EventType::TimedOut)) {
+                pendingConnection_ = 0;
+            }
             if (event.type == net::EventType::Requested) {
                 const auto accept = acceptRequest;
                 const auto addressed = acceptAddressedRequest;

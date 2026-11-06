@@ -56,6 +56,44 @@ void windowAndFailures() {
     CHECK(q.client.send(q.clientId, {}, 0, 0) == Result::InvalidState);
 }
 
+void cancelHandshake() {
+    for (const bool accepting : {false, true}) {
+        Pair p;
+        CHECK(p.client.connect("1", bytes("join"), 0, p.clientId) == Result::Ok);
+        transfer(p.a, p.b);
+        CHECK(p.server.process(0) == Result::Ok);
+        const auto requested = drain(p.server);
+        CHECK(requested.size() == 1 && requested.front().type == EventType::Requested);
+        p.serverId = requested.front().connection;
+        if (accepting) {
+            CHECK(p.server.accept(p.serverId, bytes("ok"), 0) == Result::Ok);
+        }
+        // Neither the request nor the accept has completed on the client yet.
+        CHECK(p.client.disconnect(p.clientId, bytes("cancel"), 1) == Result::Ok);
+        const auto duplicate = p.a.outgoing.front();
+        transfer(p.a, p.b);
+        CHECK(p.server.process(1) == Result::Ok);
+        const auto closed = drain(p.server);
+        CHECK(closed.size() == 1 && closed.front().type == EventType::Disconnected);
+        CHECK(text(closed.front().data()) == "cancel");
+        CHECK(p.client.connectionCount() == 0 && p.server.connectionCount() == 0);
+        p.b.incoming.push_back(duplicate);
+        CHECK(p.server.process(2) == Result::Ok);
+        CHECK(drain(p.server).empty() && p.server.connectionCount() == 0);
+    }
+    // A remote cancellation must also finish a locally Requesting connection.
+    Pair p;
+    CHECK(p.client.connect("1", {}, 0, p.clientId) == Result::Ok);
+    transfer(p.a, p.b);
+    CHECK(p.server.process(0) == Result::Ok);
+    p.serverId = drain(p.server).front().connection;
+    CHECK(p.server.disconnect(p.serverId, {}, 1) == Result::Ok);
+    transfer(p.b, p.a);
+    CHECK(p.client.process(1) == Result::Ok);
+    CHECK(drain(p.client).front().type == EventType::Disconnected);
+    CHECK(p.client.connectionCount() == 0);
+}
+
 void malformed() {
     Wire wire{"server"};
     Session session(wire);
@@ -187,6 +225,7 @@ void limitsAndBackpressure() {
 int opent1_test_net_protocol() {
     return test::run([] {
         windowAndFailures();
+        cancelHandshake();
         malformed();
         timeoutAndWrap();
         transactionalAndStale();

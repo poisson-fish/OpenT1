@@ -244,6 +244,19 @@ the server world before removing the representative, owned body, and observer.
 The hook can release ownership to retain the body. Removed stream clients are
 detached before the hook, and failed outgoing disconnect sends are logged with
 the peer address and network result code.
+Transport departures retire the player during the network poll, before another
+request in that poll can reuse its ID or publish a roster containing stale state.
+Frame-end cleanup still catches streams removed through other paths, such as kicks.
+
+Pending client requests retain their transport connection even before a
+`PacketStream` exists. Disconnecting or replacing the client world cancels that
+connection, including a request sent after asynchronous hostname resolution.
+The peer consumes Disconnect while requesting, awaiting a decision, accepting,
+or connected; cancellation does not wait for the accept handshake or a timeout.
+This follows vanilla `FearCSDelegate::cancelDuringConnection`, which retains and
+disconnects the pending VC. The game regression cancels before acceptance is
+polled and immediately rejoins three times, checking one player and one server
+disconnect callback per departure.
 
 Regression cases cover selected event, ghost, control, discovery, and game
 handshake paths. The default suite runs against test peers and bundled records,

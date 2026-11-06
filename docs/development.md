@@ -268,9 +268,12 @@ $env:SDL_GPU_DRIVER = 'direct3d12' # or vulkan; Metal on macOS
 ```
 
 The optional `disconnect_assets` suite uses that installation to connect separate
-client/server apps over UDP, click the base and RPG Disconnect buttons, and check
-input capture, subsequent frames, the join menu, and server cleanup. It uses an
-ephemeral server port so an existing dedicated server can keep running:
+client/server apps over UDP, join through the base and RPG scripts, click Disconnect,
+and repeat the join/disconnect cycle. It checks input capture, subsequent frames,
+the join menu, and exactly one additional remote client after joining and none
+after leaving. The fixture keeps its local host connected to avoid last-player
+mission rotation. It uses an ephemeral server port so an existing dedicated server
+can keep running:
 
 ```powershell
 .\build\x64-debug\tests\opent1_tests.exe --suite disconnect_assets

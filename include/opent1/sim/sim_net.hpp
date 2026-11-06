@@ -484,6 +484,7 @@ public:
 private:
     PacketStream* createStream(net::ConnectionId, SimObjectId);
     void removeStream(net::ConnectionId);
+    bool disconnectPending(UInt32, std::span<const std::byte> reason = {});
     std::unique_ptr<net::Transport> transport_;
     net::Session session_;
     ServerBrowser browser_;
@@ -492,6 +493,7 @@ private:
     std::unique_ptr<net::AddressLookup> pendingLookup_;
     std::vector<std::byte> pendingRequest_;
     std::string pendingAddress_;
+    net::ConnectionId pendingConnection_{};
     UInt32 now_{};
     std::map<net::ConnectionId, SimAddress> streams_;
 };

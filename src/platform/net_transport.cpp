@@ -348,7 +348,9 @@ struct Session::Impl {
                 emit(c, EventType::Rejected, payload);
                 c.dead = true;
             }
-        } else if (base == Disconnect && p.state == State::Connected) {
+        } else if (base == Disconnect && p.state != State::Unbound) {
+            // A client can cancel after sending Request but before receiving
+            // Accept. Retire that handshake just like an established connection.
             flush(c);
             emit(c, EventType::Disconnected, payload);
             c.dead = true;

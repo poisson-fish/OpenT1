@@ -863,6 +863,13 @@ bool FearPlugin::createServerWorld(std::string_view missionName, bool dedicated)
     csd->configureGameStream = [this](auto& stream) {
         return configureRemoteStream(stream);
     };
+    csd->onConnection = [this](const net::Event& event) {
+        if (event.type == net::EventType::Disconnected || event.type == net::EventType::TimedOut) {
+            // Retire the player before the next request in the same network
+            // poll can publish a roster or choose a reused client ID.
+            updateRemoteControls();
+        }
+    };
     auto* rawCsd = dynamic_cast<FearCSDelegate*>(mgr.addObject(std::move(csd)));
     if (rawCsd) {
         rawCsd->bindConsole(game_.console());
@@ -947,6 +954,11 @@ bool FearPlugin::bindServerPort(UInt16 port) {
         std::make_unique<FearCSDelegate>(true, banList_, netRegistry_, std::move(transport));
     replacement->configureGameStream = [this](auto& stream) {
         return configureRemoteStream(stream);
+    };
+    replacement->onConnection = [this](const net::Event& event) {
+        if (event.type == net::EventType::Disconnected || event.type == net::EventType::TimedOut) {
+            updateRemoteControls();
+        }
     };
     replacement->config() = sg_.csDelegate->config();
     replacement->bindConsole(game_.console());

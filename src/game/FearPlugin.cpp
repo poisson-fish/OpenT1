@@ -1009,15 +1009,7 @@ bool FearPlugin::createClientWorld() {
         }
         if (event.type == net::EventType::Disconnected || event.type == net::EventType::TimedOut ||
             event.type == net::EventType::Rejected) {
-            dataFinishedFlag_ = false;
-            cg_.playerPSC = nullptr;
-            cg_.ghostManager = nullptr;
-            connectAddress_.clear();
-            game_.console().setVariable("ConnectedToServer", "false");
-            if (cg_.dbm) {
-                cg_.dbm->onDataFinished = {};
-                cg_.dbm->reset();
-            }
+            resetClientConnection();
         }
     };
     csd->configureGameStream = [this](auto& stream) {
@@ -1055,6 +1047,7 @@ bool FearPlugin::createClientWorld() {
     auto* rawHudMgr = dynamic_cast<HudManager*>(mgr.addObject(std::move(hudMgr)));
 
     auto cliGhostMgr = std::make_unique<sim::network::GhostManager>();
+    cliGhostMgr->assignName("LocalGhostManager");
     auto* rawCliGhostMgr =
         dynamic_cast<sim::network::GhostManager*>(mgr.addObject(std::move(cliGhostMgr)));
     if (rawCliPsc) {
@@ -1128,6 +1121,109 @@ void FearPlugin::destroyClientWorld() {
     cg_.clear();
     game_.setWorld(sim::WorldType::Client, nullptr);
     refreshActiveGlobals();
+}
+
+void FearPlugin::resetClientConnection() {
+    const auto local = connectAddress_ == "LOOPBACK:28001" ? localClientId_ : 0;
+    connectAddress_.clear();
+    localClientId_ = 0;
+    pendingLocalKick_.reset();
+    dataFinishedFlag_ = false;
+    downloadedBlocks_ = 0;
+    centerPrintText_.clear();
+    serverToClientGhosts_.clear();
+    loopbackSourceGenerations_.clear();
+    cg_.playerPSC = nullptr;
+    cg_.ghostManager = nullptr;
+    cg_.packetStream = nullptr;
+    cg_.eventManager = nullptr;
+    auto& console = game_.console();
+    for (const auto* flag :
+         {"ConnectedToServer", "dataFinished", "DataBlock::Finished", "scoresVisible"}) {
+        console.setVariable(flag, "false");
+    }
+    if (cg_.csDelegate && cg_.csDelegate->delegate()) {
+        // This also cancels DNS and requests that have no PacketStream yet.
+        (void)cg_.csDelegate->delegate()->disconnect(2048, cg_.currentTime);
+    }
+    if (local) {
+        retireServerClient(local);
+        if (sg_.playerPSC) {
+            sg_.playerPSC->deleteObject();
+            sg_.playerPSC =
+                dynamic_cast<PlayerPSC*>(sg_.manager->addObject(std::make_unique<PlayerPSC>(true)));
+        }
+        sg_.playerManager->onLocalEvent = {};
+    }
+    if (!cg_.manager) {
+        return;
+    }
+    auto& manager = *cg_.manager;
+    // Stream removal owns the remote PSC and ghosts. Loopback has no stream,
+    // so retire its controller, ghost service and mission objects explicitly.
+    for (const auto* name : {"LocalGhostManager", "MissionGroup", "MissionCleanup"}) {
+        if (auto* object = manager.findObject(name)) {
+            object->deleteObject();
+        }
+    }
+    if (auto* control = manager.findObject(PlayerPSCId)) {
+        control->deleteObject();
+    }
+    std::vector<sim::SimAddress> missionObjects;
+    const auto collect = [&](auto&& self, sim::SimGroup& group) -> void {
+        for (auto* object : group.objects()) {
+            const auto* net = dynamic_cast<sim::SimNetObject*>(object);
+            if ((net && net->isGhost()) || dynamic_cast<GameBase*>(object) ||
+                dynamic_cast<DebrisCloud*>(object) || dynamic_cast<Snowfall*>(object)) {
+                missionObjects.push_back(object->address());
+            } else if (auto* child = dynamic_cast<sim::SimGroup*>(object)) {
+                self(self, *child);
+            }
+        }
+    };
+    collect(collect, manager);
+    for (const auto address : missionObjects) {
+        if (auto* object = address.resolve(manager)) {
+            object->deleteObject();
+        }
+    }
+    if (cg_.dbm) {
+        cg_.dbm->onDataFinished = {};
+        cg_.dbm->reset();
+    }
+    if (cg_.playerManager) {
+        cg_.playerManager->reset();
+    }
+    if (cg_.sensorManager) {
+        for (Int32 target = 0; target < SensorManager::MaxTargets; ++target) {
+            TargetNameEvent clear;
+            clear.targId = target;
+            cg_.sensorManager->processEvent(clear);
+        }
+    }
+    if (auto* paths =
+            dynamic_cast<world::SimPathManager*>(manager.findObject(world::PathManagerId))) {
+        paths->reset();
+    }
+    if (cg_.decalManager) {
+        cg_.decalManager->reset();
+    }
+    if (auto* smoke = manager.findObject(SmokeManagerId)) {
+        smoke->deleteObject();
+        manager.addObject(std::make_unique<SmokeManager>());
+    }
+    (void)manager.setNetworkId(0);
+    // Connection clients are fresh on each join; the shell world and services
+    // never unregister. In particular, scheduler events and IRC survive.
+    cg_.playerPSC = dynamic_cast<PlayerPSC*>(manager.addObject(std::make_unique<PlayerPSC>(false)));
+    auto localGhosts = std::make_unique<sim::network::GhostManager>();
+    localGhosts->assignName("LocalGhostManager");
+    cg_.ghostManager =
+        dynamic_cast<sim::network::GhostManager*>(manager.addObject(std::move(localGhosts)));
+    if (cg_.playerPSC) {
+        cg_.playerPSC->setLocalGhostManager(cg_.ghostManager);
+    }
+    bindClientControlCallbacks();
 }
 
 bool FearPlugin::focusServer() {
@@ -2380,44 +2476,7 @@ void FearPlugin::init(Console& console, sim::SimManager* manager) {
 
     console.addCommand(
         0, "disconnect", [this](Console&, Int32, std::span<const std::string>) -> std::string {
-            if ((cg_.manager && cg_.manager->isDispatching()) ||
-                (sg_.manager && sg_.manager->isDispatching())) {
-                return "False";
-            }
-            // Startup mounts and canvases belong to the shell. Keep their
-            // script identities when resetting the client; EndGame still needs
-            // the shell archives to load the next menu after disconnect().
-            std::vector<sim::SimObject*> retained;
-            if (cg_.manager) {
-                for (auto* object : cg_.manager->objects()) {
-                    const auto* volume = dynamic_cast<sim::SimVolume*>(object);
-                    if ((volume && !volume->isGhost()) || dynamic_cast<sim::SimCanvas*>(object)) {
-                        retained.push_back(object);
-                    }
-                }
-            }
-            std::vector<std::unique_ptr<sim::SimObject>> shell;
-            for (auto* object : retained) {
-                auto owned = cg_.manager->unregisterObject(*object);
-                if (!owned) {
-                    return "False";
-                }
-                shell.push_back(std::move(owned));
-            }
-            const bool local = connectAddress_ == "LOOPBACK:28001";
-            connectAddress_.clear();
-            destroyClientWorld();
-            if (local) {
-                destroyServerWorld();
-            }
-            if (!createClientWorld()) {
-                return "False";
-            }
-            for (auto& object : shell) {
-                if (!cg_.manager->addObject(std::move(object))) {
-                    return "False";
-                }
-            }
+            resetClientConnection();
             return "True";
         });
 
@@ -2436,7 +2495,7 @@ void FearPlugin::init(Console& console, sim::SimManager* manager) {
                 (argv.size() >= 3) ? std::string_view(argv[2])
                                    : std::string_view("You were kicked from the server.");
             if (peerId == UInt32(localClientId_) && connectAddress_ == "LOOPBACK:28001") {
-                // The hosted client has no PacketStream. Retire its worlds
+                // The hosted client has no PacketStream. Retire its connection
                 // after the frame, outside a running script/manager dispatch.
                 pendingLocalKick_ = std::string(reason);
                 return "True";

@@ -139,7 +139,7 @@ This table highlights a few verified contracts:
 
 | Call | Meaning |
 | --- | --- |
-| `disconnect()` | Cancel a pending join or leave an established connection; pending joins notify the server even before the client has a packet stream |
+| `disconnect()` | Cancel a pending join or leave a connection while preserving the client shell world; direct loopback disconnect leaves server shutdown to `deleteServer()` / EndGame |
 | `Client::sendMessage(%client, %type, %text [, %sender])` | Server-side message delivery to a client; missing/disconnected targets can be silently ignored |
 | `Client::setMenuScoreVis(%client, %visible)` | Server-side score visibility for a connected player; enabling sends current headings and rows, then streams changes while visible; victory mode freezes row updates |
 | `GameBase::getPosition(%object)` | Obtain a game object's position through its native binding |

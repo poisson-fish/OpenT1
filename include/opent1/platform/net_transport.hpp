@@ -148,6 +148,9 @@ public:
     Result accept(ConnectionId id, std::span<const std::byte> data, UInt32 now);
     Result reject(ConnectionId id, std::span<const std::byte> data, UInt32 now);
     Result disconnect(ConnectionId id, std::span<const std::byte> data, UInt32 now);
+    // Local owner disposal after a failed close send. No packet or event is
+    // emitted; queued events for the disposed connection are cancelled too.
+    void forget(ConnectionId id);
     Result send(ConnectionId id, std::span<const std::byte> data, UInt32 notifyKey, UInt32 now);
     Result sendRaw(std::string_view address, std::span<const std::byte> data);
     Result process(UInt32 now);

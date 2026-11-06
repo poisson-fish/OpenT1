@@ -214,6 +214,8 @@ private:
     void stepClientSimulation();
     bool configureRemoteStream(sim::network::PacketStream&);
     void bindClientControlCallbacks();
+    void resetClientConnection();
+    void retireServerClient(Int32 peer);
     void updateRemoteControls();
     void installRemoteCommands(Console&);
     void installNetworkCommands(Console&);

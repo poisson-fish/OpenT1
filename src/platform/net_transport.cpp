@@ -453,6 +453,14 @@ Result Session::disconnect(ConnectionId id, std::span<const std::byte> data, UIn
     return impl_->action(id, Disconnect, data, 0, now);
 }
 
+void Session::forget(ConnectionId id) {
+    if (auto* connection = impl_->find(id)) {
+        connection->dead = true;
+        impl_->eraseDead();
+    }
+    std::erase_if(impl_->events, [id](const auto& event) { return event.connection == id; });
+}
+
 Result Session::send(ConnectionId id, std::span<const std::byte> data, UInt32 key, UInt32 now) {
     return impl_->action(id, Data, data, key, now);
 }

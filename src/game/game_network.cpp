@@ -65,12 +65,6 @@ void FearPlugin::processPendingLocalDisconnect() {
     if (connectAddress_ != "LOOPBACK:28001") {
         return;
     }
-    game_.withWorld(sim::WorldType::Server, [&] {
-        if (game_.console().isFunction("Server::onClientDisconnect")) {
-            const std::array<std::string, 1> args{std::to_string(localClientId_)};
-            (void)game_.console().execute("Server::onClientDisconnect", args);
-        }
-    });
     (void)game_.console().execute("disconnect");
     game_.console().setVariable("ConnectedToServer", "false");
     game_.console().setVariable("errorString", reason);
@@ -363,47 +357,57 @@ void FearPlugin::updateRemoteControls() {
         if (disconnected.empty()) {
             return;
         }
-        game_.withWorld(sim::WorldType::Server, [&] {
-            for (const auto peer : disconnected) {
-                auto* client = sg_.playerManager->findClient(peer);
-                // Vanilla runs the hook while the representative, owned body and
-                // observer still exist. A leaveGame hook may release/delete the body.
-                if (game_.console().isFunction("Server::onClientDisconnect")) {
-                    const std::array<std::string, 1> args{std::to_string(peer)};
-                    (void)game_.console().execute("Server::onClientDisconnect", args);
-                }
-                const auto retire = [&](auto&& self, sim::SimGroup& group) -> bool {
-                    const std::vector<sim::SimObject*> objects(group.objects().begin(),
-                                                               group.objects().end());
-                    for (auto* object : objects) {
-                        if (object == client->ownedObject) {
-                            object->deleteObject();
-                            return true;
-                        }
-                        if (auto* child = dynamic_cast<sim::SimGroup*>(object);
-                            child && self(self, *child)) {
-                            return true;
-                        }
-                    }
-                    return false;
-                };
-                if (client->ownedObject) {
-                    (void)retire(retire, *sg_.manager);
-                }
-                if (scriptPlugin_) {
-                    if (const auto* state = scriptPlugin_->findClient(peer)) {
-                        if (auto* observer = dynamic_cast<ObserverCamera*>(
-                                sg_.manager->findObject(state->observerCameraId))) {
-                            observer->deleteObject();
-                        }
-                    }
-                    scriptPlugin_->removeClient(peer);
-                }
-                sg_.playerManager->clientDropped(peer);
-                pendingRemoteControls_.erase(peer);
-            }
-        });
+        for (const auto peer : disconnected) {
+            retireServerClient(peer);
+        }
     }
+}
+
+void FearPlugin::retireServerClient(Int32 peer) {
+    if (!sg_.manager || !sg_.playerManager || !sg_.playerManager->findClient(peer)) {
+        return;
+    }
+    game_.withWorld(sim::WorldType::Server, [&] {
+        auto* client = sg_.playerManager->findClient(peer);
+        // Vanilla runs the hook while the representative, owned body and
+        // observer still exist. A leaveGame hook may release/delete the body.
+        if (game_.console().isFunction("Server::onClientDisconnect")) {
+            const std::array<std::string, 1> args{std::to_string(peer)};
+            (void)game_.console().execute("Server::onClientDisconnect", args);
+        }
+        const auto retire = [&](auto&& self, sim::SimGroup& group) -> bool {
+            const std::vector<sim::SimObject*> objects(group.objects().begin(),
+                                                       group.objects().end());
+            for (auto* object : objects) {
+                if (object == client->ownedObject) {
+                    object->deleteObject();
+                    return true;
+                }
+                if (auto* child = dynamic_cast<sim::SimGroup*>(object);
+                    child && self(self, *child)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        if (client->ownedObject) {
+            (void)retire(retire, *sg_.manager);
+        }
+        if (scriptPlugin_) {
+            if (const auto* state = scriptPlugin_->findClient(peer)) {
+                if (auto* observer = dynamic_cast<ObserverCamera*>(
+                        sg_.manager->findObject(state->observerCameraId))) {
+                    observer->deleteObject();
+                }
+            }
+            scriptPlugin_->removeClient(peer);
+        }
+        sg_.playerManager->clientDropped(peer);
+        if (auto* placeholder = sg_.manager->findObject(peer)) {
+            placeholder->deleteObject();
+        }
+        pendingRemoteControls_.erase(peer);
+    });
 }
 
 } // namespace opent1::game

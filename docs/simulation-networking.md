@@ -236,7 +236,7 @@ version or build timestamp.
 Local hosting shares the remote client's PSC GUI/control callbacks, including
 server-menu visibility while an observer camera is controlled. Control assignment
 maintains the object's controlling-client backlink. The legacy `Net::kick`
-command also handles the direct local connection: it defers world teardown until
+command also handles the direct local connection: it defers connection teardown until
 after the simulation frame, then runs the disconnect script callbacks.
 
 Remote disconnects, kicks, and timeouts run `Server::onClientDisconnect` once in
@@ -247,6 +247,16 @@ the peer address and network result code.
 Transport departures retire the player during the network poll, before another
 request in that poll can reuse its ID or publish a roster containing stale state.
 Frame-end cleanup still catches streams removed through other paths, such as kicks.
+Direct loopback departures use the same player cleanup without deleting the server
+world. The installed EndGame script owns subsequent menus and `deleteServer()`.
+
+The client shell world persists across disconnect, rejection, kick and timeout.
+Its input manager, console scheduler, IRC client, canvases and startup mounts keep
+their identities. Connection-owned controllers, event/ghost clients, mission
+objects, datablocks, paths and effects retire before another join. Local queued
+events keep their target generation but use the owning manager rather than its
+temporary network ID. See [client lifecycle](client-lifecycle.md) for ownership
+and validation boundaries.
 
 Pending client requests retain their transport connection even before a
 `PacketStream` exists. Disconnecting or replacing the client world cancels that

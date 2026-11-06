@@ -19,6 +19,13 @@ Historical installed-content audits in `docs/` describe particular validation
 runs; they do not certify every later release. Numbered release notes should state
 which manual acceptance checks were actually performed and list unresolved issues.
 
+The client shell manager, input service, scheduler, IRC client, canvases and startup
+mounts persist across connection teardown. Mission objects and connection clients
+are removed before rejoining. A direct loopback `disconnect()` leaves the server
+alive; normal EndGame scripts decide when to call `deleteServer()`. The repository
+[client lifecycle audit](https://github.com/poisson-fish/OpenT1/blob/main/docs/client-lifecycle.md) distinguishes tested behavior from
+source comparisons and live vanilla acceptance.
+
 ## Common startup problems
 
 - **Missing bootstrap or volumes:** point `--assets` at the supplied installation

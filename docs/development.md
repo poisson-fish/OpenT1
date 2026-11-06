@@ -413,3 +413,13 @@ Keep game installations and generated runtime state outside release inputs.
 `tests/data/` supports development and is not needed to run the game. Generated
 build directories are not release source inputs. Check a proposed archive's
 contents explicitly rather than copying an entire working directory.
+
+## Optional native lifecycle interoperability
+
+On Windows, `tools/run_disconnect_interop.py` exercises separate existing native
+1.11 and OpenT1 processes through a header-only UDP relay. It supports minimal
+orderly/kick/shutdown/timeout probes and opt-in installed base or loose-script
+mod mission/EndGame cycles. It copies supplied content to isolated write roots.
+See [the live matrix](live-disconnect-interoperability.md) for commands, runtime
+hashes, observed results and unsupported native cases. This is not a standard
+CTest dependency and never automates a desktop UI.

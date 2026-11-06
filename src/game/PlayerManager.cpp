@@ -927,30 +927,74 @@ void PlayerManager::serverClientTeamChange(Int32 clientId, Int32 teamId) {
 }
 
 void PlayerManager::setTeamScoreHeading(std::string_view heading) {
-    teamScoreHeading_ = truncateTo(heading, 255);
+    const auto text = truncateTo(heading, 255);
+    if (teamScoreHeading_ == text) {
+        return;
+    }
+    teamScoreHeading_ = text;
+    if (isServer_) {
+        for (auto* receiver = getClientList(); receiver; receiver = receiver->nextClient) {
+            sendScore(*receiver, true, -1, teamScoreHeading_);
+        }
+    }
 }
 
 void PlayerManager::setClientScoreHeading(std::string_view heading) {
-    clientScoreHeading_ = truncateTo(heading, 255);
+    const auto text = truncateTo(heading, 255);
+    if (clientScoreHeading_ == text) {
+        return;
+    }
+    clientScoreHeading_ = text;
+    if (isServer_) {
+        for (auto* receiver = getClientList(); receiver; receiver = receiver->nextClient) {
+            sendScore(*receiver, false, BaseClientId, clientScoreHeading_);
+        }
+    }
 }
 
 void PlayerManager::setTeamScore(Int32 teamId, std::string_view scoreString, Int32 sortValue) {
     if (TeamRep* tr = findTeam(teamId)) {
-        tr->scoreString = truncateTo(scoreString, 255);
+        const auto text = truncateTo(scoreString, 255);
+        if (tr->scoreString == text && tr->scoreSortValue == sortValue) {
+            return;
+        }
+        tr->scoreString = text;
         tr->scoreSortValue = sortValue;
+        // The native wire reserves team ID -1 for the score heading.
+        if (isServer_ && teamId >= 0) {
+            for (auto* receiver = getClientList(); receiver; receiver = receiver->nextClient) {
+                if (receiver->sendScores && receiver->curGuiMode != 5) {
+                    sendScore(*receiver, true, teamId, tr->scoreString, sortValue);
+                }
+            }
+        }
     }
 }
 
 void PlayerManager::setClientScore(Int32 clientId, std::string_view scoreString, Int32 sortValue) {
     if (BaseRep* br = findClient(clientId)) {
-        br->scoreString = truncateTo(scoreString, 255);
+        const auto text = truncateTo(scoreString, 255);
+        if (br->scoreString == text && br->scoreSortValue == sortValue) {
+            return;
+        }
+        br->scoreString = text;
         br->scoreSortValue = sortValue;
+        if (isServer_) {
+            for (auto* receiver = getClientList(); receiver; receiver = receiver->nextClient) {
+                if (receiver->sendScores && receiver->curGuiMode != 5) {
+                    sendScore(*receiver, false, clientId, br->scoreString, sortValue);
+                }
+            }
+        }
     }
 }
 
 void PlayerManager::setDisplayScores(Int32 clientId, bool display) {
     if (ClientRep* cr = findClient(clientId)) {
         cr->sendScores = display ? 1u : 0u;
+        if (isServer_ && display && cr->curGuiMode != 5) {
+            sendScoreSnapshot(*cr);
+        }
     }
 }
 
@@ -976,10 +1020,8 @@ void PlayerManager::setClientSkin(Int32 clientId, std::string_view newSkin) {
 void PlayerManager::missionReset() {
     for (auto* base = getBaseRepList(); base; base = base->nextClient) {
         auto* client = static_cast<ClientRep*>(base);
-        if (isServer_ && client->packetStream) {
-            auto event = std::make_unique<MissionResetEvent>();
-            event->flags = sim::SimEvent::Guaranteed | sim::SimEvent::Ordered;
-            (void)client->packetStream->sendRemoteEvent(std::move(event));
+        if (isServer_ && client->isClientRep()) {
+            sendPlayerEvent(*client, std::make_unique<MissionResetEvent>());
         }
         client->curCommand = -1;
         client->commandStatus = CMD_NONE;
@@ -987,6 +1029,7 @@ void PlayerManager::missionReset() {
             0;
         if (isServer_) {
             client->scoreString.clear();
+            client->scoreSortValue = 0;
         }
     }
     curCommandSequence_ = 0;
@@ -998,6 +1041,11 @@ void PlayerManager::missionReset() {
     }
     if (isServer_) {
         teamAdded(-1);
+        for (auto* receiver = getClientList(); receiver; receiver = receiver->nextClient) {
+            if (receiver->sendScores && receiver->curGuiMode != 5) {
+                sendScoreSnapshot(*receiver);
+            }
+        }
     }
 }
 
@@ -1115,6 +1163,30 @@ void PlayerManager::sendPlayerEvent(ClientRep& receiver, std::unique_ptr<sim::Si
         (void)receiver.eventManager->postRemoteEvent(std::move(event));
     } else if (onLocalEvent) {
         onLocalEvent(std::move(event));
+    }
+}
+
+void PlayerManager::sendScore(
+    ClientRep& receiver, bool isTeam, Int32 id, std::string_view score, Int32 sortValue) {
+    auto event = std::make_unique<DeltaScoreEvent>();
+    event->isTeam = isTeam;
+    event->id = id;
+    event->score = score;
+    event->sortValue = sortValue;
+    sendPlayerEvent(receiver, std::move(event));
+}
+
+void PlayerManager::sendScoreSnapshot(ClientRep& receiver) {
+    // Include headings on every show so late joins and fresh connections need
+    // no previous score events. Empty rows also replace stale client state.
+    sendScore(receiver, true, -1, teamScoreHeading_);
+    sendScore(receiver, false, BaseClientId, clientScoreHeading_);
+    for (Int32 teamId = 0; teamId < numTeams_; ++teamId) {
+        const auto& team = *findTeam(teamId);
+        sendScore(receiver, true, teamId, team.scoreString, team.scoreSortValue);
+    }
+    for (auto* client = getClientList(); client; client = client->nextClient) {
+        sendScore(receiver, false, client->id, client->scoreString, client->scoreSortValue);
     }
 }
 
@@ -1389,6 +1461,15 @@ void PlayerManager::clientGuiModeChanged(Int32 clientId, UInt32 newGuiMode, UInt
             client->lastObjectiveSequence = curObjectiveSeq_;
         }
     }
+    // Victory shows the final scores even for a hidden list, then freezes row
+    // updates. Leaving it catches up a list that is still visible.
+    if (isServer_ && newGuiMode == 5 && !client->sendScores) {
+        if (client->curGuiMode != 5) {
+            sendScoreSnapshot(*client);
+        }
+    } else if (isServer_ && newGuiMode != 5 && client->curGuiMode == 5 && client->sendScores) {
+        sendScoreSnapshot(*client);
+    }
     client->curGuiMode = newGuiMode;
 }
 
@@ -1577,6 +1658,9 @@ bool PlayerManager::processEvent(const sim::SimEvent& event) {
             return false;
         }
         case DeltaScoreEventType: {
+            if (isServer_) {
+                return false;
+            }
             if (const auto* ev = dynamic_cast<const DeltaScoreEvent*>(&event)) {
                 if (ev->isTeam) {
                     if (ev->id == -1) {

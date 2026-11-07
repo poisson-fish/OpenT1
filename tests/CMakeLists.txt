@@ -4,6 +4,7 @@ add_executable(
     main.cpp
     core/bit_stream_test.cpp
     core/stream_test.cpp
+    core/vol_stream_test.cpp
     core/compression_test.cpp
     core/resource_test.cpp
     core/resource_retention_test.cpp

@@ -6,6 +6,11 @@ resources by name. Keep names and dependencies consistent across platforms and
 test from a clean copy of the mod rather than an installation containing unrelated
 loose files that can hide missing resources.
 
+Native-readable VOL archives can omit alignment padding after an entry, including
+the final entry before the directory (as in Iceworld's `icecaves2.vol`). OpenT1
+accepts these archives without rewriting them. Entry headers and payloads must
+still fit before the directory, and uncompressed sizes must match.
+
 ## Edit a mission
 
 Use a backed-up game/mod installation with its original editor scripts and GUI

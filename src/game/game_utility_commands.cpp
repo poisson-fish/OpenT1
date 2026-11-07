@@ -224,11 +224,11 @@ void FearPlugin::installLegacyUtilityCommands(Console& console) {
                            if (args.size() != 3 || !manager) {
                                return "True";
                            }
-                           auto* set = dynamic_cast<sim::SimSet*>(manager->findObject(args[1]));
+                           auto* set = dynamic_cast<sim::SimSet*>(game_.findObject(args[1]));
                            if (!set) {
                                return "False";
                            }
-                           if (auto* child = manager->findObject(args[2])) {
+                           if (auto* child = game_.findObject(args[2])) {
                                (void)set->removeObject(*child);
                            }
                            return "True";

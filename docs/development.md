@@ -250,6 +250,16 @@ The optional cases do not bundle game assets or run unless this variable is set.
 The `game` suite's installed-content integration checks use the same variable;
 they do not auto-discover nearby installations during the standard test run.
 
+The optional `hud` suite uses an RPG installation containing Presto and DeusHUD.
+It checks HUD attachment, fonts, text updates, screen switching, vanilla and
+Presto V menus, character stats and voice emotes in a hosted RPG mission. Writes
+go to a temporary directory:
+
+```powershell
+$env:OPENT1_TEST_ASSETS = 'C:\Games\Wasteworld'
+.\build\x64-release\tests\opent1_tests.exe --suite hud
+```
+
 The optional `camera_assets` suite checks third-person camera clearance and near
 plane clipping against all four Keldrin mine sections from Wasteland's rpgmap5.
 It also renders each section through the player camera. `camera_gpu` submits

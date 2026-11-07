@@ -468,10 +468,7 @@ SimGame::SimGame(std::shared_ptr<ResourceManager> resources)
     console_.addCommand(0,
                         "Object::getName",
                         [this](Console&, Int32, std::span<const std::string> args) -> std::string {
-                            auto* current = manager();
-                            auto* object = current && args.size() == 2
-                                               ? current->findObject(args[1])
-                                               : nullptr;
+                            auto* object = args.size() == 2 ? findObject(args[1]) : nullptr;
                             return object ? std::string(object->getName()) : std::string{};
                         });
     const auto commands =
@@ -792,7 +789,13 @@ SimObject* SimGame::findObject(std::string_view path, SimManager* preferred) con
             destination = &client->manager();
         }
     }
-    return destination ? destination->findObject(path) : nullptr;
+    if (auto* object = destination ? destination->findObject(path) : nullptr) {
+        return object;
+    }
+    const auto* client = world(WorldType::Client);
+    return client && destination == &client->manager() && findClientObject
+               ? findClientObject(path)
+               : nullptr;
 }
 
 SimObject* SimGame::createObject(std::string_view className,
@@ -821,7 +824,8 @@ SimObject* SimGame::createObject(std::string_view className,
         if (result) {
             auto* initialized = result;
             try {
-                if (!initialized->processArguments(arguments) || initialized->isRemoved()) {
+                if (!initialized->processArguments(arguments) || initialized->isRemoved() ||
+                    (initializeObject && !initializeObject(*initialized))) {
                     if (!initialized->isRemoved()) {
                         initialized->deleteObject();
                     }
@@ -1066,7 +1070,7 @@ SimGame::invokeCommand(Console& console, Int32 id, std::span<const std::string> 
         return "True";
     }
     if (id == SetObjectId) {
-        if (size != 3) {
+        if (size != 3 || !object->getManager()) {
             return "False";
         }
         UInt32 value{};
@@ -1078,7 +1082,7 @@ SimGame::invokeCommand(Console& console, Int32 id, std::span<const std::string> 
         return size == 2 && object->getGroup() ? std::to_string(object->getGroup()->getId()) : "-1";
     }
     if (id == PostAction) {
-        if (size != 4) {
+        if (size != 4 || !object->getManager()) {
             return "False";
         }
         Int32 action{};

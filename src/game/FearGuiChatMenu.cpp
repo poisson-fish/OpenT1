@@ -40,7 +40,7 @@ std::vector<std::string> FGChatMenu::buildVisibleRows(const ChatMenu& menu) cons
     if (cur == nullptr) {
         return rows;
     }
-    rows.emplace_back(menu.getHeading());
+    rows.emplace_back(menu.curMenuQuery().empty() ? menu.getHeading() : menu.curMenuQuery());
     for (const auto* walk = cur; walk != nullptr; walk = walk->nextSibling.get()) {
         if (walk->key != '\0') {
             rows.push_back(std::format("{}: {}", walk->key, walk->heading));

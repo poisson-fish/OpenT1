@@ -157,7 +157,38 @@ bool FearGuiChatDisplay::draw(gfx::SoftwareSurface& surface, Point2I offset, Rec
         y += fontHeight(*lines[i].font);
     }
     surface.setClip(saved);
-    return drawChildren(surface, offset, clip);
+    if (!drawChildren(surface, offset, clip)) {
+        return false;
+    }
+    const auto* menu = !commanderChat_ && resolvePlayMenu ? resolvePlayMenu() : nullptr;
+    if (!menu || menu->getMode() == ChatMenu::Inactive || !menu->curMenu()) {
+        return true;
+    }
+    // Vanilla draws the V menu outside the chat control, below its history
+    // (or above it when there is insufficient room at the bottom of the screen).
+    const auto* menuFont = fontFor(MSG_TeamChat);
+    const auto height = fontHeight(*menuFont);
+    Int32 rows = 1;
+    for (auto* node = menu->curMenu(); node; node = node->nextSibling.get()) {
+        ++rows;
+    }
+    auto menuY = offset.y + fields_.extent.y;
+    if (menuY + rows * height >= surface.bitmap().height) {
+        menuY = offset.y - rows * height - 8;
+    }
+    surface.setClip(surface.bitmap().bounds());
+    const auto heading = menu->curMenuQuery().empty() ? menu->getHeading() : menu->curMenuQuery();
+    if (!surface.text(*menuFont, {offset.x, menuY}, heading)) {
+        return false;
+    }
+    for (auto* node = menu->curMenu(); node; node = node->nextSibling.get()) {
+        menuY += height;
+        if (!surface.text(*menuFont, {offset.x, menuY},
+                          std::string(1, node->key) + ": " + node->heading)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool FearGuiChatDisplay::layout(Point2I extent) {

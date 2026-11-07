@@ -399,6 +399,14 @@ void files() {
     CHECK(text == "$Saved::A = \"1\";\r\n$Saved::B = \"line\\n\\t\\\"\\\\\";\r\n");
     CHECK(c.removeVariable("Saved::A") && c.removeVariable("Saved::B"));
     CHECK(eval(c, text) == saved && c.getVariable("saved::b") == saved);
+    CHECK(c.evaluate(R"($Saved::Stats["Player [One]"] = 42;)").ok());
+    CHECK(c.execute("export", exportArgs).value == "True");
+    Console restored;
+    std::ifstream indexed(root / "saved.cs", std::ios::binary);
+    const std::string indexedText(std::istreambuf_iterator<char>(indexed), {});
+    CHECK(restored.evaluate(indexedText).ok());
+    CHECK(eval(restored, R"(return $Saved::Stats["Player [One]"];)") == "42");
+    indexed.close();
     c.bindVariable("ExportOnce",
                    [&] {
                        CHECK(c.removeVariable("ExportOnce"));

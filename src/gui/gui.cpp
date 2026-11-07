@@ -3,6 +3,8 @@
 #include <opent1/gui/controls.hpp>
 #include <algorithm>
 #include <cmath>
+#include <charconv>
+#include <cctype>
 #include <cstring>
 
 namespace opent1::gui {
@@ -195,6 +197,35 @@ bool Control::onAdd() {
     }
     return fields_.variable.empty() || !getManager() || !getManager()->console() ||
            variableChanged(getManager()->console()->getVariable(fields_.variable));
+}
+
+bool Control::processArguments(std::span<const std::string> arguments) {
+    auto next = fields_;
+    if (arguments.size() >= 4) {
+        std::array<Int32, 4> values{};
+        for (std::size_t i = 0; i < values.size(); ++i) {
+            std::string_view text = arguments[i];
+            while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front()))) {
+                text.remove_prefix(1);
+            }
+            if (!text.empty() && text.front() == '+') {
+                text.remove_prefix(1);
+            }
+            const auto parsed = std::from_chars(text.data(), text.data() + text.size(), values[i]);
+            if (parsed.ec == std::errc::result_out_of_range) {
+                return false;
+            }
+        }
+        next.position = {values[0], values[1]};
+        next.extent = {values[2], values[3]};
+    }
+    if (arguments.size() >= 5) {
+        next.variable = arguments[4];
+    }
+    if (arguments.size() >= 6) {
+        next.command = arguments[5];
+    }
+    return configure(std::move(next));
 }
 
 void Control::onNameChange(std::string_view) {

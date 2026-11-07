@@ -283,6 +283,18 @@ bool FearGameApp::escapeGameplay() {
         chat->deactivate();
         return true;
     }
+    bool closedMenu = false;
+    for (const auto name : {"PlayChatMenu", "PlayChatMenuInvisible"}) {
+        auto* menu = cg.manager ? dynamic_cast<ChatMenu*>(cg.manager->findObject(name)) : nullptr;
+        if (menu && menu->getMode() != ChatMenu::Inactive) {
+            sim::SimInputEvent escape;
+            escape.objInst = ChatMenu::kEscapeScanCode;
+            closedMenu |= menu->processEvent(escape);
+        }
+    }
+    if (closedMenu) {
+        return true;
+    }
     if (showingScores_) {
         const std::array<std::string, 2> args{"2048", "ScoresOff"};
         (void)game_.console().execute("remoteEval", args);
@@ -537,7 +549,8 @@ void FearGameApp::updateGameplayGui() {
                 cg.manager ? dynamic_cast<ChatMenu*>(cg.manager->findObject("CurServerMenu"))
                            : nullptr;
             if (menu && menu->getMode() != ChatMenu::Inactive) {
-                display->heading = menu->getHeading();
+                display->heading = menu->curMenuQuery().empty() ? menu->getHeading()
+                                                              : menu->curMenuQuery();
                 for (auto* node = menu->curMenu(); node; node = node->nextSibling.get()) {
                     display->entries.push_back(std::string(1, node->key) + ": " + node->heading);
                 }

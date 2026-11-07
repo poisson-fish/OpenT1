@@ -172,9 +172,9 @@ bool CSDelegate::disconnectPending(UInt32 now, std::span<const std::byte> reason
     }
     const auto address = session_.address(pendingConnection_);
     const auto result = session_.disconnect(pendingConnection_, reason, now);
-    if (result != net::Result::Ok) {
-        session_.forget(pendingConnection_);
-    }
+    // Disposal also cancels already queued events, including a late Accept or
+    // terminal notification that must not act on the replacement connection.
+    session_.forget(pendingConnection_);
     if (result != net::Result::Ok && getManager() && getManager()->console()) {
         getManager()->console()->print(std::format(
             "Failed to send disconnect to {} (network result {}).", address, int(result)));
@@ -350,7 +350,14 @@ net::Result CSDelegate::process(UInt32 now) {
                         ps->handleNotify(event.notifyKey, event.delivered);
                     } else {
                         try {
-                            if (!ps->readPacket(event.data(), now)) {
+                            const bool read = ps->readPacket(event.data(), now);
+                            // A remote command may intentionally disconnect or
+                            // transfer while this packet is being delivered.
+                            // That retires the stream, not the new connection.
+                            if (ps->isRemoved()) {
+                                continue;
+                            }
+                            if (!read) {
                                 const std::string error(ps->error());
                                 event.type = net::EventType::Disconnected;
                                 event.size = std::min(error.size(), event.bytes.size());

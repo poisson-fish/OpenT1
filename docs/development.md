@@ -19,6 +19,14 @@ cmake --build --preset x64-debug --parallel 8
 ctest --preset x64-debug
 ```
 
+The Windows presets reset `CMAKE_RUNTIME_OUTPUT_DIRECTORY` so the executable
+lands at `build/<preset>/opent1.exe` and the test runner at
+`build/<preset>/tests/opent1_tests.exe`. An old cached output override can otherwise
+leave an obsolete executable at the documented launch path while new builds and
+CTest run successfully elsewhere. Check the exact executable with `--version`.
+Use a separate build directory for experiments that need a different output path;
+an explicit command-line `-D` override still takes precedence over the preset.
+
 The first desktop configuration needs internet access to fetch dependencies.
 SDL3 3.4.2 is fetched from its official GitHub release if no suitable installed
 SDL3 package is found. OpenAL Soft 1.25.2 is built as a shared library. Both
@@ -278,6 +286,14 @@ can keep running:
 ```powershell
 .\build\x64-debug\tests\opent1_tests.exe --suite disconnect_assets
 ```
+
+When the installation includes `config/SinConnect.cs`, this suite also exercises
+the installed portal callback and scheduled `Wasteworld::Transfer`/`JoinGame`
+sequence between two local RPG servers running `rpgmap5`. It checks repeated
+cross-port and same-port transfers, restored player control, clean rosters and
+shell identity. It does not host the Iceworld Mapping mission or test a public
+server. The ordinary `game/portal_transfers` regression covers both scheduled
+and immediate remote-script transfers without installed assets.
 
 With the Wasteland RPG mod (including `RPG/SpecialArmors.cs`), the optional
 `skins` suite saves a DeathKnight character and checks its first controllable

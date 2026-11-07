@@ -56,6 +56,13 @@ sending Disconnect. Those limits remain explicit.
   interface configuration. Test firewall/router reachability separately.
 - **Unknown script function:** verify its defining file loaded successfully and
   the required plugin/world exists before the call.
+- **A rebuilt Windows client still shows an old connection bug:** run `--version`
+  on the exact executable being launched. A cached
+  `CMAKE_RUNTIME_OUTPUT_DIRECTORY` override can redirect builds while leaving an
+  old `build/x64-release/opent1.exe` behind. Reconfigure with the Windows preset,
+  close the running client normally, and rebuild the documented executable.
+  The presets clear that cached override. Server transfers are covered by the
+  [client lifecycle audit](https://github.com/poisson-fish/OpenT1/blob/main/docs/client-lifecycle.md).
 
 ## Collect useful evidence
 

@@ -19,6 +19,7 @@
       "toolchainFile": "${sourceDir}/cmake/toolchains/msvc-x64.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "",
         "FETCHCONTENT_QUIET": "OFF",
         "BUILD_TESTING": "ON"
       }
@@ -36,6 +37,7 @@
       "toolchainFile": "${sourceDir}/cmake/toolchains/msvc-x64.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_RUNTIME_OUTPUT_DIRECTORY": "",
         "FETCHCONTENT_QUIET": "OFF",
         "BUILD_TESTING": "ON"
       }

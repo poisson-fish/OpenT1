@@ -90,6 +90,36 @@ void disconnectSendFailures() {
     }
 }
 
+void disconnectQueuedEvents() {
+    for (const auto result : {net::Result::Ok, net::Result::IoError}) {
+        net_test::Pair peers;
+        peers.connect();
+        Console console;
+        sim::SimWorld world(&console);
+        auto owned = std::make_unique<sim::network::PacketStream>(
+            std::make_shared<sim::network::Registry>(), false);
+        auto* stream = owned.get();
+        CHECK(world.manager().addObject(std::move(owned)));
+        stream->attach(peers.client, peers.clientId);
+        // Session::process can enqueue several events before a script in the
+        // first packet replaces the connection. Even a successful close must
+        // discard the remaining old events and pending send notifications.
+        CHECK(peers.client.send(peers.clientId, net_test::bytes("outgoing"), 42, 1) ==
+              net::Result::Ok);
+        CHECK(peers.server.send(peers.serverId, net_test::bytes("queued"), 0, 1) ==
+              net::Result::Ok);
+        net_test::transfer(peers.b, peers.a);
+        CHECK(peers.client.process(2) == net::Result::Ok);
+        peers.a.sendResult = result;
+        stream->disconnect(3);
+        net::Event event;
+        CHECK(!peers.client.poll(event));
+        CHECK(peers.client.connectionCount() == 0);
+        peers.a.sendResult = net::Result::Ok;
+        CHECK(peers.client.connect("1", {}, 4, peers.clientId) == net::Result::Ok);
+    }
+}
+
 void pendingDelegateDisconnect() {
     {
         auto transport = std::make_unique<net_test::Wire>("client");
@@ -334,6 +364,173 @@ void cancelAndReconnect() {
     CHECK(!client.fearPlugin().isConnected());
     shell.check(client);
     CHECK(client.console().getVariable("errorString") == "Connection to server rejected.");
+}
+
+void portalTransfers(bool installed, bool immediate = false) {
+    const auto* assets = std::getenv("OPENT1_TEST_ASSETS");
+    if (installed && (!assets || !std::filesystem::is_regular_file(std::filesystem::path(assets) /
+                                                                   "config/SinConnect.cs"))) {
+        return;
+    }
+    TemporaryDirectory firstDirectory, secondDirectory, clientDirectory;
+    FearGameApp::Config config;
+    if (installed) {
+        config.assetRoot = assets;
+    }
+    config.writeRoot = firstDirectory.path;
+    FearGameApp first(config);
+    config.writeRoot = secondDirectory.path;
+    FearGameApp second(config);
+    config.writeRoot = clientDirectory.path;
+    FearGameApp client(config);
+    const std::array<std::string_view, 2> mod{"-mod", "RPG"};
+    std::array<FearGameApp*, 2> servers{&first, &second};
+    std::array<std::string, 2> endpoints;
+    std::array<Int32, 2> hosted{};
+    for (std::size_t i = 0; i < servers.size(); ++i) {
+        auto& server = *servers[i];
+        CHECK(installed ? server.init(mod) : server.init());
+        server.console().setVariable("Server::Port", "0");
+        server.console().setVariable("Server::Heartbeats", "false");
+        const bool loaded = installed ? server.loadMission("rpgmap5")
+                                      : server.fearPlugin().createServerWorld({}, true);
+        if (!loaded) {
+            for (const auto& line : server.console().log()) {
+                if (line.find("fail") != std::string::npos ||
+                    line.find("missing") != std::string::npos) {
+                    std::fprintf(stderr, "%s\n", line.c_str());
+                }
+            }
+        }
+        CHECK(loaded);
+        auto& sg = server.fearPlugin().serverGlobals();
+        hosted[i] = sg.playerManager->getNumClients();
+        const auto endpoint = net::parseIPv4Address(sg.csDelegate->delegate()->localAddress());
+        CHECK(endpoint);
+        endpoints[i] = "IP:127.0.0.1:" + std::to_string(endpoint->port);
+    }
+    CHECK(installed ? client.init(mod) : client.init());
+    if (!client.fearPlugin().clientGlobals().world) {
+        CHECK(client.fearPlugin().createClientWorld());
+    }
+    const ShellIdentity shell(client);
+    client.console().setVariable("PCFG::Name", "PortalRegression");
+    client.console().setVariable("PCFG::Info", "portal-regression-password");
+    client.console().setVariable("PCFG::Script", "");
+    client.console().setVariable("PortalImmediate", immediate ? "true" : "false");
+    if (!installed) {
+        // The portal delivers a remote event, then disconnects and joins in a
+        // scheduler callback. Calling these commands outside dispatch misses
+        // the original failure, even when using a real UDP transport.
+        CHECK(client.console()
+                  .evaluate(R"(
+            function remoteSinBot(%server, %address) {
+                if (%server != 2048) return;
+                $PortalAddress = %address;
+                if ($PortalImmediate) PortalTransfer();
+                else schedule("PortalTransfer();", 0.3);
+            }
+            function PortalTransfer() {
+                $PortalDisconnect = disconnect();
+                $PortalConnect = connect($PortalAddress);
+            }
+        )")
+                  .ok());
+    } else {
+        CHECK(client.console().isFunction("remoteSinBot"));
+        CHECK(client.console().isFunction("Wasteworld::Transfer"));
+    }
+    unsigned accepted{};
+    auto* delegate = client.fearPlugin().clientGlobals().csDelegate;
+    const auto callback = delegate->onConnection;
+    delegate->onConnection = [&, callback](const net::Event& event) {
+        accepted += event.type == net::EventType::Accepted;
+        callback(event);
+    };
+    double time{};
+    const auto advance = [&] {
+        time += .032;
+        CHECK(first.stepFrame(time, false));
+        CHECK(second.stepFrame(time, false));
+        CHECK(client.stepFrame(time, false));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    };
+    const auto joined = [&](std::size_t destination, unsigned count) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+        for (;;) {
+            auto& cg = client.fearPlugin().clientGlobals();
+            const auto* stream = cg.csDelegate->delegate()->stream(2048);
+            const auto ready = accepted == count && client.fearPlugin().isConnected() && stream &&
+                               stream->transportAddress() == endpoints[destination] &&
+                               (!installed || (cg.playerPSC && cg.playerPSC->getControlObject()));
+            if (ready) {
+                break;
+            }
+            CHECK(std::chrono::steady_clock::now() < deadline);
+            advance();
+        }
+        shell.check(client);
+        CHECK(client.console().getVariable("OpenT1::LastNetworkError").empty());
+        for (std::size_t i = 0; i < servers.size(); ++i) {
+            auto* players = servers[i]->fearPlugin().serverGlobals().playerManager;
+            CHECK(players->getNumClients() == hosted[i] + (i == destination ? 1 : 0));
+            Int32 matches{};
+            for (auto* rep = players->getClientList(); rep; rep = rep->nextClient) {
+                matches += rep->name == "PortalRegression";
+            }
+            CHECK(matches == (i == destination ? 1 : 0));
+        }
+    };
+    CHECK(client.console().execute("connect", std::array{endpoints[0]}).value == "True");
+    joined(0, 1);
+    std::size_t source{};
+    // Repeated cross-port transfers and a same-port portal both need teardown
+    // before the next request, without recreating the shell or renaming players.
+    for (const auto destination :
+         {std::size_t{1}, std::size_t{0}, std::size_t{0}, std::size_t{1}}) {
+        auto& server = *servers[source];
+        CHECK(server.fearPlugin().focusServer());
+        const auto id = client.fearPlugin().clientGlobals().manager->getId();
+        const std::array<std::string, 3> args{std::to_string(id), "SinBot", endpoints[destination]};
+        CHECK(server.console().execute("remoteEval", args).value == "True");
+        joined(destination, accepted + 1);
+        if (!installed) {
+            CHECK(client.console().getVariable("PortalDisconnect") == "True");
+            CHECK(client.console().getVariable("PortalConnect") == "True");
+        }
+        source = destination;
+    }
+    if (!installed) {
+        // A destination rejecting the transfer must leave a reusable client,
+        // including when the next attempt returns to the original port.
+        first.console().setVariable("Server::Password", "required");
+        auto& server = *servers[source];
+        CHECK(server.fearPlugin().focusServer());
+        const auto id = client.fearPlugin().clientGlobals().manager->getId();
+        const std::array<std::string, 3> args{std::to_string(id), "SinBot", endpoints[0]};
+        CHECK(server.console().execute("remoteEval", args).value == "True");
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (client.console().getVariable("OpenT1::LastNetworkError").empty()) {
+            CHECK(std::chrono::steady_clock::now() < deadline);
+            advance();
+        }
+        CHECK(!client.fearPlugin().isConnected());
+        CHECK(client.console().getVariable("errorString") == "Connection to server rejected.");
+        shell.check(client);
+        first.console().setVariable("Server::Password", "");
+    }
+    // The ordinary menu/console recovery must still work after the portals.
+    CHECK(client.console().execute("disconnect").value == "True");
+    CHECK(client.console().execute("connect", std::array{endpoints[0]}).value == "True");
+    joined(0, accepted + 1);
+    CHECK(client.console().execute("disconnect").value == "True");
+    for (int frame = 0; frame < 16; ++frame) {
+        advance();
+    }
+    shell.check(client);
+    for (std::size_t i = 0; i < servers.size(); ++i) {
+        CHECK(servers[i]->fearPlugin().serverGlobals().playerManager->getNumClients() == hosted[i]);
+    }
 }
 
 void disconnectShellResources() {
@@ -620,7 +817,10 @@ int opent1_test_remote_disconnect() {
 }
 
 int opent1_test_disconnect_send_failures() {
-    return opent1::test::run(disconnectSendFailures);
+    return opent1::test::run([] {
+        disconnectSendFailures();
+        disconnectQueuedEvents();
+    });
 }
 
 int opent1_test_cancel_and_reconnect() {
@@ -630,6 +830,23 @@ int opent1_test_cancel_and_reconnect() {
     });
 }
 
+int opent1_test_portal_transfers() {
+    return opent1::test::run([] {
+        portalTransfers(false);
+        portalTransfers(false, true);
+    });
+}
+
+int opent1_test_installed_portal_transfers() {
+    return opent1::test::run([] {
+        portalTransfers(true);
+    });
+}
+
+OPENT1_REGISTER_TEST("game", "portal_transfers", opent1_test_portal_transfers);
+OPENT1_REGISTER_TEST("disconnect_assets",
+                     "installed_portal_transfers",
+                     opent1_test_installed_portal_transfers);
 OPENT1_REGISTER_TEST("game", "cancel_and_reconnect", opent1_test_cancel_and_reconnect);
 OPENT1_REGISTER_TEST("game", "disconnect_send_failures", opent1_test_disconnect_send_failures);
 OPENT1_REGISTER_TEST("game", "remote_disconnect", opent1_test_remote_disconnect);

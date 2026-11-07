@@ -169,7 +169,7 @@ void localProfileDelivery() {
     CHECK(console.getVariable("profileAtDataFinished") == console.getVariable("PCFG::Info"));
     CHECK(plugin.focusServer());
     CHECK(console.evaluate("PlayerData LocalProfileArmor { mass = 9; };").ok());
-    CHECK(plugin.spawnPlayer("LocalProfileArmor", {0, 0, 100}, {}));
+    CHECK(plugin.spawnPlayer("LocalProfileArmor", {0, 0, 100}, {}, localId));
     CHECK(players->findClient(localId)->ownedObject);
     CHECK(players->findClient(localId)->ownedObject->getOwnerClient() == localId);
     CHECK(!plugin.spawnPlayer("LocalProfileArmor", {}, {}, bot));

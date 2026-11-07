@@ -116,6 +116,8 @@ public:
     bool focusServer();
     bool focusClient();
 
+    // Creates an unowned body by default. A nonzero clientId must already be
+    // connected and explicitly assigns ownership/control to that client.
     std::optional<sim::SimObjectId> spawnPlayer(std::string_view armorName,
                                                 const Point3F& pos,
                                                 const Point3F& rot,

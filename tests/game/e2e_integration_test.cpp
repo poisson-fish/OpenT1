@@ -719,6 +719,11 @@ void verifyFullStackEndToEndIntegration() {
         const std::string spawnedIdStr =
             app.console().evaluate("spawnPlayer(\"LightArmor\", \"0 0 0\", \"0 0 0\");").value;
         CHECK(spawnedIdStr != "-1");
+        CHECK(app.console()
+                  .evaluate(std::format(
+                      "Client::setOwnedObject(2049, {0}); Client::setControlObject(2049, {0});",
+                      spawnedIdStr))
+                  .ok());
         CHECK(app.console().evaluate("Client::getOwnedObject(2049);").value == spawnedIdStr);
         CHECK(app.console().evaluate("Client::getControlObject(2049);").value == spawnedIdStr);
         CHECK(app.console().evaluate("Client::getObserverCamera(2049);").value != "-1");

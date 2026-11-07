@@ -59,6 +59,13 @@ for data crossing the connection. A dedicated server has no local player's GUI.
 Do not trust a client-supplied object ID, score, team or inventory change merely
 because a remote callback received it.
 
+`spawnPlayer(armor, position, rotation)` creates an unowned player body in
+`MissionCleanup`; it does not connect a player or choose a client from server
+preferences. Assign the returned body to an existing client with
+`Client::setOwnedObject(clientId, body)` and `Client::setControlObject(clientId, body)`.
+This also applies to hosted games: spawning another body must not take ownership
+or control away from the local host.
+
 ## Test and distribute
 
 Start with a small reproducible script change. Test a local mission, a separate

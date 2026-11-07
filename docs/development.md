@@ -289,11 +289,14 @@ can keep running:
 
 When the installation includes `config/SinConnect.cs`, this suite also exercises
 the installed portal callback and scheduled `Wasteworld::Transfer`/`JoinGame`
-sequence between two local RPG servers running `rpgmap5`. It checks repeated
-cross-port and same-port transfers, restored player control, clean rosters and
-shell identity. It does not host the Iceworld Mapping mission or test a public
-server. The ordinary `game/portal_transfers` regression covers both scheduled
-and immediate remote-script transfers without installed assets.
+sequence between two local dedicated RPG servers running `rpgmap5`. It creates
+the test character through the installed class menus and requires a spawned
+player, not just observer control. It checks repeated cross-port and same-port
+transfers, restored player control, clean rosters and shell identity. It does not
+host the Iceworld Mapping mission or test a public server. The ordinary
+`game/portal_transfers` regression covers scheduled and immediate remote-script
+transfers, script spawning without extra clients, and reconnecting after 30
+minutes of simulated idle time without installed assets.
 
 With the Wasteland RPG mod (including `RPG/SpecialArmors.cs`), the optional
 `skins` suite saves a DeathKnight character and checks its first controllable

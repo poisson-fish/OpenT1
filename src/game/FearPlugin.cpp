@@ -1256,13 +1256,13 @@ std::optional<sim::SimObjectId> FearPlugin::spawnPlayer(std::string_view armorNa
     if (!sg_.manager || !sg_.dbm) {
         return std::nullopt;
     }
-    if (!clientId) {
-        clientId = localClientId_ ? localClientId_
-                                 : sg_.playerManager ? sg_.playerManager->getFreeId() : 0;
-    }
     const auto* representative =
         sg_.playerManager ? sg_.playerManager->findBaseRep(clientId) : nullptr;
-    if (!clientId || (representative && !representative->isClientRep())) {
+    // Vanilla's script command creates an unowned body. Only a connection may
+    // create a client representative; scripts assign the body afterward with
+    // Client::setOwnedObject/Client::setControlObject. Inventing a client here
+    // leaves a permanent, disconnected name reservation on dedicated servers.
+    if (clientId && (!representative || !representative->isClientRep())) {
         return std::nullopt;
     }
 
@@ -1331,10 +1331,7 @@ std::optional<sim::SimObjectId> FearPlugin::spawnPlayer(std::string_view armorNa
     added->setRot(spawnRot);
     added->setPos(spawnPos);
 
-    if (sg_.playerManager) {
-        if (!sg_.playerManager->findClient(clientId)) {
-            addLocalPlayer(*sg_.playerManager, game_.console(), clientId);
-        }
+    if (clientId && sg_.playerManager) {
         if (auto* cl = sg_.playerManager->findClient(clientId)) {
             cl->ownedObject = added;
             cl->controlObject = added;
@@ -1348,7 +1345,7 @@ std::optional<sim::SimObjectId> FearPlugin::spawnPlayer(std::string_view armorNa
         }
     }
 
-    if (scriptPlugin_) {
+    if (clientId && scriptPlugin_) {
         auto& clRep = scriptPlugin_->ensureClient(clientId);
         if (clRep.observerCameraId == 0) {
             auto obsCam = std::make_unique<ObserverCamera>(clientId);

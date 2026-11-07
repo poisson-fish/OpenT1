@@ -366,6 +366,44 @@ void cancelAndReconnect() {
     CHECK(client.console().getVariable("errorString") == "Connection to server rejected.");
 }
 
+void scriptPlayerOwnership() {
+    FearGameApp app;
+    CHECK(app.init());
+    CHECK(app.fearPlugin().createServerWorld({}, true));
+    auto& sg = app.fearPlugin().serverGlobals();
+    CHECK(app.console().evaluate("PlayerData UnownedArmor { mass = 9; };").ok());
+    const auto spawn = [&] {
+        const auto result =
+            app.console().evaluate("spawnPlayer(\"UnownedArmor\", \"0 0 100\", \"0 0 0\");");
+        CHECK(result.ok() && result.value != "-1");
+        auto* body = dynamic_cast<Player*>(sg.manager->findObject(result.value));
+        CHECK(body && body->getOwnerClient() == 0 && body->getControlClient() == 0);
+        CHECK(body->getGroup() == sg.manager->findObject("MissionCleanup"));
+        return body;
+    };
+    // A body can exist without a client, and never reserves a player name/ID.
+    const auto free = sg.playerManager->getFreeId();
+    spawn();
+    CHECK(sg.playerManager->getNumClients() == 0);
+    CHECK(sg.playerManager->getFreeId() == free);
+    CHECK(!app.scriptPlugin().findClient(free));
+    CHECK(!app.fearPlugin().spawnPlayer("UnownedArmor", {}, {}, free));
+
+    CHECK(app.console().execute("localConnect").value == "True");
+    const auto id = app.fearPlugin().clientGlobals().manager->getId();
+    const auto attached = app.fearPlugin().spawnPlayer("UnownedArmor", {0, 0, 100}, {}, id);
+    CHECK(attached);
+    auto* host = sg.playerManager->findClient(id);
+    CHECK(host && host->ownedObject && host->controlObject);
+    auto* owned = host->ownedObject;
+    auto* controlled = host->controlObject;
+    auto* unowned = spawn();
+    CHECK(sg.playerManager->getNumClients() == 1);
+    CHECK(host->ownedObject == owned && host->controlObject == controlled);
+    CHECK(sg.playerPSC->getControlObject() == controlled);
+    CHECK(unowned != owned);
+}
+
 void portalTransfers(bool installed, bool immediate = false) {
     const auto* assets = std::getenv("OPENT1_TEST_ASSETS");
     if (installed && (!assets || !std::filesystem::is_regular_file(std::filesystem::path(assets) /
@@ -389,10 +427,18 @@ void portalTransfers(bool installed, bool immediate = false) {
     std::array<Int32, 2> hosted{};
     for (std::size_t i = 0; i < servers.size(); ++i) {
         auto& server = *servers[i];
+        if (installed) {
+            std::printf("Loading dedicated portal server %zu\n", i);
+            std::fflush(stdout);
+        }
         CHECK(installed ? server.init(mod) : server.init());
         server.console().setVariable("Server::Port", "0");
         server.console().setVariable("Server::Heartbeats", "false");
-        const bool loaded = installed ? server.loadMission("rpgmap5")
+        if (installed) {
+            CHECK(server.fearPlugin().createServerWorld({}, true));
+            CHECK(server.fearPlugin().focusServer());
+        }
+        const bool loaded = installed ? server.loadMission("rpgmap5", true)
                                       : server.fearPlugin().createServerWorld({}, true);
         if (!loaded) {
             for (const auto& line : server.console().log()) {
@@ -403,11 +449,31 @@ void portalTransfers(bool installed, bool immediate = false) {
             }
         }
         CHECK(loaded);
+        if (!installed) {
+            // Dedicated servers often inherit a player's local preferences.
+            // Script spawning must not turn that profile into another client.
+            server.console().setVariable("PCFG::Name", "PortalRegression");
+            CHECK(server.console()
+                      .evaluate(R"(
+                PlayerData PortalArmor { mass = 9; };
+                function Server::onClientConnect(%id) {
+                    %body = spawnPlayer("PortalArmor", "0 0 100", "0 0 0");
+                    Client::setOwnedObject(%id, %body);
+                    Client::setControlObject(%id, %body);
+                }
+                function Server::onClientDisconnect(%id) { $PortalDrops++; }
+            )")
+                      .ok());
+        }
         auto& sg = server.fearPlugin().serverGlobals();
         hosted[i] = sg.playerManager->getNumClients();
         const auto endpoint = net::parseIPv4Address(sg.csDelegate->delegate()->localAddress());
         CHECK(endpoint);
         endpoints[i] = "IP:127.0.0.1:" + std::to_string(endpoint->port);
+        if (installed) {
+            std::printf("Loaded dedicated portal server %zu\n", i);
+            std::fflush(stdout);
+        }
     }
     CHECK(installed ? client.init(mod) : client.init());
     if (!client.fearPlugin().clientGlobals().world) {
@@ -456,7 +522,13 @@ void portalTransfers(bool installed, bool immediate = false) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     };
     const auto joined = [&](std::size_t destination, unsigned count) {
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+        if (installed) {
+            std::printf("Waiting for spawned portal join %u to server %zu\n", count, destination);
+            std::fflush(stdout);
+        }
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::seconds(installed ? 90 : 15);
+        bool selectedClass{};
         for (;;) {
             auto& cg = client.fearPlugin().clientGlobals();
             const auto* stream = cg.csDelegate->delegate()->stream(2048);
@@ -464,7 +536,22 @@ void portalTransfers(bool installed, bool immediate = false) {
                                stream->transportAddress() == endpoints[destination] &&
                                (!installed || (cg.playerPSC && cg.playerPSC->getControlObject()));
             if (ready) {
-                break;
+                if (!installed || dynamic_cast<Player*>(cg.playerPSC->getControlObject())) {
+                    break;
+                }
+                // An observer/menu join never exercises the RPG spawn path.
+                // Create the isolated test character through the actual menus.
+                if (!selectedClass) {
+                    auto& server = *servers[destination];
+                    CHECK(server.fearPlugin().focusServer());
+                    const auto id = cg.manager->getId();
+                    CHECK(
+                        server.console()
+                            .evaluate(std::format(
+                                "processMenupickgroup({0}, 3); processMenupickclass({0}, 1);", id))
+                            .ok());
+                    selectedClass = true;
+                }
             }
             CHECK(std::chrono::steady_clock::now() < deadline);
             advance();
@@ -521,6 +608,18 @@ void portalTransfers(bool installed, bool immediate = false) {
     }
     // The ordinary menu/console recovery must still work after the portals.
     CHECK(client.console().execute("disconnect").value == "True");
+    if (!installed) {
+        // The server must remain empty even after the reported 30-minute gap.
+        for (int frame = 0; frame < 7040; ++frame) {
+            time += .256;
+            CHECK(first.stepFrame(time, false));
+            CHECK(second.stepFrame(time, false));
+            CHECK(client.stepFrame(time, false));
+        }
+        for (std::size_t i = 0; i < servers.size(); ++i) {
+            CHECK(servers[i]->fearPlugin().serverGlobals().playerManager->getNumClients() == hosted[i]);
+        }
+    }
     CHECK(client.console().execute("connect", std::array{endpoints[0]}).value == "True");
     joined(0, accepted + 1);
     CHECK(client.console().execute("disconnect").value == "True");
@@ -832,6 +931,7 @@ int opent1_test_cancel_and_reconnect() {
 
 int opent1_test_portal_transfers() {
     return opent1::test::run([] {
+        scriptPlayerOwnership();
         portalTransfers(false);
         portalTransfers(false, true);
     });

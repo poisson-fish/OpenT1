@@ -52,6 +52,45 @@ OpenT1 peer tests.
 
 ## Portal regression and executable provenance
 
+### Phantom clients created by player spawning
+
+A later public Wasteland/Iceworld report showed a successful portal transfer,
+followed by a duplicate-name suffix and RPG's invalid-name kick on return.
+Server logs recorded one real connection and its departure. Both servers still
+had a second representative with the same profile name, no transport address
+and no owned body. The second representative was never a network connection.
+
+The script `spawnPlayer` callback implicitly selected the local host or allocated
+a new client ID from server preferences. On a dedicated server, RPG then moved
+the spawned body's ownership to the actual remote client, leaving the invented
+representative behind. It had no transport to time out and reserved the name
+indefinitely. Observer-only joins and hosted tests masked the bug.
+
+Script spawning now creates an unowned body, matching the original Tribes
+command. Only connection handling creates client representatives. The C++ helper
+can explicitly attach a body to an existing client; an unknown client ID fails.
+The synthetic demo now assigns ownership/control explicitly, like mod scripts.
+Regressions cover unowned spawning, unchanged hosted-player ownership, dedicated
+remote spawning, repeated portals and a return after 30 simulated minutes.
+
+Validation on November 7, 2026 UTC: all 17 CTest suites passed in Windows Debug,
+Windows Release and Linux Release. The installed `disconnect_assets` suite passed
+both cases in all three builds. Both public realms were backed up and restarted
+with the verified Linux executable; every existing save matched its pre-restart
+checksum. A separate headless Windows client spawned a test character, entered
+the actual Keldrin portal trigger, spawned on public Iceworld, disconnected, and
+returned to Wasteland with the same name and one client. Both rosters returned to
+zero after departure, and the original character saves remained unchanged.
+
+The isolated public probe must include `mappers` as well as `base`, `RPG` and
+private `config`/`temp` directories: the public Mapping mission mounts mapper
+prefab volumes. Omitting that directory caused a volume-ghost initialization
+failure in the first probe. The corrected probe passed the network/spawn checks;
+its headless renderer also logged a world-scene draw failure on return, so this
+check does not establish public graphical rendering acceptance.
+
+### Earlier transfer teardown and build output fixes
+
 The November 6, 2026 investigation reproduced this sequence with the executable
 at the normal Windows Release path, reporting commit
 `010687f79f2be91861263dbeb5952d8df2b83f05`:
@@ -94,5 +133,6 @@ and the actual `SinConnect.cs` callback, with temporary write directories.
 
 The initial attempt to host local `Mapping` stopped at initialization of
 `cchurchchurch1` (`cchurchchurch.dis`). That is a separate unresolved content/load
-failure, not evidence of a transport rejection. These tests do not establish
-public Iceworld gameplay or teleporter acceptance.
+failure, not evidence of a transport rejection. Those earlier tests did not
+establish public Iceworld gameplay or teleporter acceptance; the later
+phantom-client validation above adds a public network/spawn round trip.

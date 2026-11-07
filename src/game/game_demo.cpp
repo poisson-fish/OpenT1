@@ -308,6 +308,11 @@ bool FearGameApp::setupLiveDemoSession() {
     if (spawnedId.empty() || spawnedId == "-1") {
         return false;
     }
+    const auto clientId = fearPlugin_->clientGlobals().manager->getId();
+    (void)game_.console().evaluate(std::format(
+        "Client::setOwnedObject({0}, {1}); Client::setControlObject({0}, {1});",
+        clientId,
+        spawnedId));
     (void)game_.console().evaluate(
         std::format("Player::setItemCount({}, \"DiscAmmo\", 15);", spawnedId));
     (void)game_.console().evaluate(

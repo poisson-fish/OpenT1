@@ -805,8 +805,18 @@ void Console::Impl::builtins(Console& c) {
                         if (match(pattern, entry.second, [&] {
                                 state.step();
                             })) {
+                            auto name = entry.second;
+                            // Array indices are flattened into variable names at runtime.
+                            // Quote a non-identifier suffix so player names containing
+                            // spaces or punctuation survive a preference export/reload.
+                            const auto suffix = name.find_first_not_of(
+                                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_:", 1);
+                            if (suffix != name.npos) {
+                                name = name.substr(0, suffix) + "[\"" +
+                                       escaped(std::string_view(name).substr(suffix)) + "\"]";
+                            }
                             lines[entry.first] =
-                                entry.second + " = \"" + escaped(state.read(entry.first)) + "\";";
+                                name + " = \"" + escaped(state.read(entry.first)) + "\";";
                         }
                     });
                 }

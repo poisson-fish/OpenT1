@@ -177,6 +177,43 @@ void historyState() {
     CHECK(display.messages().empty() && display.commandMessage().text.empty() &&
           display.pageUpCount() == 0);
 }
+
+void voiceMenu() {
+    FearGuiChatDisplay display;
+    const auto font = historyFont();
+    display.hudFont = font;
+    display.messageFonts.fill(font);
+    display.setSize(3, 8);
+    ChatMenu menu("Voice Chat:");
+    CHECK(menu.addMenuString("hHello", std::array<std::string_view, 1>{"hello"}));
+    menu.setMode(ChatMenu::OneShot);
+    display.resolvePlayMenu = [&] { return &menu; };
+    auto actual = gfx::SoftwareSurface::create(640, 480);
+    auto expected = gfx::SoftwareSurface::create(640, 480);
+    CHECK(actual && expected);
+    for (const auto offset : {Point2I{10, 10}, Point2I{10, 440}}) {
+        actual->clear(0);
+        expected->clear(0);
+        const auto extent = display.fields().extent;
+        const RectI clip{offset.x, offset.y, offset.x + extent.x - 1,
+                         offset.y + extent.y - 1};
+        actual->setClip(clip);
+        CHECK(display.draw(*actual, offset, clip));
+        CHECK(actual->clip() == clip);
+        CHECK(drawHudPanel(*expected, {offset.x, offset.y,
+                                       offset.x + extent.x, offset.y + extent.y}));
+        const auto y = offset.y == 10 ? offset.y + extent.y : offset.y - 24;
+        CHECK(expected->text(*font, {offset.x, y}, "Voice Chat:"));
+        CHECK(expected->text(*font, {offset.x, y + 8}, "h: Hello"));
+        CHECK(std::ranges::equal(actual->bitmap().pixels, expected->bitmap().pixels));
+    }
+    menu.setMode(ChatMenu::Inactive);
+    display.setCommanderChat(false);
+    checkLines(display, {});
+    menu.setMode(ChatMenu::OneShot);
+    display.setCommanderChat(true);
+    checkLines(display, {});
+}
 }
 
 int opent1_test_chat_history_wrap() {
@@ -191,6 +228,11 @@ int opent1_test_chat_history_state() {
     return opent1::test::run(historyState);
 }
 
+int opent1_test_voice_menu() {
+    return opent1::test::run(voiceMenu);
+}
+
 OPENT1_REGISTER_TEST("game", "chat_history_wrap", opent1_test_chat_history_wrap);
 OPENT1_REGISTER_TEST("game", "chat_history_layout", opent1_test_chat_history_layout);
 OPENT1_REGISTER_TEST("game", "chat_history_state", opent1_test_chat_history_state);
+OPENT1_REGISTER_TEST("game", "voice_menu", opent1_test_voice_menu);

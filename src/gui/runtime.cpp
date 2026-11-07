@@ -103,8 +103,7 @@ std::string scriptValue(Control& c) {
 
 bool setValue(Control& c, std::string_view value) {
     if (auto* format = dynamic_cast<TextFormat*>(&c)) {
-        return format->format(value, std::max(20, c.fields().extent.x)) &&
-               format->resize(c.fields().position, {c.fields().extent.x, format->height() + 4});
+        return format->variableChanged(value);
     }
     if (auto* list = dynamic_cast<TextList*>(&c)) {
         return list->variableChanged(value);
@@ -1119,7 +1118,10 @@ Control* Runtime::findControl(std::string_view key) const {
         return root.findNamed(key);
     };
     if (scriptRoot_) {
-        return find(*scriptRoot_);
+        if (auto* found = find(*scriptRoot_)) {
+            return found;
+        }
+        return findDetachedControl ? findDetachedControl(key) : nullptr;
     }
     if (auto* top = canvas.top()) {
         if (auto* found = find(*top)) {
@@ -1131,7 +1133,7 @@ Control* Runtime::findControl(std::string_view key) const {
             return found;
         }
     }
-    return nullptr;
+    return findDetachedControl ? findDetachedControl(key) : nullptr;
 }
 
 std::optional<std::string> Runtime::command(std::string_view name,

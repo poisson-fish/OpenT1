@@ -443,6 +443,9 @@ public:
     }
 
     [[nodiscard]] SimObject* findObject(std::string_view, SimManager* preferred = nullptr) const;
+    // Hosts may expose independently owned presentation graphs to client scripts.
+    std::function<SimObject*(std::string_view)> findClientObject;
+    std::function<bool(SimObject&)> initializeObject;
     SimObject* createObject(std::string_view className,
                             std::string_view name = {},
                             SimGroup* parent = nullptr,

@@ -117,6 +117,7 @@ public:
     FearGuiChatDisplay();
     ~FearGuiChatDisplay() override = default;
     std::array<std::shared_ptr<const gfx::BitmapFont>, 4> messageFonts, smallMessageFonts;
+    std::function<const ChatMenu*()> resolvePlayMenu;
     bool layout(Point2I extent);
     void wake() override;
 

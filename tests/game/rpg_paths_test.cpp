@@ -6,6 +6,8 @@
 #include <opent1/game/item.hpp>
 #include <opent1/game/player.hpp>
 #include <opent1/game/player_manager.hpp>
+#include <opent1/game/shell_controls.hpp>
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <format>
@@ -14,6 +16,51 @@ using namespace opent1;
 using namespace opent1::game;
 
 namespace {
+std::shared_ptr<gfx::BitmapFont> chatTestFont();
+
+void scriptHudLifecycle() {
+    FearGameApp app;
+    CHECK(app.init() && app.setupLiveDemoSession());
+    auto& console = app.console();
+    auto runtime = app.guiRuntime();
+    CHECK(console.evaluate(R"(
+        $Frame = newObject("HUD::Test", FearGui::FearGuiMenu, 20, 30, 170, 200);
+        $Text = newObject("HUD::Test::0", FearGuiFormattedText, 4, 0, 996, 201);
+        addToSet($Frame, $Text);
+        $Hidden = Control::SetVisible("HUD::Test", false);
+    )").ok());
+    CHECK(console.getVariable("Hidden") == "True");
+    auto* frame = runtime->findControl("HUD::Test");
+    auto* text = dynamic_cast<FearGuiFormattedText*>(runtime->findControl("HUD::Test::0"));
+    CHECK(frame && text && text->parent() == frame);
+    CHECK(frame->fields().position == Point2I(20, 30));
+    CHECK(frame->fields().extent == Point2I(170, 200));
+    CHECK(!frame->visible());
+    for (auto& slot : text->fonts) {
+        slot.resource = chatTestFont();
+    }
+    CHECK(console.evaluate(R"(
+        $Updated = Control::SetValue(Object::GetName($Text), "<f0>HP: 50 / 100\nMP: 20");
+        Control::SetVisible("HUD::Test", true);
+        function playGui::onOpen() { $Attached = addToSet(playGui, $Frame); }
+        function playGui::onClose() { $Detached = removeFromSet(playGui, $Frame); }
+    )").ok());
+    CHECK(console.getVariable("Updated") == "True" && text->fields().extent.x == 170);
+    for (Int32 iteration = 0; iteration < 2; ++iteration) {
+        auto root = std::make_unique<gui::Control>();
+        root->assignName("playGui");
+        CHECK(root->resize({}, {640, 480}));
+        CHECK(runtime->show(gui::Graph::create(std::move(root))));
+        CHECK(console.getVariable("Attached") == "True" && frame->parent() == runtime->canvas.top());
+        CHECK(console.evaluate("return isObject(playGui);").value == "True");
+        CHECK(runtime->show(gui::Graph::create(std::make_unique<gui::Control>())));
+        CHECK(console.getVariable("Detached") == "True" && !frame->parent());
+        CHECK(runtime->findControl("HUD::Test::0") == text);
+    }
+    CHECK(console.evaluate("return deleteObject($Frame);").value == "True");
+    CHECK(!runtime->findControl("HUD::Test") && !runtime->findControl("HUD::Test::0"));
+}
+
 void recipientMessages() {
     FearGameApp app;
     CHECK(app.init());
@@ -373,6 +420,119 @@ void chatOverServerMenu() {
     CHECK(runtime->clear());
 }
 
+void installedClientHuds() {
+    const auto* assets = std::getenv("OPENT1_TEST_ASSETS");
+    if (!assets || !std::filesystem::is_regular_file(
+                       std::filesystem::path(assets) / "config/Presto/HUD.cs")) {
+        return;
+    }
+    FearGameApp::Config config;
+    config.assetRoot = assets;
+    config.writeRoot = std::filesystem::temp_directory_path() /
+                       std::format("opent1-client-huds-{}",
+                                   std::chrono::steady_clock::now().time_since_epoch().count());
+    struct Cleanup {
+        std::filesystem::path path;
+        ~Cleanup() {
+            std::error_code ec;
+            std::filesystem::remove_all(path, ec);
+        }
+    } cleanup{config.writeRoot};
+    FearGameApp app(config);
+    CHECK(app.init(std::array<std::string_view, 2>{"-mod", "RPG"}));
+    auto& console = app.console();
+    auto runtime = app.guiRuntime();
+    auto* frame = runtime->findControl("HUD::DeusRPGhud");
+    auto* text = dynamic_cast<FearGuiFormattedText*>(runtime->findControl("HUD::DeusRPGhud::0"));
+    CHECK(frame && text && frame->fields().extent.x == 165 && frame->visible());
+    CHECK(text->fonts[0].resource && text->fonts[1].resource && text->fonts[2].resource);
+    CHECK(runtime->open("gui/play.gui"));
+    CHECK(frame->parent() == runtime->canvas.top());
+    CHECK(console.evaluate("return HUD::GetDisplayed(DeusRPGhud);").value == "1");
+    CHECK(!text->text().empty() && text->fields().extent.x == 165);
+    auto surface = gfx::SoftwareSurface::create(640, 480);
+    CHECK(surface && frame->draw(*surface, frame->fields().position, surface->bitmap().bounds()));
+    CHECK(std::ranges::any_of(surface->bitmap().pixels, [](auto pixel) { return pixel != std::byte{}; }));
+    CHECK(app.setGameplayGuiMode(1) && app.bindGameplayActions());
+    auto* manager = app.fearPlugin().clientGlobals().manager;
+    auto* input = dynamic_cast<sim::SimInputManager*>(manager->findObject(sim::InputManagerId));
+    CHECK(input);
+    sim::SimInputEvent key;
+    key.objInst = sim::inputKeyCode('v');
+    CHECK(input->submit(key));
+    CHECK(app.stepFrame(0) && app.stepFrame(.032));
+    auto* menu = dynamic_cast<ChatMenu*>(manager->findObject("PlayChatMenu"));
+    CHECK(menu && menu->getMode() == ChatMenu::OneShot && menu->curMenu());
+    key.action = sim::InputBreak;
+    (void)input->submit(key);
+    key.action = sim::InputMake;
+    // This installation binds V to Presto's wrapper around the vanilla menu.
+    key.objInst = sim::inputKeyCode(menu->curMenu()->key);
+    CHECK(input->submit(key));
+    CHECK(app.stepFrame(.064));
+    CHECK(menu->curMenu() != menu->rootMenu());
+    CHECK(app.escapeGameplay() && menu->getMode() == ChatMenu::Inactive);
+    // Presto's custom menus replace the named ChatMenu for each submenu.
+    CHECK(console.evaluate("Menu::Display(menuChat);").ok());
+    CHECK(app.stepFrame(.096));
+    menu = dynamic_cast<ChatMenu*>(manager->findObject("PlayChatMenu"));
+    CHECK(menu && menu->getMode() == ChatMenu::OneShot && menu->curMenu());
+    const auto menuNumber = menu->getNumber();
+    key.objInst = sim::inputKeyCode(menu->curMenu()->key);
+    CHECK(input->submit(key));
+    CHECK(app.stepFrame(.128));
+    menu = dynamic_cast<ChatMenu*>(manager->findObject("PlayChatMenu"));
+    CHECK(menu && menu->getMode() == ChatMenu::OneShot && menu->curMenu());
+    CHECK(menu->getNumber() != menuNumber);
+    CHECK(app.escapeGameplay() && menu->getMode() == ChatMenu::Inactive);
+    CHECK(runtime->open("gui/MainMenu.gui") && !frame->parent());
+    CHECK(runtime->open("gui/play.gui") && frame->parent() == runtime->canvas.top());
+    CHECK(!text->text().empty());
+    console.setVariable("PCFG::Name", "HudRegression");
+    console.setVariable("PCFG::Script", "");
+    console.setVariable("PCFG::Info", "hud-regression-test");
+    console.setVariable("Server::Port", "0");
+    console.setVariable("Server::Heartbeats", "false");
+    CHECK(app.loadMission("rpgmap5"));
+    for (Int32 tick = 0; tick < 8; ++tick) {
+        CHECK(app.stepFrame(.16 + tick * .032));
+    }
+    CHECK(app.fearPlugin().focusServer());
+    CHECK(console.evaluate(R"(
+        processMenupickgroup(2049, 3);
+        processMenupickclass(2049, 1);
+    )").ok());
+    (void)app.fearPlugin().syncLoopbackState(false);
+    CHECK(app.setGameplayGuiMode(1));
+    CHECK(app.fearPlugin().focusClient());
+    CHECK(console.evaluate("HUD::Update(DeusRPGhud);").ok());
+    text = dynamic_cast<FearGuiFormattedText*>(runtime->findControl("HUD::DeusRPGhud::0"));
+    CHECK(text && text->text().find("Fighter") != std::string::npos &&
+          text->text().find("HP:") != std::string::npos);
+    CHECK(app.fearPlugin().focusServer());
+    CHECK(console.evaluate("2049.lastSayTime = -100;").ok());
+    CHECK(app.fearPlugin().focusClient());
+    // Follow the installed V-menu emote through remoteSay, the RPG's local
+    // feedback and its sound-only PlayerSayEvent broadcast.
+    auto messages = std::make_shared<std::vector<std::string>>();
+    auto& plugin = app.fearPlugin();
+    auto previous = plugin.onChatMessage;
+    plugin.onChatMessage = [messages, previous](Int32 type, std::string_view message) {
+        messages->emplace_back(message);
+        if (previous) {
+            previous(type, message);
+        }
+    };
+    CHECK(console.evaluate("Say::Public(yellDoh);").ok());
+    CHECK(app.stepFrame(.416));
+    plugin.onChatMessage = std::move(previous);
+    CHECK(std::ranges::any_of(*messages, [](const auto& message) {
+        return message.find("Doh!") != std::string::npos;
+    }));
+    const auto prefix = plugin.clientGlobals().playerManager->findClient(2049)->name + ": ";
+    CHECK(std::ranges::none_of(*messages, [&](const auto& message) { return message == prefix; }));
+}
+
 void installedRpgBulkChat() {
     const auto* assets = std::getenv("OPENT1_TEST_ASSETS");
     if (!assets ||
@@ -541,6 +701,7 @@ void thrownItems() {
 
 int opent1_test_rpg_paths() {
     return opent1::test::run([] {
+        scriptHudLifecycle();
         recipientMessages();
         chatReentry();
         chatEntryParity();
@@ -557,3 +718,9 @@ int opent1_test_installed_rpg_bulk_chat() {
 }
 
 OPENT1_REGISTER_TEST("chat", "installed_rpg_bulk_chat", opent1_test_installed_rpg_bulk_chat);
+
+int opent1_test_installed_client_huds() {
+    return opent1::test::run(installedClientHuds);
+}
+
+OPENT1_REGISTER_TEST("hud", "installed_client_huds", opent1_test_installed_client_huds);

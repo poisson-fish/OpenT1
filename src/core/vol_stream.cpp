@@ -154,7 +154,9 @@ Bool VolumeRStream::parse() {
             }
             entry.compression = static_cast<StreamCompressType>(compression);
             const auto payload = block(bytes, entry.blockOffset, kVolFileBlockTag);
-            if (!payload || payload->end > stringsAt ||
+            // Dictionary-addressed entries use the actual payload extent. Native
+            // archives may omit alignment padding before the directory.
+            if (!payload || UInt64(entry.blockOffset) + 8 + payload->bytes.size() > stringsAt ||
                 (compression == STRM_COMPRESS_NONE && payload->bytes.size() != entry.size)) {
                 valid = false;
                 return;

@@ -135,6 +135,7 @@ bool ChatMenu::processKey(char key) {
                 }
                 executedCommands_.push_back(cmdArgs);
                 curMenu_ = chatTree_.get();
+                curMenuQuery_.clear();
                 if (curMode_ == OneShot) {
                     setMode(Inactive);
                 }
@@ -147,6 +148,7 @@ bool ChatMenu::processKey(char key) {
                 return true;
             }
             curMenu_ = walk->child.get();
+            curMenuQuery_ += walk->heading + ":";
             ret = true;
             break;
         }
@@ -154,6 +156,7 @@ bool ChatMenu::processKey(char key) {
     }
     if (!curMenu_) {
         curMenu_ = chatTree_.get();
+        curMenuQuery_.clear();
         if (curMode_ == OneShot) {
             setMode(Inactive);
         }
@@ -167,6 +170,7 @@ void ChatMenu::setMode(Int32 mode) {
     }
     curMode_ = mode;
     curMenu_ = chatTree_.get();
+    curMenuQuery_.clear();
 }
 
 bool ChatMenu::processArguments(std::span<const std::string> arguments) {
@@ -205,6 +209,7 @@ bool ChatMenu::processEvent(const sim::SimEvent& event) {
                 }
                 if (curMenu_ != chatTree_.get()) {
                     curMenu_ = chatTree_.get();
+                    curMenuQuery_.clear();
                     lastKey_ = ev->objInst;
                     return true;
                 }

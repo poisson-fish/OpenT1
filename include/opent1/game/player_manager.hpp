@@ -270,7 +270,10 @@ private:
                      const ClientRep& target,
                      const std::optional<std::string_view>& message,
                      bool statusOnly);
-    void displayCommandMessage(ClientRep* speaker, Int32 type, std::string message);
+    void displayCommandMessage(ClientRep* speaker,
+                               Int32 type,
+                               std::string message,
+                               std::string_view prefix = {});
 
     Int32 numClients_{0};
     Int32 numBaseReps_{0};

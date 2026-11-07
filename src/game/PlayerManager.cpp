@@ -1374,7 +1374,10 @@ bool PlayerManager::commandStatusReport(Int32 peonId, Int32 status, std::string_
     return true;
 }
 
-void PlayerManager::displayCommandMessage(ClientRep* speaker, Int32 type, std::string message) {
+void PlayerManager::displayCommandMessage(ClientRep* speaker,
+                                         Int32 type,
+                                         std::string message,
+                                         std::string_view prefix) {
     const auto token = message.find("~w");
     if (token != std::string::npos) {
         const auto sound = message.substr(token + 2);
@@ -1408,7 +1411,9 @@ void PlayerManager::displayCommandMessage(ClientRep* speaker, Int32 type, std::s
         }
     }
     if (onChatMessage && !message.empty()) {
-        onChatMessage(type, message);
+        // Voice-only messages still play and reach the script hook, but must
+        // not create a chat line containing only the sender's name.
+        onChatMessage(type, std::string(prefix) + message);
     }
 }
 
@@ -1591,7 +1596,8 @@ bool PlayerManager::processEvent(const sim::SimEvent& event) {
             }
             displayCommandMessage(speaker,
                                   static_cast<Int32>(ev->msgType),
-                                  speaker ? speaker->name + ": " + message : message);
+                                  std::move(message),
+                                  speaker ? speaker->name + ": " : "");
             return true;
         }
         case VoiceEventType: {

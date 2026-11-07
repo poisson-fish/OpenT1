@@ -521,7 +521,7 @@ SimSet::~SimSet() {
 
 bool SimSet::addObject(SimObject& object) {
     if (&object == this || object.isDeleted() || object.isRemoved() ||
-        object.getManager() != getManager()) {
+        !acceptsObjectManager(object)) {
         return false;
     }
     if (std::ranges::find(objects_, &object) != objects_.end()) {

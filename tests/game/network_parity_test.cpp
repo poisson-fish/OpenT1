@@ -414,6 +414,32 @@ void nativeChatDelivery() {
         event->message = message;
         send(std::move(event));
     };
+    auto* resources = SimResource::find(to.manager());
+    CHECK(resources);
+    CHECK(resources->get().add("male1.wdoh.wav", std::make_unique<Int32>(1)));
+    auto* playback = add<SoundPlayback>(to.manager(), SoundPlayback::Play{});
+    UInt32 voiceCount{};
+    playback->playVoice = [&](Int32 speaker,
+                              std::string_view filename,
+                              const SoundProfileData&,
+                              const TMat3F&,
+                              const Point3F&) {
+        CHECK(speaker == 2049 && filename == "male1.wdoh.wav");
+        return ++voiceCount;
+    };
+    const auto beforeEmote = messages.size();
+    say(2049, FearGuiChatDisplay::MSG_Command, "~wdoh");
+    CHECK(messages.size() == beforeEmote && voiceCount == 1);
+    CHECK(console.getVariable("chatSender") == "2049" &&
+          console.getVariable("chatBody") == "~wdoh");
+    console.setVariable("pref::playVoices", "false");
+    say(2049, FearGuiChatDisplay::MSG_Chat, "~wdoh");
+    CHECK(messages.size() == beforeEmote && voiceCount == 1);
+    say(2049, FearGuiChatDisplay::MSG_Game, "~wdoh");
+    CHECK(messages.size() == beforeEmote && voiceCount == 1);
+    console.setVariable("pref::playVoices", "true");
+    say(2049, FearGuiChatDisplay::MSG_Chat, "Doh!~wdoh");
+    CHECK(messages.back().second == "OpenT1 Player: Doh!" && voiceCount == 2);
     say(2049, FearGuiChatDisplay::MSG_Chat, "Hello \"Tribes\"");
     CHECK(messages.back().second == "OpenT1 Player: Hello \"Tribes\"");
     CHECK(console.getVariable("chatSender") == "2049" &&

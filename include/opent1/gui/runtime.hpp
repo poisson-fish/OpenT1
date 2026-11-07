@@ -107,6 +107,7 @@ public:
 
     bool synchronizeVariables();
     [[nodiscard]] Control* findControl(std::string_view) const;
+    std::function<Control*(std::string_view)> findDetachedControl;
     void install();
     void uninstall();
     void stop();

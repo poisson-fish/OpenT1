@@ -331,6 +331,9 @@ public:
     Persistent::Error write(StreamIO&, Int32, Int32, Persistent::StoreContext&) const override;
 
 protected:
+    virtual bool acceptsObjectManager(const SimObject& object) const {
+        return object.getManager() == getManager();
+    }
     std::vector<SimObject*> objects_;
     bool stable_{};
 };

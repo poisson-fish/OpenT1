@@ -145,6 +145,20 @@ This table highlights a few verified contracts:
 | `GameBase::getPosition(%object)` | Obtain a game object's position through its native binding |
 | `remoteEval(%peer, %command, ...)` | Dispatch a remote console event; the receiving function is named `remote` followed by the command, with the sender supplied first |
 
+Client HUD scripts can create GUI controls with `newObject(%name, %class, %x,
+%y, %width, %height [, %variable, %command])`. Named controls remain accessible
+to `Control::` commands while detached. Attach frames to an open screen with
+`addToSet(%gui, %frame)` and detach them in the screen's `onClose` callback with
+`removeFromSet(%gui, %frame)` before that graph is replaced. Formatted HUD text
+uses the containing frame's width. These paths support Presto and DeusHUD's
+script-created panels.
+
+The play chat display renders the active `PlayChatMenu` below its history, or
+above it when space is limited. This includes menus replaced by Presto scripts.
+Messages containing only a `~w` voice marker still reach `onClientMessage` and
+play when voices are enabled, without adding a name-only line to chat. Messages
+with text retain their sender prefix after the voice marker is removed.
+
 Set score headings and player/team scores on the server. The engine delivers
 them through native score events; assigning client globals does not replace
 that delivery. Opening scores catches up changes made while hidden, including

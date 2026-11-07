@@ -115,8 +115,13 @@ public:
     bool addObject(sim::SimObject&) override;
     bool removeObject(sim::SimObject&) override;
     bool onAdd() override;
+    bool processArguments(std::span<const std::string>) override;
     void onNameChange(std::string_view) override;
     void onRemove() override;
+    // Runtime graphs borrow script controls owned by the client manager.
+    bool acceptsObjectManager(const sim::SimObject& object) const override {
+        return !getManager() || object.getManager() == getManager();
+    }
     [[nodiscard]] Point2I localToGlobal(Point2I) const;
     [[nodiscard]] Point2I globalToLocal(Point2I) const;
     [[nodiscard]] virtual Control* hit(Point2I local);

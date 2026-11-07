@@ -4647,6 +4647,11 @@ void FearGameApp::installRuntimeServices() {
             chat->visible(false);
         }
         if (auto* display = dynamic_cast<FearGuiChatDisplay*>(&control)) {
+            display->resolvePlayMenu = [this]() -> const ChatMenu* {
+                auto* manager = fearPlugin_->clientGlobals().manager;
+                return manager ? dynamic_cast<ChatMenu*>(manager->findObject("PlayChatMenu"))
+                               : nullptr;
+            };
             constexpr std::array names{
                 "if_w_10b.pft", "sf_red_10b.pft", "sf_yellow_10b.pft", "if_g_10b.pft"};
             constexpr std::array smallNames{
@@ -4765,7 +4770,32 @@ void FearGameApp::installRuntimeServices() {
         }
         return true;
     };
+    game_.initializeObject = [bindings](sim::SimObject& object) {
+        auto* control = dynamic_cast<gui::Control*>(&object);
+        return !control || gui::bindResources(*control, bindings);
+    };
     guiRuntime_ = std::make_shared<gui::Runtime>(console, game_.classes(), std::move(bindings));
+    guiRuntime_->findDetachedControl = [this](std::string_view name) -> gui::Control* {
+        auto* manager = fearPlugin_->clientGlobals().manager;
+        if (!manager) {
+            return nullptr;
+        }
+        if (auto* control = dynamic_cast<gui::Control*>(manager->findObject(name))) {
+            return control;
+        }
+        const auto* named = dynamic_cast<sim::SimSet*>(manager->findObject(sim::NamedGuiSetId));
+        if (named) {
+            for (auto* object : named->objects()) {
+                if (equalIgnoreCase(object->getName(), name)) {
+                    return dynamic_cast<gui::Control*>(object);
+                }
+            }
+        }
+        return nullptr;
+    };
+    game_.findClientObject = [this](std::string_view name) -> sim::SimObject* {
+        return guiRuntime_ ? guiRuntime_->findControl(name) : nullptr;
+    };
     guiRuntime_->canvas.assignName("MainWindow");
     guiRuntime_->loadFile = [this](std::string_view name) -> std::optional<std::vector<std::byte>> {
         std::vector<std::byte> bytes;

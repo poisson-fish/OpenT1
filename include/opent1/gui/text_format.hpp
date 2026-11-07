@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <opent1/gui/controls.hpp>
 
 namespace opent1::gui {
@@ -34,6 +35,10 @@ public:
     // V tags expand names up to 124 bytes; longer native names skip lookup.
     // Layout and all resources are staged before replacing the previous result.
     bool format(std::string_view, Int32 width);
+    bool variableChanged(std::string_view value) override {
+        return format(value, std::max(20, fields_.extent.x)) &&
+               resize(fields_.position, {fields_.extent.x, height() + 4});
+    }
 
     [[nodiscard]] const std::string& text() const {
         return text_;

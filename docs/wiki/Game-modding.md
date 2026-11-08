@@ -66,6 +66,13 @@ preferences. Assign the returned body to an existing client with
 This also applies to hosted games: spawning another body must not take ownership
 or control away from the local host.
 
+V-menu animations use the armor's `animData[38..50]`, selected by
+`remotePlayAnim(clientId, 0..12)`. They follow the vanilla animation priorities:
+one-shot signals finish before equal-priority movement replaces them, while
+`HoldPose` keeps the final pose until movement can interrupt it. The menu's
+`playVoice(clientId, sound)` call sends a separate nearby voice event from the
+speaker's owned body and honors the receiver's `$pref::playVoices` setting.
+
 ## Test and distribute
 
 Start with a small reproducible script change. Test a local mission, a separate

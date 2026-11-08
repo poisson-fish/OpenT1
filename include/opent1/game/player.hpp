@@ -537,6 +537,7 @@ protected:
     bool processCollision(MovementInfo& info) override;
 
 private:
+    [[nodiscard]] Int32 pickMovementAnim() const noexcept;
     void calcImagePullIn();
     void updateClientEffects();
     void stopJetSound();

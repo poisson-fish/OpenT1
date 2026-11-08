@@ -7,6 +7,7 @@
 #include <opent1/game/player.hpp>
 #include <opent1/game/player_manager.hpp>
 #include <opent1/game/shell_controls.hpp>
+#include <opent1/game/sound.hpp>
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -531,6 +532,40 @@ void installedClientHuds() {
     }));
     const auto prefix = plugin.clientGlobals().playerManager->findClient(2049)->name + ": ";
     CHECK(std::ranges::none_of(*messages, [&](const auto& message) { return message == prefix; }));
+
+    // Select the installed animation entry, including its separate spatial voice.
+    for (Int32 tick = 0; tick < 8; ++tick) {
+        CHECK(app.stepFrame(.666 + tick * .25));
+    }
+    auto* body = dynamic_cast<Player*>(plugin.clientGlobals().playerPSC->getControlObject());
+    CHECK(body && !body->isDead());
+    UInt32 voices = 0;
+    auto playback = std::make_unique<SoundPlayback>(nullptr);
+    playback->playVoice = [&](Int32 speaker,
+                              std::string_view filename,
+                              const SoundProfileData&,
+                              const TMat3F& transform,
+                              const Point3F&) {
+        CHECK(speaker == 2049 && filename.ends_with(".wovrhere.wav"));
+        CHECK((transform.p - body->getPos()).len() < .01f);
+        ++voices;
+        return SoundHandle(voices);
+    };
+    CHECK(manager->addObject(std::move(playback)));
+    CHECK(console.evaluate("Menu::Display(menuChat);").ok());
+    CHECK(app.stepFrame(2.448));
+    menu = dynamic_cast<ChatMenu*>(manager->findObject("PlayChatMenu"));
+    CHECK(menu && menu->processKey('a'));
+    CHECK(app.stepFrame(2.480));
+    menu = dynamic_cast<ChatMenu*>(manager->findObject("PlayChatMenu"));
+    CHECK(menu && menu->processKey('o'));
+    CHECK(app.stepFrame(2.512));
+    CHECK(voices == 1);
+    CHECK(body->currentAnimation() == Player::ANIM_PLAYER_FIRST);
+    CHECK(body->shapeInstance());
+    const auto& shape = *body->shapeInstance()->shape();
+    const auto& thread = body->shapeInstance()->threads().front();
+    CHECK(shape.names[shape.sequences[thread.sequence].name] == "sign over here");
 }
 
 void installedRpgBulkChat() {

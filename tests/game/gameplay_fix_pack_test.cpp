@@ -237,6 +237,107 @@ void gameplayRegressions() {
     app.shutdown();
 }
 
+void playerEmotePlayback() {
+    FearGameApp app;
+    CHECK(app.init() && app.fearPlugin().createServerWorld("EmotePlayback"));
+    auto& globals = app.fearPlugin().serverGlobals();
+    auto& manager = *globals.manager;
+    auto& dbm = *globals.dbm;
+    auto shape = opent1::test::ts_collision::cube();
+    shape->names.insert(shape->names.end(), {"root", "run", "fall", "jet"});
+    shape->sequences = {{2, 1, 1.f, 0}, {3, 1, 1.f, 0}, {4, 1, 1.f, 0}, {5, 1, 1.f, 0}};
+    for (Int32 wave = 0; wave <= 12; ++wave) {
+        shape->names.push_back(std::format("signal{}", wave));
+        shape->sequences.push_back({6 + wave, 0, .5f, 0});
+    }
+    CHECK(app.resources().add<world::TsShape>("emotes.dts", std::move(shape)));
+    auto& sound = block<SoundData>(dbm, DataBlockManager::SoundDataType, "EmoteSound");
+    sound.wavFileName = "synthetic.wav";
+    auto& armor = block<PlayerData>(dbm, DataBlockManager::PlayerDataType, "EmoteArmor");
+    armor.shape = app.resources().load<world::TsShape>("emotes.dts");
+    armor.maxForwardSpeed = 10;
+    armor.animData[Player::ANIM_STAND] = {"root", -1, 1, 7, 0};
+    armor.animData[Player::ANIM_RUN] = {"run", -1, 1, 7, 1};
+    armor.animData[Player::ANIM_FALL] = {"fall", -1, 1, 7, 3};
+    armor.animData[Player::ANIM_JET] = {"jet", -1, 1, 7, 3};
+    for (Int32 wave = 0; wave <= 12; ++wave) {
+        armor.animData[Player::ANIM_PLAYER_FIRST + wave] = {std::format("signal{}", wave),
+                                                            sound.dbmIndex,
+                                                            wave == 1 ? -1 : 1,
+                                                            wave == 10 ? 9 : 1,
+                                                            wave == 10 ? 1 : 2};
+    }
+    UInt32 sounds = 0;
+    CHECK(manager.addObject(
+        std::make_unique<SoundPlayback>([&](UInt32 id, const TMat3F& transform, const Point3F&) {
+            CHECK(id == UInt32(sound.dbmIndex) && transform.p == Point3F(12, 34, 56));
+            return ++sounds;
+        })));
+    auto* body = add<Player>(manager, dbm, "EmoteArmor", true);
+    body->setPos({12, 34, 56});
+    body->setCurGuiMode(1);
+    Player source;
+    CHECK(source.initResources(&armor));
+    const auto send = [&](Int32 wave) {
+        source.setAnimation(UInt32(Player::ANIM_PLAYER_FIRST + wave));
+        std::array<std::byte, 2048> bytes{};
+        BitStream output{std::span<std::byte>(bytes)};
+        CHECK(source.packPlayerUpdate(Player::AnimationMask, output));
+        BitStream input{std::span<const std::byte>(bytes)};
+        CHECK(body->unpackPlayerUpdate(input));
+        return bytes;
+    };
+    for (Int32 wave = 0; wave <= 12; ++wave) {
+        const auto before = sounds;
+        const auto bytes = send(wave);
+        body->updateAnimation(.1f);
+        CHECK(body->currentAnimation() == Player::ANIM_PLAYER_FIRST + wave);
+        CHECK(body->shapeInstance()->threads().front().sequence == 4 + wave);
+        CHECK(near(body->shapeInstance()->threads().front().position, wave == 1 ? .8f : .2f));
+        CHECK(sounds == before + 1);
+        body->updateAnimation(.1f);
+        CHECK(sounds == before + 1);
+        // A repeated replicated request restarts both the clip and its sound.
+        BitStream repeat{std::span<const std::byte>(bytes)};
+        CHECK(body->unpackPlayerUpdate(repeat));
+        body->updateAnimation(.1f);
+        CHECK(near(body->shapeInstance()->threads().front().position, wave == 1 ? .8f : .2f));
+        CHECK(sounds == before + 2);
+        body->updateAnimation(.4f);
+        body->updateAnimation(.032f);
+        if (wave == 10) {
+            // Vanilla's HoldPose stays at the last frame until movement of
+            // equal priority, or a higher-priority state, interrupts it.
+            CHECK(body->currentAnimation() == Player::ANIM_PLAYER_FIRST + wave);
+            CHECK(near(body->shapeInstance()->threads().front().position, 1));
+            PlayerMove move{};
+            move.forwardAction = 1;
+            body->updateMove(&move, false);
+            body->updateAnimation(.032f);
+            CHECK(body->currentAnimation() == Player::ANIM_RUN);
+            move.forwardAction = 0;
+            body->updateMove(&move, false);
+            body->updateAnimation(.032f);
+        }
+        CHECK(body->currentAnimation() == Player::ANIM_STAND && body->serverAnimation() == -1);
+    }
+    send(0);
+    body->updateAnimation(.1f);
+    body->setJetting(true);
+    body->updateAnimation(.032f);
+    CHECK(body->currentAnimation() == Player::ANIM_JET && body->serverAnimation() == -1);
+    body->setJetting(false);
+    body->updateAnimation(.032f);
+    CHECK(body->currentAnimation() == Player::ANIM_STAND);
+    armor.animData[Player::ANIM_PLAYER_FIRST].name = "missing optional signal";
+    const auto beforeMissing = sounds;
+    send(0);
+    body->updateAnimation(.032f);
+    CHECK(body->currentAnimation() == Player::ANIM_STAND && body->serverAnimation() == -1);
+    CHECK(sounds == beforeMissing);
+    app.shutdown();
+}
+
 void scheduledMissionClock() {
     FearGameApp app;
     CHECK(app.init());
@@ -537,6 +638,10 @@ int opent1_test_gameplay_regressions() {
     return opent1::test::run(gameplayRegressions);
 }
 
+int opent1_test_player_emote_playback() {
+    return opent1::test::run(playerEmotePlayback);
+}
+
 int opent1_test_scheduled_mission_clock() {
     return opent1::test::run(scheduledMissionClock);
 }
@@ -546,6 +651,7 @@ int opent1_test_installed_gameplay() {
 }
 
 OPENT1_REGISTER_TEST("game", "gameplay_regressions", opent1_test_gameplay_regressions);
+OPENT1_REGISTER_TEST("game", "player_emote_playback", opent1_test_player_emote_playback);
 OPENT1_REGISTER_TEST("game", "sound_loop_emitters", opent1_test_sound_loop_emitters);
 OPENT1_REGISTER_TEST("game", "scheduled_mission_clock", opent1_test_scheduled_mission_clock);
 OPENT1_REGISTER_TEST("fixpack", "installed_gameplay", opent1_test_installed_gameplay);

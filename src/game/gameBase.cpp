@@ -312,6 +312,10 @@ bool GameBase::onAdd() {
     lastProcessTime_ = curTime;
     lastAnimateTime_ = curTime;
     updateTeamId();
+    // Initial ghost state is decoded before this object has a manager.
+    // Establish the roster's body links now that its PlayerManager is available.
+    setControlClient(ctrlClientId_);
+    setOwnerClient(ownerClientId_);
 
     if (mapName_.empty()) {
         if (const auto nm = getFieldValue("name"); nm && !nm->empty()) {
@@ -735,9 +739,6 @@ void GameBase::setOwnerClient(Int32 clientId) {
     if (clientId != 0) {
         lastOwnerClientId_ = clientId;
     }
-    if (clientId == ownerClientId_) {
-        return;
-    }
     if (auto* players = PlayerManager::get(getManager())) {
         if (auto* old = players->findBaseRep(ownerClientId_); old && old->ownedObject == this) {
             old->ownedObject = nullptr;
@@ -749,14 +750,14 @@ void GameBase::setOwnerClient(Int32 clientId) {
             next->ownedObject = this;
         }
     }
+    if (clientId == ownerClientId_) {
+        return;
+    }
     ownerClientId_ = clientId;
     setMaskBits(BaseStateMask);
 }
 
 void GameBase::setControlClient(Int32 clientId) {
-    if (clientId == ctrlClientId_) {
-        return;
-    }
     if (auto* players = PlayerManager::get(getManager())) {
         if (auto* old = players->findClient(ctrlClientId_); old && old->controlObject == this) {
             old->controlObject = nullptr;
@@ -764,6 +765,9 @@ void GameBase::setControlClient(Int32 clientId) {
         if (auto* next = players->findClient(clientId)) {
             next->controlObject = this;
         }
+    }
+    if (clientId == ctrlClientId_) {
+        return;
     }
     ctrlClientId_ = clientId;
     setMaskBits(BaseStateMask);

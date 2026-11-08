@@ -687,6 +687,31 @@ void Player::setAnimation(UInt32 anim) {
 }
 
 Int32 Player::pickAnim() const noexcept {
+    const auto movement = pickMovementAnim();
+    if (!isGhost() || dead_ || !playerData_ || serverAnimation_ < ANIM_PLAYER_FIRST ||
+        serverAnimation_ >= NUM_ANIMS) {
+        return movement;
+    }
+    const auto& requested = playerData_->animData[std::size_t(serverAnimation_)];
+    const auto& locomotion = playerData_->animData[std::size_t(movement)];
+    bool interruptible = false;
+    if (!animationPending_ && animationThread_ && shapeInstance_) {
+        const auto& thread = shapeInstance_->threads()[*animationThread_];
+        const auto& sequence = shapeInstance_->shape()->sequences[thread.sequence];
+        interruptible = sequence.cyclic != 0 || (requested.direction < 0 ? thread.position <= .01f
+                                                                         : thread.position >= .99f);
+    }
+    // Signals and taunts finish before equal-priority movement takes over.
+    // HoldPose keeps a completed pose only while it outranks locomotion.
+    const bool holdPose = (requested.viewFlags & 8) != 0;
+    if (requested.priority >= locomotion.priority &&
+        (!interruptible || (holdPose && requested.priority > locomotion.priority))) {
+        return serverAnimation_;
+    }
+    return movement;
+}
+
+Int32 Player::pickMovementAnim() const noexcept {
     if (dead_) {
         if (serverAnimation_ >= ANIM_DIE_START && serverAnimation_ <= ANIM_DIE_END) {
             return serverAnimation_;
@@ -779,7 +804,14 @@ void Player::updateAnimation(Flt32 seconds) {
             serverAnimation_ = currentAnimation_ = -1;
         }
     }
+    if (isGhost() && serverAnimation_ >= ANIM_PLAYER_FIRST && serverAnimation_ < NUM_ANIMS &&
+        sequence(playerData_->animData[std::size_t(serverAnimation_)].name) < 0) {
+        serverAnimation_ = -1;
+    }
     const auto anim = pickAnim();
+    if (isGhost() && serverAnimation_ >= ANIM_PLAYER_FIRST && anim != serverAnimation_) {
+        serverAnimation_ = -1;
+    }
     const auto& data = playerData_->animData[std::size_t(anim)];
     auto seq = sequence(data.name);
     if (seq < 0) {

@@ -1244,7 +1244,9 @@ void ownershipBacklinks() {
     CHECK(players->clientAdded("Two", "female1", "base", false, 2050) == 2050);
     CHECK(players->findClient(2049)->gender == "MALE" &&
           players->findClient(2050)->gender == "FEMALE");
-    auto* object = add<GameBase>(manager);
+    auto pending = std::make_unique<GameBase>();
+    CHECK(pending->setNetFlags(sim::SimNetObject::IsGhost));
+    auto* object = pending.get();
     const auto transfer = [&](Int32 control, Int32 ownerId) {
         GameBase source;
         source.setControlClient(control);
@@ -1256,6 +1258,8 @@ void ownershipBacklinks() {
         CHECK(object->unpackGameBaseUpdate(input));
     };
     transfer(2049, 2049);
+    CHECK(!players->findClient(2049)->controlObject && !players->findClient(2049)->ownedObject);
+    CHECK(manager.addObject(std::move(pending)) == object);
     CHECK(players->findClient(2049)->controlObject == object);
     CHECK(players->findClient(2049)->ownedObject == object);
     transfer(2050, 2050);
